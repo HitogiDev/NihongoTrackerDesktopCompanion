@@ -189,7 +189,7 @@ async fn update_anime(
     if session.ready() && !session.logged {
         session.logged = true;
         let session = session.clone();
-        commit_anime(app, &session, settings).await;
+        commit_anime(app, &session, settings, false).await;
     }
 }
 
@@ -204,12 +204,21 @@ fn threshold_for(settings: &Settings, media: Option<&MediaMatch>) -> u64 {
     secs.max(30)
 }
 
-async fn commit_anime(app: &AppHandle, session: &AnimeSession, settings: &Settings) {
+/// Turn a finished (or manually accepted) episode into a log.
+/// `forced` comes from the user pressing "log now", which also means the
+/// confirmation step is redundant. Returns true when the log was queued for
+/// delivery rather than parked for confirmation.
+pub async fn commit_anime(
+    app: &AppHandle,
+    session: &AnimeSession,
+    settings: &Settings,
+    forced: bool,
+) -> bool {
     let state = app.state::<AppState>();
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let dedup_key = format!("anime:{}:{today}", session.key);
     if state.db.was_logged(&dedup_key) {
-        return;
+        return false;
     }
 
     let title = session
@@ -218,7 +227,7 @@ async fn commit_anime(app: &AppHandle, session: &AnimeSession, settings: &Settin
         .map(|m| m.title.clone())
         .unwrap_or_else(|| session.parsed.title.clone());
     if title.trim().is_empty() {
-        return;
+        return false;
     }
 
     let mut payload = json!({
@@ -251,7 +260,10 @@ async fn commit_anime(app: &AppHandle, session: &AnimeSession, settings: &Settin
         .map(|e| format!("ep. {e}"))
         .unwrap_or_else(|| "episodio".into());
 
-    if settings.anime_auto_log && session.media.is_some() {
+    // Pressing "log now" is itself the confirmation, so it skips the queue.
+    let send_now = forced || (settings.anime_auto_log && session.media.is_some());
+
+    if send_now {
         sync::enqueue_log(app, &payload);
         notify(
             app,
@@ -269,6 +281,7 @@ async fn commit_anime(app: &AppHandle, session: &AnimeSession, settings: &Settin
             &format!("{title} — {episode_label}"),
         );
     }
+    send_now
 }
 
 // ── visual novels ──────────────────────────────────────────────────────
@@ -332,6 +345,27 @@ async fn update_vn(
             session_chars: 0,
             session_lines: 0,
         });
+
+        // Point the hooker at this work from here, not from the frontend: the
+        // window may be hidden in the tray and its listener never fire.
+        {
+            let mut hooker = state.hooker.write().await;
+            hooker.content_id = Some(vn_app.media_id.clone());
+            hooker.content_title = Some(vn_app.media_title.clone());
+        }
+        let hooker_idle = {
+            let hooker = state.hooker.read().await;
+            hooker.status != crate::state::HookerStatus::Connected
+        };
+        if settings.texthooker_autoconnect && hooker_idle {
+            let _ = state
+                .hooker_tx
+                .send(crate::state::HookerCommand::Connect(
+                    settings.texthooker_ws_url.clone(),
+                ));
+        }
+        let hooker_snapshot = state.hooker.read().await.clone();
+        let _ = app.emit(crate::texthooker::EVT_STATUS, &hooker_snapshot);
 
         let _ = app.emit(
             EVT_VN_STARTED,

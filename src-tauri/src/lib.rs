@@ -113,6 +113,7 @@ pub fn run() {
             commands::connection_status,
             commands::get_tracker_state,
             commands::list_processes,
+            commands::log_current_anime,
             commands::list_pending,
             commands::confirm_pending,
             commands::discard_pending,

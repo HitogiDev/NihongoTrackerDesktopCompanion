@@ -92,6 +92,35 @@ pub async fn get_tracker_state(state: State<'_, AppState>) -> CmdResult<TrackerS
     Ok(state.tracker.read().await.clone())
 }
 
+/// Log the episode currently on screen without waiting for the threshold.
+#[tauri::command]
+pub async fn log_current_anime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<Value> {
+    let session = state
+        .tracker
+        .read()
+        .await
+        .anime
+        .clone()
+        .ok_or_else(|| "no anime session detected".to_string())?;
+    if session.logged {
+        return Err("this episode was already logged".into());
+    }
+
+    let settings = state.settings_snapshot().await;
+    let sent = crate::watcher::commit_anime(&app, &session, &settings, true).await;
+
+    // Keep the snapshot honest so the UI stops offering the button.
+    if let Some(current) = state.tracker.write().await.anime.as_mut() {
+        if current.key == session.key {
+            current.logged = true;
+        }
+    }
+    Ok(json!({ "pending": !sent }))
+}
+
 #[derive(Serialize)]
 pub struct ProcessEntry {
     pub name: String,

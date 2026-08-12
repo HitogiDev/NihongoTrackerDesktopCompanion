@@ -5,7 +5,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { Sidebar } from './components/Sidebar';
 import { PageLoader } from './components/ui/Spinner';
 import { useAppStore } from './store/useAppStore';
-import { events, ipc } from './lib/ipc';
+import { events } from './lib/ipc';
 import Dashboard from './screens/Dashboard';
 import Queue from './screens/Queue';
 import LibraryScreen from './screens/Library';
@@ -36,9 +36,9 @@ export default function App() {
   // point of the desktop companion.
   useEffect(() => {
     const unlisten = listen<VnStartedPayload>(events.vnStarted, async (event) => {
-      const { contentId, title, type, openTexthooker, externalUrl } = event.payload;
-      await ipc.setHookerSession(contentId, title, type);
-      await ipc.hookerConnect();
+      // The watcher already pointed the hooker at this work and connected it;
+      // the window only has to show the right screen.
+      const { openTexthooker, externalUrl } = event.payload;
       if (openTexthooker) navigate('/texthooker');
       if (externalUrl) {
         await openUrl(externalUrl).catch(() => undefined);

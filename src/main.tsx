@@ -2,9 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router-dom';
+// Only the UI font is bundled. Japanese text falls back to the system face
+// (Yu Gothic / Hiragino / Noto), which every target OS ships — bundling the
+// ~120 Noto subsets would add several MB to the installer for no gain.
 import '@fontsource-variable/inter';
-import '@fontsource/noto-sans-jp/400.css';
-import '@fontsource/noto-sans-jp/700.css';
 import App from './App';
 import './index.css';
 

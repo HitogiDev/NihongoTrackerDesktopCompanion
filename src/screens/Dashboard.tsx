@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   BookOpenText,
+  Check,
   Clock,
   Film,
   Inbox,
@@ -138,6 +139,7 @@ function IdleCard({ kind }: { kind: 'anime' | 'vn' }) {
 function AnimeCard({ session }: { session: AnimeSession }) {
   const type = getMediaTypeClasses('anime');
   const [matching, setMatching] = useState(false);
+  const [logging, setLogging] = useState(false);
   const progress = session.threshold_secs
     ? Math.min(100, Math.round((session.elapsed_secs / session.threshold_secs) * 100))
     : 100;
@@ -211,6 +213,26 @@ function AnimeCard({ session }: { session: AnimeSession }) {
             max={100}
           />
         </div>
+
+        {!session.logged ? (
+          <Button
+            size="sm"
+            appearance="outline"
+            block
+            loading={logging}
+            onClick={async () => {
+              setLogging(true);
+              try {
+                await ipc.logCurrentAnime();
+              } finally {
+                setLogging(false);
+              }
+            }}
+          >
+            <Check className="w-4 h-4" />
+            Registrar ahora
+          </Button>
+        ) : null}
       </div>
 
       <MediaSearchModal

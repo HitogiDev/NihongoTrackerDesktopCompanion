@@ -34,6 +34,8 @@ export const ipc = {
   getTrackerState: () => invoke<TrackerSnapshot>('get_tracker_state'),
   listProcesses: () => invoke<ProcessEntry[]>('list_processes'),
   platformSupported: () => invoke<boolean>('platform_supported'),
+  /** Log the episode currently on screen without waiting for the threshold. */
+  logCurrentAnime: () => invoke<{ pending: boolean }>('log_current_anime'),
   parseReleaseName: (name: string) => invoke('parse_release_name', { name }),
 
   // pending confirmations

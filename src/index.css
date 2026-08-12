@@ -57,7 +57,9 @@
   --font-sans:
     'Inter Variable', 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont,
     'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-  --font-jp: 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;
+  --font-jp:
+    'Noto Sans JP', 'Yu Gothic UI', 'Yu Gothic', 'Hiragino Sans', 'Meiryo',
+    'MS Gothic', sans-serif;
 }
 
 /* ── Surfaces: one recipe for resting / inset / floating ── */
