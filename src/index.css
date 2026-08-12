@@ -1,0 +1,134 @@
+@import 'tailwindcss';
+
+/* Mirrors NihongoTracker/Frontend/src/index.css so the companion looks like the
+   site it feeds. Keep the token names identical — components are copied over. */
+@plugin "daisyui" {
+  themes: dark --default, light, dracula, night, dim, sunset, abyss, forest, winter;
+}
+@plugin "@tailwindcss/typography";
+
+@plugin "daisyui/theme" {
+  name: 'light';
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: oklch(98% 0.005 240);
+  --color-base-200: oklch(95.5% 0.01 240);
+  --color-base-300: oklch(91% 0.015 240);
+  --color-base-content: oklch(25% 0.02 250);
+
+  --color-primary: oklch(55% 0.18 250);
+  --color-primary-content: oklch(98% 0.005 250);
+  --color-secondary: oklch(58% 0.16 300);
+  --color-secondary-content: oklch(98% 0.005 300);
+  --color-accent: oklch(60% 0.16 170);
+  --color-accent-content: oklch(98% 0.005 170);
+
+  --color-neutral: oklch(35% 0.02 250);
+  --color-neutral-content: oklch(96% 0.005 250);
+
+  --color-info: oklch(62% 0.15 240);
+  --color-info-content: oklch(98% 0.005 240);
+  --color-success: oklch(60% 0.18 150);
+  --color-success-content: oklch(98% 0.005 150);
+  --color-warning: oklch(75% 0.15 75);
+  --color-warning-content: oklch(25% 0.05 75);
+  --color-error: oklch(53% 0.22 25);
+  --color-error-content: oklch(98% 0.005 25);
+
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* App geometry — pinned for ALL themes (daisyUI ships a different radius scale
+   per theme). */
+:root,
+[data-theme] {
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+}
+
+@theme {
+  --font-sans:
+    'Inter Variable', 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --font-jp: 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;
+}
+
+/* ── Surfaces: one recipe for resting / inset / floating ── */
+@utility surface {
+  background-color: var(--color-base-100);
+  border-radius: var(--radius-box);
+  @apply border border-base-300/50 shadow-sm;
+}
+@utility surface-muted {
+  background-color: var(--color-base-200);
+  border-radius: var(--radius-box);
+  @apply border border-base-300/50;
+}
+@utility surface-raised {
+  background-color: var(--color-base-100);
+  border-radius: var(--radius-box);
+  @apply border border-base-300 shadow-lg;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  height: 100%;
+  overflow-x: clip;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Desktop chrome: no text selection outside reading surfaces, no rubber band. */
+body {
+  user-select: none;
+  overscroll-behavior: none;
+}
+input,
+textarea,
+.selectable {
+  user-select: text;
+}
+
+/* Thin scrollbars everywhere — the window is small. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-base-300) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-base-300);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.recording-dot {
+  animation: pulse-ring 2s infinite;
+}
