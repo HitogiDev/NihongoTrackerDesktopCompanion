@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,8 @@ use crate::api::{ApiClient, MediaHit};
 use crate::config::Settings;
 use crate::db::Db;
 use crate::parser::ParsedAnime;
+use crate::playback::{Playback, PlaybackSource};
+use crate::streak::StreakCache;
 
 /// Media the tracker managed to resolve for a detected title.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +20,10 @@ pub struct MediaMatch {
     pub media_type: String,
     pub image: Option<String>,
     pub episode_duration: Option<u32>,
+    /// `isAdult` from the media entry. Discord Rich Presence must never publish
+    /// the title of a work flagged this way.
+    #[serde(default)]
+    pub is_adult: bool,
     /// `true` when the user pinned this match by hand.
     pub manual: bool,
 }
@@ -35,13 +42,43 @@ pub struct AnimeSession {
     pub unmatched: bool,
     pub elapsed_secs: u64,
     pub threshold_secs: u64,
+    /// Share of the episode that must be watched, kept per session so a settings
+    /// change mid-episode doesn't move the goalposts.
+    pub threshold_percent: u8,
+    /// Where the player says it is, when it says (mpv IPC, MPC web interface).
+    pub position_secs: Option<f64>,
+    pub duration_secs: Option<f64>,
+    pub paused: bool,
+    pub source: PlaybackSource,
+    /// 0.0–1.0 towards being logged; computed here so the UI never re-derives it.
+    pub progress: f64,
     pub logged: bool,
     pub started_at: String,
 }
 
 impl AnimeSession {
+    /// True once enough of the episode has been seen. Real playback position
+    /// wins over wall-clock time whenever the player reports it — a paused
+    /// player or a window left open otherwise counts as watching.
     pub fn ready(&self) -> bool {
+        if let (Some(position), Some(duration)) = (self.position_secs, self.duration_secs) {
+            if duration > 0.0 {
+                return position / duration >= self.threshold_percent as f64 / 100.0;
+            }
+        }
         self.elapsed_secs >= self.threshold_secs
+    }
+
+    /// 0.0–1.0 towards being logged.
+    pub fn compute_progress(&self) -> f64 {
+        let ratio = match (self.position_secs, self.duration_secs) {
+            (Some(position), Some(duration)) if duration > 0.0 => {
+                (position / duration) / (self.threshold_percent.max(1) as f64 / 100.0)
+            }
+            _ if self.threshold_secs > 0 => self.elapsed_secs as f64 / self.threshold_secs as f64,
+            _ => 1.0,
+        };
+        ratio.clamp(0.0, 1.0)
     }
 }
 
@@ -52,6 +89,10 @@ pub struct VnSession {
     pub media_title: String,
     pub media_type: String,
     pub image: Option<String>,
+    /// Carried from the registry so the presence can be stripped without a
+    /// round trip to the API.
+    #[serde(default)]
+    pub is_adult: bool,
     pub elapsed_secs: u64,
     /// Whether time is being counted at this instant.
     pub counting: bool,
@@ -112,6 +153,13 @@ pub enum HookerCommand {
     Disconnect,
 }
 
+/// Last answer from the player, with the player it came from.
+#[derive(Debug, Clone)]
+pub struct PlaybackSnapshot {
+    pub player: String,
+    pub playback: Playback,
+}
+
 pub struct AppState {
     pub db: Arc<Db>,
     pub settings: RwLock<Settings>,
@@ -120,6 +168,22 @@ pub struct AppState {
     pub hooker_tx: mpsc::UnboundedSender<HookerCommand>,
     /// title (lowercased) → resolved media, `None` when the search found nothing.
     pub media_cache: RwLock<HashMap<String, Option<MediaMatch>>>,
+    /// Filled by a task off the detection tick; one second stale at worst.
+    pub playback: RwLock<Option<PlaybackSnapshot>>,
+    /// Guard so a slow player can't pile up probes.
+    pub playback_probing: AtomicBool,
+    /// Whether the reader's timer is running. The UI owns it for manual
+    /// sessions; ingestion checks it to honour the "during pause" settings.
+    pub hooker_timer_active: AtomicBool,
+    /// Last streak answer, shared by the reminder loop and the UI so the two of
+    /// them together still respect one request per five minutes.
+    pub streak: RwLock<StreakCache>,
+    /// Set when `auth/verify` answers 401. Stops the reminder loop instead of
+    /// retrying a revoked key all day; cleared when the settings are saved.
+    pub streak_auth_failed: AtomicBool,
+    /// The Discord Rich Presence thread, present only while the user has the
+    /// feature switched on. `None` means no socket has ever been touched.
+    pub discord: RwLock<Option<crate::discord::Discord>>,
 }
 
 impl AppState {
@@ -141,6 +205,7 @@ impl From<MediaHit> for MediaMatch {
             media_type: hit.media_type.unwrap_or_else(|| "anime".into()),
             image: hit.content_image.or(hit.cover_image),
             episode_duration: hit.episode_duration,
+            is_adult: hit.is_adult,
             manual: false,
         }
     }

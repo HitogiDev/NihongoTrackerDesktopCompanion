@@ -1,0 +1,16 @@
+{
+  "activity": "Activity",
+  "pending": "Pending",
+  "library": "Library",
+  "ranking": "Ranking",
+  "texthooker": "Texthooker",
+  "settings": "Settings",
+  "status": {
+    "checking": "Checking…",
+    "online": "Connected",
+    "offline": "Offline",
+    "hookerConnected": "Texthooker running",
+    "hookerConnecting": "Connecting hook…",
+    "hookerOffline": "Hook disconnected"
+  }
+}

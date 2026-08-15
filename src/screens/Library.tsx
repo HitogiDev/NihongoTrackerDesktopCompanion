@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { BookOpenText, Link2, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/Empty';
@@ -12,6 +13,7 @@ import { ipc } from '../lib/ipc';
 import type { MediaHit, ProcessEntry, VnApp } from '../lib/types';
 
 export default function LibraryScreen() {
+  const { t } = useTranslation(['library', 'common']);
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<VnApp | null>(null);
@@ -37,29 +39,29 @@ export default function LibraryScreen() {
 
   return (
     <Page
-      title="Biblioteca"
-      description="Ejecutables vinculados a una obra: al abrirlos se inicia la sesión y el texthooker."
+      title={t('title')}
+      description={t('subtitle')}
       actions={
         <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
           <Plus className="w-4 h-4" />
-          Añadir
+          {t('common:add')}
         </Button>
       }
     >
       <SectionTitle aside={<span className="text-xs text-base-content/50">{list.length}</span>}>
-        Novelas y juegos
+        {t('works')}
       </SectionTitle>
 
       {list.length === 0 ? (
         <div className="surface">
           <EmptyState
             icon={BookOpenText}
-            title="Sin obras registradas"
-            description="Vincula el .exe de una novela visual con su entrada en NihongoTracker para trackearla automáticamente."
+            title={t('empty')}
+            description={t('emptyBody')}
             action={
               <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
                 <Plus className="w-4 h-4" />
-                Añadir la primera
+                {t('addFirst')}
               </Button>
             }
           />
@@ -84,18 +86,18 @@ export default function LibraryScreen() {
                     <p className="text-xs text-base-content/60 font-mono truncate">{app.exe}</p>
                     <p className="text-[11px] text-base-content/45 font-mono">{app.media_id}</p>
                     {!app.enabled ? (
-                      <span className="badge badge-ghost badge-xs mt-1">Desactivada</span>
+                      <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col gap-1">
                     <Button size="xs" appearance="outline" onClick={() => setEditing(app)}>
-                      Editar
+                      {t('common:edit')}
                     </Button>
                     <Button
                       size="xs"
                       appearance="ghost"
                       onClick={() => remove.mutate(app.exe)}
-                      aria-label="Eliminar"
+                      aria-label={t('common:delete')}
                     >
                       <Trash2 className="w-3 h-3" />
                     </Button>
@@ -109,7 +111,7 @@ export default function LibraryScreen() {
 
       {(mappings.data ?? []).length > 0 ? (
         <>
-          <SectionTitle>Títulos vinculados a mano</SectionTitle>
+          <SectionTitle>{t('manualMappings')}</SectionTitle>
           <ul className="space-y-1.5">
             {(mappings.data ?? []).map(({ title, media }) => (
               <li
@@ -158,6 +160,7 @@ const EMPTY: VnApp = {
   image: null,
   texthooker_url: null,
   enabled: true,
+  is_adult: false,
 };
 
 function VnAppModal({
@@ -173,6 +176,7 @@ function VnAppModal({
   onSave: (entry: VnApp) => void;
   saving: boolean;
 }) {
+  const { t } = useTranslation(['library', 'common']);
   const [draft, setDraft] = useState<VnApp>(EMPTY);
   const [picking, setPicking] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -188,6 +192,8 @@ function VnAppModal({
       media_type: hit.type ?? type,
       media_title: hit.title.contentTitleRomaji || hit.title.contentTitleNative,
       image: hit.contentImage ?? hit.coverImage,
+      // Carried along so Discord Rich Presence can strip the title later.
+      is_adult: hit.isAdult,
     }));
     setSearching(false);
   }
@@ -199,12 +205,12 @@ function VnAppModal({
       <Modal
         open={open}
         onClose={onClose}
-        title={initial ? 'Editar obra' : 'Añadir obra'}
+        title={initial ? t('modal.editTitle') : t('modal.addTitle')}
         size="lg"
         actions={
           <>
             <Button appearance="ghost" onClick={onClose}>
-              Cancelar
+              {t('common:cancel')}
             </Button>
             <Button
               variant="primary"
@@ -212,13 +218,13 @@ function VnAppModal({
               disabled={!valid}
               onClick={() => onSave({ ...draft, exe: draft.exe.trim().toLowerCase() })}
             >
-              Guardar
+              {t('common:save')}
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="Ejecutable" hint="El nombre del proceso, por ejemplo siglusengine.exe">
+          <Field label={t('modal.executable')} hint={t('modal.executableHint')}>
             {(id) => (
               <div className="flex gap-2">
                 <input
@@ -230,13 +236,13 @@ function VnAppModal({
                 />
                 <Button appearance="outline" onClick={() => setPicking(true)}>
                   <Search className="w-4 h-4" />
-                  Elegir
+                  {t('modal.choose')}
                 </Button>
               </div>
             )}
           </Field>
 
-          <Field label="Obra en NihongoTracker">
+          <Field label={t('modal.work')}>
             {() => (
               <div className="flex items-center gap-3 p-3 rounded-field bg-base-200/60">
                 {draft.image ? (
@@ -246,23 +252,20 @@ function VnAppModal({
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">
-                    {draft.media_title || 'Sin seleccionar'}
+                    {draft.media_title || t('modal.notSelected')}
                   </p>
                   <p className="text-xs text-base-content/60 font-mono">
                     {draft.media_id || '—'}
                   </p>
                 </div>
                 <Button appearance="outline" size="sm" onClick={() => setSearching(true)}>
-                  Buscar
+                  {t('common:search')}
                 </Button>
               </div>
             )}
           </Field>
 
-          <Field
-            label="URL extra del texthooker"
-            hint="Opcional: se abrirá en el navegador junto al texthooker integrado."
-          >
+          <Field label={t('modal.extraUrl')} hint={t('modal.extraUrlHint')}>
             {(id) => (
               <input
                 id={id}
@@ -277,8 +280,8 @@ function VnAppModal({
           </Field>
 
           <Toggle
-            label="Detección activa"
-            description="Desactívala para dejar de trackear esta obra sin borrarla."
+            label={t('modal.enabled')}
+            description={t('modal.enabledHint')}
             checked={draft.enabled}
             onChange={(enabled) => setDraft({ ...draft, enabled })}
           />
@@ -314,6 +317,7 @@ function ProcessPickerModal({
   onClose: () => void;
   onPick: (entry: ProcessEntry) => void;
 }) {
+  const { t } = useTranslation(['library', 'common']);
   const [filter, setFilter] = useState('');
   const { data, isFetching, refetch } = useQuery({
     queryKey: ['processes'],
@@ -331,7 +335,7 @@ function ProcessPickerModal({
   }, [data, filter]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Elegir proceso" size="lg">
+    <Modal open={open} onClose={onClose} title={t('processes.title')} size="lg">
       <div className="space-y-3">
         <div className="flex gap-2">
           <label className="input input-sm flex-1 flex items-center gap-2">
@@ -340,11 +344,11 @@ function ProcessPickerModal({
               className="grow"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filtrar por nombre o título de ventana…"
+              placeholder={t('processes.filter')}
             />
           </label>
           <Button size="sm" appearance="outline" loading={isFetching} onClick={() => void refetch()}>
-            Actualizar
+            {t('common:refresh')}
           </Button>
         </div>
         <ul className="max-h-96 overflow-y-auto space-y-1">
@@ -363,7 +367,9 @@ function ProcessPickerModal({
                     </span>
                   ) : null}
                 </span>
-                {entry.title ? <span className="badge badge-xs badge-primary">ventana</span> : null}
+                {entry.title ? (
+                  <span className="badge badge-xs badge-primary">{t('processes.window')}</span>
+                ) : null}
               </button>
             </li>
           ))}

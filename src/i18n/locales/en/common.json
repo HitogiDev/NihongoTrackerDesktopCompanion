@@ -1,0 +1,46 @@
+{
+  "cancel": "Cancel",
+  "save": "Save",
+  "close": "Close",
+  "delete": "Delete",
+  "edit": "Edit",
+  "search": "Search",
+  "refresh": "Refresh",
+  "connect": "Connect",
+  "retry": "Retry",
+  "add": "Add",
+  "back": "Back",
+  "none": "—",
+  "minutesShort": "{{count}} min",
+  "charsShort": "{{count}} chars",
+  "episodesShort": "{{count}} ep.",
+  "linesShort": "{{count}} lines",
+  "relative": {
+    "now": "just now",
+    "minutes": "{{count}} min ago",
+    "hours": "{{count}} h ago",
+    "days": "{{count}} d ago"
+  },
+  "logType": {
+    "anime": "Anime",
+    "manga": "Manga",
+    "reading": "Reading",
+    "vn": "Visual novel",
+    "video": "Video",
+    "movie": "Movie",
+    "tv show": "TV show",
+    "audio": "Audio",
+    "game": "Game",
+    "book": "Book",
+    "other": "Other"
+  },
+  "levelUp": {
+    "title": "Congratulations! Level Up!"
+  },
+  "media": {
+    "title": "Search media",
+    "placeholder": "Title in romaji, English or Japanese…",
+    "noResults": "No results.",
+    "adult": "18+"
+  }
+}

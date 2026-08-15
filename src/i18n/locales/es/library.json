@@ -1,0 +1,28 @@
+{
+  "title": "Biblioteca",
+  "subtitle": "Ejecutables vinculados a una obra: al abrirlos se inicia la sesión y el texthooker.",
+  "works": "Novelas y juegos",
+  "empty": "Sin obras registradas",
+  "emptyBody": "Vincula el .exe de una novela visual con su entrada en NihongoTracker para trackearla automáticamente.",
+  "addFirst": "Añadir la primera",
+  "disabled": "Desactivada",
+  "manualMappings": "Títulos vinculados a mano",
+  "modal": {
+    "addTitle": "Añadir obra",
+    "editTitle": "Editar obra",
+    "executable": "Ejecutable",
+    "executableHint": "El nombre del proceso, por ejemplo siglusengine.exe",
+    "choose": "Elegir",
+    "work": "Obra en NihongoTracker",
+    "notSelected": "Sin seleccionar",
+    "extraUrl": "URL extra del texthooker",
+    "extraUrlHint": "Opcional: se abrirá en el navegador junto al texthooker integrado.",
+    "enabled": "Detección activa",
+    "enabledHint": "Desactívala para dejar de trackear esta obra sin borrarla."
+  },
+  "processes": {
+    "title": "Elegir proceso",
+    "filter": "Filtrar por nombre o título de ventana…",
+    "window": "ventana"
+  }
+}

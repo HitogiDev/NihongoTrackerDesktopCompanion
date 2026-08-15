@@ -1,0 +1,25 @@
+{
+  "title": "Pending",
+  "subtitle": "Confirm what was detected and check what has not reached the server yet.",
+  "retryAll": "Retry sending",
+  "awaiting": "Awaiting confirmation",
+  "empty": "Nothing to confirm",
+  "emptyBody": "Finished episodes and reading sessions show up here.",
+  "unlinked": "Not linked",
+  "log": "Log",
+  "discard": "Discard",
+  "outbox": "Send queue",
+  "outboxQueued": "Queued",
+  "attempts": "{{count}} attempt",
+  "attempts_other": "{{count}} attempts",
+  "sent": "Recently sent",
+  "edit": {
+    "title": "Edit log",
+    "description": "Description",
+    "episodes": "Episodes",
+    "minutes": "Minutes",
+    "characters": "Characters",
+    "mediaId": "Media ID",
+    "mediaIdHint": "Empty means the log stays unlinked on the site."
+  }
+}

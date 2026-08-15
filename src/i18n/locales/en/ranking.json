@@ -1,0 +1,22 @@
+{
+  "title": "Ranking",
+  "subtitle": "Where you stand against everyone else. Needs a connection.",
+  "offline": "The ranking lives on the server, so it needs a connection.",
+  "you": "you",
+  "position": "#{{position}}",
+  "filter": {
+    "label": "Metric",
+    "userXp": "Total XP",
+    "readingXp": "Reading XP",
+    "listeningXp": "Listening XP"
+  },
+  "time": {
+    "label": "Period",
+    "all-time": "All time",
+    "today": "Today",
+    "month": "This month",
+    "year": "This year"
+  },
+  "empty": "No one in this ranking yet.",
+  "loadMore": "Load more"
+}

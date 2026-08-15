@@ -1,0 +1,46 @@
+{
+  "cancel": "Cancelar",
+  "save": "Guardar",
+  "close": "Cerrar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "search": "Buscar",
+  "refresh": "Actualizar",
+  "connect": "Conectar",
+  "retry": "Reintentar",
+  "add": "Añadir",
+  "back": "Volver",
+  "none": "—",
+  "minutesShort": "{{count}} min",
+  "charsShort": "{{count}} car.",
+  "episodesShort": "{{count}} ep.",
+  "linesShort": "{{count}} líneas",
+  "relative": {
+    "now": "ahora",
+    "minutes": "hace {{count}} min",
+    "hours": "hace {{count}} h",
+    "days": "hace {{count}} d"
+  },
+  "logType": {
+    "anime": "Anime",
+    "manga": "Manga",
+    "reading": "Lectura",
+    "vn": "Novela visual",
+    "video": "Vídeo",
+    "movie": "Película",
+    "tv show": "Serie",
+    "audio": "Audio",
+    "game": "Juego",
+    "book": "Libro",
+    "other": "Otro"
+  },
+  "levelUp": {
+    "title": "¡Enhorabuena! ¡Has subido de nivel!"
+  },
+  "media": {
+    "title": "Buscar media",
+    "placeholder": "Título en romaji, inglés o japonés…",
+    "noResults": "Sin resultados.",
+    "adult": "18+"
+  }
+}

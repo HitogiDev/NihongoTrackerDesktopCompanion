@@ -27,6 +27,22 @@ pub struct VnApp {
     /// Optional extra URL to open alongside the built-in texthooker.
     pub texthooker_url: Option<String>,
     pub enabled: bool,
+    /// `isAdult` as NihongoTracker reports it. Kept here so Discord Rich
+    /// Presence can strip the title without a round trip.
+    #[serde(default)]
+    pub is_adult: bool,
+}
+
+/// One entry of the Discord presence blacklist: a media contentId or an
+/// executable the user never wants published.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlacklistEntry {
+    /// contentId or executable, lowercased.
+    pub key: String,
+    /// `media` | `process`
+    pub kind: String,
+    /// What to call it in the settings list.
+    pub label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +74,25 @@ pub struct TextLine {
     pub chars: i64,
     pub created_at: String,
     pub synced: bool,
+}
+
+/// One "log session" event, kept locally so the reader can show its history
+/// with no network — the server has the same rows under `sessionHistory`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextHistoryEntry {
+    pub id: String,
+    #[serde(rename = "contentId")]
+    pub content_id: String,
+    #[serde(rename = "loggedAt")]
+    pub logged_at: String,
+    #[serde(rename = "charactersLogged")]
+    pub chars: i64,
+    #[serde(rename = "linesLogged")]
+    pub lines: i64,
+    #[serde(rename = "sessionSeconds")]
+    pub seconds: i64,
+    #[serde(rename = "readingSpeed")]
+    pub speed: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -117,11 +152,31 @@ CREATE TABLE IF NOT EXISTS text_state (
     media_type TEXT,
     media_title TEXT
 );
+CREATE TABLE IF NOT EXISTS text_history (
+    id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
+    logged_at TEXT NOT NULL,
+    chars INTEGER NOT NULL,
+    lines INTEGER NOT NULL,
+    seconds INTEGER NOT NULL,
+    speed INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS text_history_content ON text_history(content_id, logged_at);
 CREATE TABLE IF NOT EXISTS watch_history (
     key TEXT PRIMARY KEY,
     logged_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS discord_blacklist (
+    key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    label TEXT NOT NULL
+);
 "#;
+
+/// Columns added after the first release. SQLite has no `ADD COLUMN IF NOT
+/// EXISTS`, so a duplicate-column error simply means the database is already
+/// up to date.
+const MIGRATIONS: &[&str] = &["ALTER TABLE vn_apps ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0"];
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
@@ -132,6 +187,9 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
+        for statement in MIGRATIONS {
+            let _ = conn.execute(statement, []);
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -217,7 +275,7 @@ impl Db {
     pub fn list_vn_apps(&self) -> Result<Vec<VnApp>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT exe, media_id, media_type, media_title, image, texthooker_url, enabled
+                "SELECT exe, media_id, media_type, media_title, image, texthooker_url, enabled, is_adult
                  FROM vn_apps ORDER BY media_title COLLATE NOCASE",
             )?;
             let rows = stmt.query_map([], |r| {
@@ -229,6 +287,7 @@ impl Db {
                     image: r.get(4)?,
                     texthooker_url: r.get(5)?,
                     enabled: r.get::<_, i64>(6)? != 0,
+                    is_adult: r.get::<_, i64>(7)? != 0,
                 })
             })?;
             rows.collect()
@@ -238,15 +297,16 @@ impl Db {
     pub fn upsert_vn_app(&self, app: &VnApp) -> Result<()> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, texthooker_url, enabled)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, texthooker_url, enabled, is_adult)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT(exe) DO UPDATE SET
                     media_id = excluded.media_id,
                     media_type = excluded.media_type,
                     media_title = excluded.media_title,
                     image = excluded.image,
                     texthooker_url = excluded.texthooker_url,
-                    enabled = excluded.enabled",
+                    enabled = excluded.enabled,
+                    is_adult = excluded.is_adult",
                 params![
                     app.exe.to_lowercase(),
                     app.media_id,
@@ -254,8 +314,48 @@ impl Db {
                     app.media_title,
                     app.image,
                     app.texthooker_url,
-                    app.enabled as i64
+                    app.enabled as i64,
+                    app.is_adult as i64
                 ],
+            )
+            .map(|_| ())
+        })
+    }
+
+    // ── Discord blacklist ──────────────────────────────────────────────
+
+    pub fn discord_blacklist(&self) -> Result<Vec<BlacklistEntry>> {
+        self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT key, kind, label FROM discord_blacklist ORDER BY label COLLATE NOCASE",
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok(BlacklistEntry {
+                    key: r.get(0)?,
+                    kind: r.get(1)?,
+                    label: r.get(2)?,
+                })
+            })?;
+            rows.collect()
+        })
+    }
+
+    pub fn add_discord_blacklist(&self, entry: &BlacklistEntry) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO discord_blacklist (key, kind, label) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET kind = excluded.kind, label = excluded.label",
+                params![entry.key.trim().to_lowercase(), entry.kind, entry.label],
+            )
+            .map(|_| ())
+        })
+    }
+
+    pub fn delete_discord_blacklist(&self, key: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "DELETE FROM discord_blacklist WHERE key = ?1",
+                params![key.trim().to_lowercase()],
             )
             .map(|_| ())
         })
@@ -602,6 +702,46 @@ impl Db {
                 ],
             )
             .map(|_| ())
+        })
+    }
+
+    pub fn add_text_history(&self, entry: &TextHistoryEntry) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO text_history (id, content_id, logged_at, chars, lines, seconds, speed)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    entry.id,
+                    entry.content_id,
+                    entry.logged_at,
+                    entry.chars,
+                    entry.lines,
+                    entry.seconds,
+                    entry.speed
+                ],
+            )
+            .map(|_| ())
+        })
+    }
+
+    pub fn text_history(&self, content_id: &str) -> Result<Vec<TextHistoryEntry>> {
+        self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT id, content_id, logged_at, chars, lines, seconds, speed
+                 FROM text_history WHERE content_id = ?1 ORDER BY logged_at DESC LIMIT 100",
+            )?;
+            let rows = stmt.query_map(params![content_id], |r| {
+                Ok(TextHistoryEntry {
+                    id: r.get(0)?,
+                    content_id: r.get(1)?,
+                    logged_at: r.get(2)?,
+                    chars: r.get(3)?,
+                    lines: r.get(4)?,
+                    seconds: r.get(5)?,
+                    speed: r.get(6)?,
+                })
+            })?;
+            rows.collect()
         })
     }
 

@@ -1,0 +1,22 @@
+{
+  "title": "Ranking",
+  "subtitle": "Dónde estás respecto a los demás. Necesita conexión.",
+  "offline": "El ranking vive en el servidor, así que hace falta conexión.",
+  "you": "tú",
+  "position": "#{{position}}",
+  "filter": {
+    "label": "Métrica",
+    "userXp": "XP total",
+    "readingXp": "XP de lectura",
+    "listeningXp": "XP de escucha"
+  },
+  "time": {
+    "label": "Periodo",
+    "all-time": "Histórico",
+    "today": "Hoy",
+    "month": "Este mes",
+    "year": "Este año"
+  },
+  "empty": "Todavía no hay nadie en este ranking.",
+  "loadMore": "Cargar más"
+}

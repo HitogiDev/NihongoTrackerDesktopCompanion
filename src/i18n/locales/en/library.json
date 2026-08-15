@@ -1,0 +1,28 @@
+{
+  "title": "Library",
+  "subtitle": "Executables linked to a work: opening one starts the session and the texthooker.",
+  "works": "Visual novels and games",
+  "empty": "No works registered",
+  "emptyBody": "Link a visual novel's .exe to its NihongoTracker entry to track it automatically.",
+  "addFirst": "Add the first one",
+  "disabled": "Disabled",
+  "manualMappings": "Manually linked titles",
+  "modal": {
+    "addTitle": "Add work",
+    "editTitle": "Edit work",
+    "executable": "Executable",
+    "executableHint": "The process name, for example siglusengine.exe",
+    "choose": "Choose",
+    "work": "Work on NihongoTracker",
+    "notSelected": "Not selected",
+    "extraUrl": "Extra texthooker URL",
+    "extraUrlHint": "Optional: opens in the browser alongside the built-in texthooker.",
+    "enabled": "Detection on",
+    "enabledHint": "Turn it off to stop tracking this work without deleting it."
+  },
+  "processes": {
+    "title": "Choose process",
+    "filter": "Filter by name or window title…",
+    "window": "window"
+  }
+}

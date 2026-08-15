@@ -1,0 +1,69 @@
+{
+  "title": "Settings",
+  "subtitle": "How things are detected, when they are logged, and where they are sent.",
+  "account": {
+    "title": "Account",
+    "noUser": "No user",
+    "web": "Web",
+    "server": "Server",
+    "newKey": "New API key",
+    "replace": "Replace",
+    "signOut": "Disconnect account"
+  },
+  "anime": {
+    "title": "Anime",
+    "detect": "Detect video players",
+    "detectHint": "mpv, mpv.net, MPC-HC/BE, VLC, PotPlayer, GOM, KMPlayer, SMPlayer.",
+    "usePosition": "Use the player's real position",
+    "usePositionHint": "mpv over IPC and MPC-HC/BE over its web interface. Without it, time with the window open is counted, and a paused video counts too.",
+    "mpvIpc": "mpv IPC socket",
+    "mpvIpcHint": "The same path as input-ipc-server in mpv.conf. On Windows it is translated to a named pipe automatically.",
+    "mpcPort": "MPC web port",
+    "mpcPortHint": "Options → Player → Web Interface → Listen on port.",
+    "autoLog": "Log without confirming",
+    "autoLogHint": "With this off, the episode waits in Pending until you approve it.",
+    "logTime": "Send the measured time",
+    "logTimeHint": "The site already credits 24 min per episode; turn this on only if you want the real time.",
+    "threshold": "Threshold: {{percent}}% of the episode",
+    "episodeMinutes": "Default length (min)"
+  },
+  "vn": {
+    "title": "Visual novels",
+    "detect": "Detect registered novels",
+    "detectHint": "Opening the executable starts the session and the texthooker.",
+    "requireFocus": "Only count while the window is in the foreground",
+    "openTexthooker": "Open the texthooker automatically",
+    "confirm": "Confirm before logging the session",
+    "confirmHint": "Closing the novel sends the log to Pending.",
+    "afk": "Idle pause: {{seconds}}s",
+    "afkHint": "0 disables the automatic pause."
+  },
+  "extensions": {
+    "title": "Popup dictionaries",
+    "enabled": "Load browser extensions",
+    "enabledHint": "Windows only: the webview can run unpacked Chrome extensions, so Yomitan or JitenReader work over the reader itself.",
+    "body": "Download the extension's Chrome build, unzip it into the folder below — one folder per extension — and restart the app.",
+    "openFolder": "Open folder",
+    "none": "No extensions installed yet.",
+    "settings": "Settings",
+    "restart": "Changes apply after restarting the app."
+  },
+  "app": {
+    "title": "Application",
+    "language": "Language",
+    "autostart": "Start with the system",
+    "startMinimized": "Start minimized",
+    "minimizeToTray": "Close to tray",
+    "minimizeToTrayHint": "Detection keeps running with the window closed.",
+    "notifications": "System notifications",
+    "streakReminder": "Warn me when my streak is at risk",
+    "streakReminderHint": "Once a day at most, only if nothing was logged in your NihongoTracker timezone. Clicking it opens the log form.",
+    "streakHours": "Warn {{count}} h before midnight",
+    "streakHoursHint": "Midnight in your account's timezone, not this computer's.",
+    "streakAt": "Also at a fixed time",
+    "streakAtHint": "Leave empty to rely on the window before midnight only.",
+    "theme": "Theme",
+    "poll": "Polling interval: {{ms}} ms",
+    "pollHint": "Higher means less CPU."
+  }
+}

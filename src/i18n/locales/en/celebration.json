@@ -1,0 +1,15 @@
+{
+  "success": "Log successful!",
+  "monthlyRanking": "Monthly ranking",
+  "streak": "{{count}} day streak",
+  "streak_other": "{{count}} days streak",
+  "level": "Level {{level}}",
+  "passed": "You passed",
+  "andMore": "and {{count}} more",
+  "next": "Next",
+  "done": "Awesome!",
+  "mute": "Mute sounds",
+  "unmute": "Unmute sounds",
+  "achievements": "{{count}} new achievement",
+  "achievements_other": "{{count}} new achievements"
+}

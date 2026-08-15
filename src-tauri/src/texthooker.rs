@@ -5,6 +5,7 @@
 //! Lines land in SQLite first, so the reader keeps working with no connection;
 //! `sync::sync_text_lines` pushes them to the server when it can.
 
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -20,6 +21,7 @@ use crate::state::{AppState, HookerCommand, HookerStatus};
 
 pub const EVT_LINE: &str = "texthooker://line";
 pub const EVT_STATUS: &str = "texthooker://status";
+pub const EVT_TIMER: &str = "texthooker://timer";
 
 static JP: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[\p{Han}\p{Hiragana}\p{Katakana}]").unwrap());
@@ -116,14 +118,40 @@ async fn handle_text(app: &AppHandle, raw: &str) {
     if text.is_empty() {
         return;
     }
-    ingest(app, &text).await;
+    ingest(app, &text, IngestSource::Socket).await;
 }
 
-/// Store one line and tell the UI about it. Shared with the manual "paste"
-/// path exposed as a command.
-pub async fn ingest(app: &AppHandle, text: &str) {
+/// Where a line came from. The reader has a separate "allow during pause"
+/// setting per input, same as the web client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IngestSource {
+    Socket,
+    Clipboard,
+}
+
+/// Store one line and tell the UI about it.
+pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource) {
     let state = app.state::<AppState>();
     let settings = state.settings_snapshot().await;
+
+    let timer_active = state.hooker_timer_active.load(Ordering::Acquire);
+    let allowed_while_paused = match source {
+        IngestSource::Socket => settings.texthooker_allow_line_during_pause,
+        IngestSource::Clipboard => settings.texthooker_allow_clipboard_during_pause,
+    };
+    if !timer_active && !allowed_while_paused {
+        return;
+    }
+
+    // Autostart: the first line of a sitting can start the clock for you.
+    let autostart = match source {
+        IngestSource::Socket => settings.texthooker_autostart_by_line,
+        IngestSource::Clipboard => settings.texthooker_autostart_by_clipboard,
+    };
+    if !timer_active && autostart {
+        state.hooker_timer_active.store(true, Ordering::Release);
+        let _ = app.emit(EVT_TIMER, json!({ "active": true }));
+    }
 
     let content_id = state
         .hooker
@@ -158,6 +186,60 @@ pub async fn ingest(app: &AppHandle, text: &str) {
     }
 }
 
+/// Watch the clipboard for Japanese text.
+///
+/// The web texthooker gets a second input path from a browser extension that
+/// injects `<p>` elements into the page (`HookerScreen.tsx` MutationObserver).
+/// A native app can't be on the receiving end of that, so this is the desktop
+/// equivalent — and it covers hooks that only copy to the clipboard.
+pub fn spawn_clipboard_watcher(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut last: Option<String> = None;
+        // Whatever is already in the clipboard when the watcher starts is not
+        // a new line; remember it without ingesting.
+        let mut primed = false;
+
+        loop {
+            let enabled = {
+                let state = app.state::<AppState>();
+                state.settings_snapshot().await.texthooker_clipboard
+            };
+
+            if enabled {
+                match read_clipboard().await {
+                    Some(text) if !text.trim().is_empty() => {
+                        if !primed {
+                            primed = true;
+                            last = Some(text);
+                        } else if last.as_deref() != Some(text.as_str()) {
+                            last = Some(text.clone());
+                            // Ignore copies that carry no Japanese at all —
+                            // otherwise every Ctrl+C becomes a line.
+                            if count_japanese(&text) > 0 {
+                                ingest(&app, text.trim(), IngestSource::Clipboard).await;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                primed = false;
+                last = None;
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+}
+
+/// Clipboard access is blocking and platform-specific; keep it off the runtime.
+async fn read_clipboard() -> Option<String> {
+    tokio::task::spawn_blocking(|| arboard::Clipboard::new().ok()?.get_text().ok())
+        .await
+        .ok()
+        .flatten()
+}
+
 #[cfg(test)]
 mod tests {
     use super::count_japanese;
@@ -185,6 +267,17 @@ pub async fn set_status(
         }
         hooker.last_error = error;
     }
+    // Losing the hook can stop the clock, so a crash mid-session doesn't bank
+    // an hour of nothing.
+    if matches!(status, HookerStatus::Disconnected | HookerStatus::Error) {
+        let settings = state.settings_snapshot().await;
+        if settings.texthooker_pause_on_disconnect
+            && state.hooker_timer_active.swap(false, Ordering::AcqRel)
+        {
+            let _ = app.emit(EVT_TIMER, json!({ "active": false }));
+        }
+    }
+
     let snapshot = state.hooker.read().await.clone();
     let _ = app.emit(EVT_STATUS, &snapshot);
 }

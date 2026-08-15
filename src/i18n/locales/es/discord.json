@@ -1,0 +1,39 @@
+{
+  "title": "Discord Rich Presence",
+  "enable": "Mostrar mi inmersión en Discord",
+  "enableHint": "Apagado hasta que tú lo enciendas. Mientras esté apagado no se publica nada ni se abre ninguna conexión.",
+  "appId": "Application ID",
+  "appIdHint": "Crea una aplicación en el Discord Developer Portal, sube tus iconos en Rich Presence → Art Assets y pega aquí su ID.",
+  "largeImage": "Imagen de reserva",
+  "largeImageHint": "Clave del asset que se usa cuando no hay portada, o cuando enseñarla delataría el título.",
+  "connected": "Conectado a Discord.",
+  "disconnected": "Sin conexión. Puede que Discord esté cerrado; se reintenta solo.",
+  "genericMode": "Solo actividad, nunca el título",
+  "genericModeHint": "Publica siempre \"Inmersión en japonés\", sin título ni portada, sea lo que sea.",
+  "profileButton": "Añadir el botón \"Ver perfil\"",
+  "profileButtonHint": "Enlaza a tu perfil público de NihongoTracker.",
+  "preview": {
+    "title": "Lo que ven los demás",
+    "hint": "No es una maqueta: es exactamente la presencia que se publicaría ahora mismo.",
+    "off": "Rich Presence está apagado. No se publica nada.",
+    "idle": "No hay nada en marcha, así que la presencia está vacía.",
+    "blocked": "\"{{label}}\" está en tu lista negra: no se publica absolutamente nada.",
+    "elapsed": "{{time}} transcurridos",
+    "reason": {
+      "adult": "Marcado como +18 en NihongoTracker, así que se ocultan el título y la portada.",
+      "unresolved": "No se pudo identificar la obra, y el nombre del archivo no se publica nunca.",
+      "generic": "Está activo el modo de solo actividad."
+    }
+  },
+  "blacklist": {
+    "title": "No mostrar nunca",
+    "hint": "Una obra o un programa de esta lista no publica nada en absoluto, ni siquiera una actividad genérica.",
+    "addMedia": "Añadir una obra",
+    "processPlaceholder": "juego.exe o mpv",
+    "empty": "Todavía no hay nada oculto.",
+    "kind": {
+      "media": "Obra",
+      "process": "Programa"
+    }
+  }
+}

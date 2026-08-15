@@ -1,0 +1,20 @@
+{
+  "title": "Log immersion",
+  "submit": "Log",
+  "type": "Type",
+  "description": "Description",
+  "descriptionHint": "Always required by the server, even when the media is linked.",
+  "descriptionPlaceholder": "What did you read or watch?",
+  "linked": "Linked media",
+  "unlink": "Unlink",
+  "streakReason": "Nothing is logged today and your streak is about to end.",
+  "estimatedXp": "{{xp}} XP estimated",
+  "required": "{{field}} is required for this type.",
+  "requiredAny": "Fill in at least one: {{fields}}.",
+  "amount": {
+    "episodes": "Episodes",
+    "time": "Minutes",
+    "chars": "Characters",
+    "pages": "Pages"
+  }
+}

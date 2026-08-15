@@ -30,12 +30,20 @@ src-tauri/src/
   platform/      Ventanas/procesos por SO. windows_impl.rs real, stub.rs el resto
   players.rs     Reproductores conocidos + limpieza del título de ventana
   parser.rs      Parser de nombres de release (tests dentro)
+  playback.rs    Posición real: IPC de mpv y interfaz web de MPC
   watcher.rs     Bucle de detección; convierte sesiones en logs
-  texthooker.rs  Cliente WebSocket Textractor/Agent
+  texthooker.rs  Cliente WebSocket Textractor/Agent + lector de portapapeles
   api.rs         Cliente REST (x-api-key)
+  streak.rs      Aviso de "racha en riesgo": day-keys, ventana y antirruido
+  discord.rs     Rich Presence opcional: política de privacidad + hilo de IPC
+  i18n.rs        Los pocos textos que muestra Rust (bandeja y notificaciones)
   sync.rs        Outbox con reintentos + push de líneas
   commands.rs    Superficie IPC
+packages/
+  yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
+                    con el Frontend web. Sin Tauri dentro
 src/
+  i18n/          i18next: `locales/{en,es}/*.json`, un namespace por pantalla
   lib/ipc.ts     Único punto de entrada a los comandos Rust, tipado
   lib/types.ts   Espejo de los tipos de Rust — hay que mantenerlos sincronizados
   store/         zustand: settings, tracker, hooker (se alimentan de eventos)
@@ -51,11 +59,140 @@ src/
 3. Los logs terminados van al **outbox** de SQLite, nunca directos a la red.
    `sync.rs` los drena cada 30 s y al confirmar desde la UI.
 
+### Quién manda en cada cosa
+
+- La sesión del texthooker (`content_id`) la fija **Rust** al detectar una VN, no
+  el frontend: la ventana puede estar en la bandeja y su listener no dispararse.
+- El cronómetro de una VN detectada lo lleva el watcher; el temporizador manual
+  de la pantalla del texthooker solo se usa cuando no hay sesión automática.
+- El XP nunca se calcula en el cliente: se pide a `POST /api/logs/preview-xp`.
+- El día del usuario lo decide `streak.rs`, no el frontend ni el reloj del SO.
+
+### Recordatorio de racha
+
+`streak.rs` avisa antes de que el día acabe **en la zona horaria de la cuenta**
+(`user.settings.timezone`, por defecto `UTC`), no en la del sistema operativo. La
+day-key `YYYY-MM-DD` tiene que salir idéntica a la del backend
+(`Backend/src/services/streaks.ts`), y hay un test con valores calcados de su
+`Intl` para que no se desvíe.
+
+- `lastStreakDate` es un **ancla de medianoche UTC** de una day-key, así que se
+  lee en UTC (`getDayKeyFromUTCDate`). Convertirla a la zona del usuario correría
+  el día para todo el que esté al oeste de Greenwich.
+- Está en riesgo si `currentStreak > 0` y la day-key del ancla no es la de hoy.
+- Los logs con `unknownDate: true` no cuentan para la racha: "he enviado un log
+  hoy" no prueba nada, sólo lo hace `lastStreakDate`.
+- Antirruido: una notificación por day-key como mucho (persistida en
+  `kv:streak:notified_day`), y **siempre se reconsulta** justo antes de
+  dispararla, porque el log pudo entrar desde la web o el móvil.
+- Presupuesto de red: `streak::budget` decide la antigüedad admisible —5 min
+  dentro de la ventana, 1 h fuera— y **todo** el mundo pide por `streak::refresh`,
+  incluida la UI, así que abrir el dashboard no gasta peticiones extra.
+- Un 401 apaga el bucle (`streak_auth_failed`) y emite `streak://auth-required`;
+  sólo `save_settings` lo rearma. Nada de reintentar una clave revocada.
+- La notificación es accionable sólo en Windows: el plugin de Tauri no expone el
+  clic en escritorio, así que ahí el toast se construye con
+  `tauri-winrt-notification` (botón + `on_activated`), con el AppUserModelID de
+  la app y `POWERSHELL_APP_ID` de reserva. En el resto de sistemas cae al plugin,
+  sin botón. El clic (y la entrada de la bandeja) emiten `streak://open-log`.
+
+### Extensiones del webview
+
+La ventana principal **no** está en `tauri.conf.json`: se construye en
+`build_main_window` porque `extensions_path` solo existe en el builder de Rust,
+no en el archivo de configuración. De ahí salen los diccionarios emergentes
+(Yomitan, JitenReader) cargados como extensiones sin empaquetar. Solo Windows.
+
+El id de una extensión sin empaquetar lo deriva Chromium de su ruta absoluta
+(SHA-256, primeros 16 bytes, cada dígito hex mapeado `0-f` → `a-p`; en Windows
+la ruta se hashea como UTF-16LE). Está en `commands::extension_id_for_path` y
+sirve para abrir sus páginas internas, ya que el webview no tiene barra de
+herramientas.
+
+### Salas del texthooker
+
+Las salas compartidas van por Socket.IO **desde el webview** (`src/lib/room.ts`),
+no desde Rust, porque el protocolo es el mismo que el de la web y así una sala
+sirve para los dos clientes. El handshake del socket autentica con la cookie
+`jwt`, que aquí no existe, pero el servidor la trata como opcional y
+`join_room` acepta el `username` en el propio evento. El `hostToken` se guarda
+en `localStorage` con la misma clave que la web (`hostToken_<roomId>`), así que
+retomar una sala funciona indistintamente desde el escritorio o el navegador.
+Ojo con el formato: por socket las líneas viajan con `japaneseCount`.
+
+### Discord Rich Presence
+
+Opt-in y apagado por defecto: con el toggle apagado no se lanza el hilo ni se
+abre ningún socket. Lo que se publica lo decide `discord::decide`, una **función
+pura**, y la pantalla de ajustes llama exactamente a esa misma función para el
+preview: lo que ve el usuario ahí es literalmente lo que verán los demás, no una
+maqueta.
+
+Orden de la política, y no se puede reordenar:
+
+1. Obra o proceso en la lista negra → no se publica **nada**, ni genérico.
+2. `isAdult`, media sin resolver, o el modo genérico global → presencia genérica
+   ("Inmersión en japonés"), sin título ni portada. El progreso (episodio o
+   caracteres) sí se queda: no identifica nada.
+3. Si no, la presencia completa.
+
+- `isAdult` viaja con los datos, no se consulta al vuelo: `MediaMatch.is_adult`
+  y la columna `vn_apps.is_adult` (migración en `db::MIGRATIONS`, porque SQLite
+  no tiene `ADD COLUMN IF NOT EXISTS`). Si añades otra ruta que cree un
+  `MediaMatch` o un `VnApp`, arrastra el flag o el título acabará en Discord.
+- Una sesión en pausa (`counting == false`, o el reproductor en pausa) limpia la
+  presencia. También al cerrar la app (`RunEvent::Exit`) y al apagar el toggle.
+- El IPC del crate es **bloqueante**, así que vive en su propio hilo de SO con un
+  `std::sync::mpsc`. Nunca en un worker de tokio, y un fallo de IPC no puede
+  llegar al watcher.
+- Límite de Discord: ~1 update cada 15 s. El hilo guarda un único `pending` que
+  se **sobrescribe**, así que los estados intermedios se descartan, no se
+  encolan. Los `clear` se saltan el límite: una presencia colgada es una fuga.
+- Reconexión con backoff 2 s → 60 s. Que Discord no esté abierto no es un error,
+  y no bloquea el arranque.
+- `timestamps.start` es el inicio de la sesión: cuenta Discord, no nosotros.
+- El Application ID lo pone el usuario en ajustes (hay que crear la app en el
+  Developer Portal y subir los assets); sin él no se intenta conectar.
+
+### Renderer de diccionario
+
+`packages/yomitan-content` es un paquete TypeScript **sin nada de Tauri**: lo
+consume este webview (`file:packages/yomitan-content`) y también el Frontend web
+(por ruta relativa entre repos hermanos). Rust devuelve el JSON del glosario tal
+cual; todo lo que es presentación vive ahí, para que los dos clientes enseñen una
+definición igual.
+
+Lo que hay que saber antes de tocarlo:
+
+- El alcance está cerrado por el censo de las 435.448 entradas de Jitendex: 8
+  tags, los once hooks por encima del 10 %, tres `data-sc-class`. `table` e `img`
+  quedan fuera **de momento** — no se descartan, se renderiza su contenido y se
+  cuenta en `RenderDiagnostics`.
+- **Nunca `innerHTML` ni `dangerouslySetInnerHTML`**, y **nunca se emite un
+  `href`**: un `<a>` interno (`?query=…`) se convierte en `<button>` que pide otro
+  lookup, y cualquier otro se queda en texto. Por eso no hay lista negra de
+  esquemas: `javascript:` simplemente no es la forma interna.
+- El `styles.css` del diccionario se pasa por `scopeDictionaryCss` y va en un
+  `<style>` dentro del popup. Nunca global: sale de un zip que importó el usuario.
+- Los mapas de clases se reparten así: `data-sc-class` pone la forma (badge,
+  caja) y `data-sc-content` solo color y tipografía, porque en los datos
+  `part-of-speech-info` siempre viene con `tag` y `xref` siempre con `extra-box`.
+  Si los dos ponen badge, sale `badge-sm badge-xs` con dos colores peleándose.
+- El paquete no tiene ni una cadena visible: el botón de volver y sus textos los
+  pone cada app con su i18n. `useLookupHistory` solo lleva la pila.
+
 ### Eventos Rust → frontend
 
 `tracker://state`, `vn://started`, `vn://ended`, `texthooker://line`,
-`texthooker://status`, `outbox://changed`, `pending://changed`,
-`settings://changed`. Están centralizados en `src/lib/ipc.ts` (`events`).
+`texthooker://status`, `texthooker://timer`, `outbox://changed`,
+`pending://changed`, `settings://changed`, `log://celebration`,
+`streak://reminder`, `streak://open-log`, `streak://auth-required`,
+`discord://status`. Están
+centralizados en `src/lib/ipc.ts` (`events`).
+
+`log://celebration` lleva el `celebration` y los `newAchievements` que devuelve
+`POST /api/logs`; lo emite `sync.rs` al entregar del outbox, así que un log que
+se encoló sin conexión celebra igual cuando por fin sale.
 
 ## Reglas del proyecto
 
@@ -89,6 +226,12 @@ src/
   la prop `size`.
 - Añadir un comando Rust implica: `commands.rs` → `invoke_handler` en `lib.rs`
   → wrapper en `src/lib/ipc.ts`. Los tres pasos, siempre.
+- **Ningún texto visible se escribe a pelo.** Todo pasa por `useTranslation` y
+  vive en `src/i18n/locales/en` y `.../es`; las dos carpetas tienen que tener
+  exactamente las mismas claves. Inglés es el idioma de respaldo.
+- Los textos que enseña Rust (bandeja, notificaciones) están en
+  `src-tauri/src/i18n.rs` y hay que mantenerlos a mano en los dos idiomas. El
+  menú de la bandeja se reconstruye en `save_settings` al cambiar de idioma.
 
 ## Contrato con el backend de NihongoTracker
 
@@ -125,6 +268,23 @@ equivocarse:
   caso ahí antes de tocar la lógica.
 - Los reproductores nuevos van a la tabla `PLAYERS` de `players.rs`, con sus
   sufijos de título y, si aplica, su título en reposo en `IDLE_TITLES`.
+- La posición real manda sobre el tiempo transcurrido: `AnimeSession::ready`
+  usa `position/duration` cuando el reproductor la da y solo cae al reloj si no.
+  Un reproductor nuevo con API se añade a `playback::probe`, no al watcher.
+- El sondeo de posición sale del tick (`request_playback`) con un `AtomicBool`
+  que impide que se acumulen sondas si el reproductor tarda.
 - El conteo de caracteres debe seguir siendo solo kana + kanji
   (`texthooker::count_japanese`), igual que `countJapaneseCharacters` en la web,
   o las estadísticas dejarán de cuadrar con el sitio.
+- Las dos entradas del texthooker (WebSocket y portapapeles) terminan en
+  `texthooker::ingest`. Cualquier filtro nuevo va ahí, no duplicado en cada
+  camino. El del portapapeles además exige que la copia lleve japonés, o cada
+  Ctrl+C acabaría siendo una línea.
+- `src/screens/Texthooker.tsx` es un port de `HookerScreen.tsx` de la web: mismo
+  layout, mismas clases (`th-root`, `th-topbar`, `th-line-item`…), mismas
+  opciones de fuente y tema, mismo cronómetro anclado a reloj de pared. Si
+  cambias algo ahí, compáralo con el original antes.
+- El estado del cronómetro vive en los dos lados: la UI lo lleva y lo replica en
+  `AppState::hooker_timer_active` con `hooker_set_timer_active`, porque la
+  ingestión en Rust necesita saberlo para los ajustes de "en pausa" y de
+  arranque automático.

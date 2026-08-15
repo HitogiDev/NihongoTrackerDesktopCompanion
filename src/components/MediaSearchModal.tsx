@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Spinner } from './ui/Spinner';
 import { ipc } from '../lib/ipc';
 import type { MediaHit } from '../lib/types';
 
-const TYPES = [
-  { value: 'anime', label: 'Anime' },
-  { value: 'vn', label: 'Novela visual' },
-  { value: 'manga', label: 'Manga' },
-  { value: 'reading', label: 'Novela ligera' },
-  { value: 'game', label: 'Juego' },
-  { value: 'movie', label: 'Película' },
-  { value: 'tv show', label: 'Serie' },
-  { value: 'book', label: 'Libro' },
-];
+const TYPES = ['anime', 'vn', 'manga', 'reading', 'game', 'movie', 'tv show', 'book'];
 
 export function MediaSearchModal({
   open,
@@ -32,6 +24,7 @@ export function MediaSearchModal({
   allowTypeChange?: boolean;
   onPick: (hit: MediaHit, type: string) => void | Promise<void>;
 }) {
+  const { t } = useTranslation('common');
   const [type, setType] = useState(mediaType);
   const [query, setQuery] = useState(initialQuery);
   const [debounced, setDebounced] = useState(initialQuery);
@@ -56,7 +49,7 @@ export function MediaSearchModal({
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="Buscar media" size="lg">
+    <Modal open={open} onClose={onClose} title={t('media.title')} size="lg">
       <div className="space-y-3">
         <div className="flex gap-2">
           <label className="input input-sm flex-1 flex items-center gap-2">
@@ -66,7 +59,7 @@ export function MediaSearchModal({
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Título en romaji, inglés o japonés…"
+              placeholder={t('media.placeholder')}
             />
             {isFetching ? <Spinner size="xs" /> : null}
           </label>
@@ -76,9 +69,9 @@ export function MediaSearchModal({
               value={type}
               onChange={(e) => setType(e.target.value)}
             >
-              {TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              {TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`logType.${value}`)}
                 </option>
               ))}
             </select>
@@ -91,7 +84,9 @@ export function MediaSearchModal({
 
         <div className="max-h-96 overflow-y-auto -mx-2 px-2">
           {(data ?? []).length === 0 && debounced.trim().length >= 2 && !isFetching ? (
-            <p className="text-sm text-base-content/60 py-6 text-center">Sin resultados.</p>
+            <p className="text-sm text-base-content/60 py-6 text-center">
+              {t('media.noResults')}
+            </p>
           ) : null}
           <ul className="space-y-1">
             {(data ?? []).map((hit) => (
@@ -121,7 +116,9 @@ export function MediaSearchModal({
                       {hit.contentId}
                     </span>
                   </span>
-                  {hit.isAdult ? <span className="badge badge-xs badge-error">18+</span> : null}
+                  {hit.isAdult ? (
+                    <span className="badge badge-xs badge-error">{t('media.adult')}</span>
+                  ) : null}
                 </button>
               </li>
             ))}

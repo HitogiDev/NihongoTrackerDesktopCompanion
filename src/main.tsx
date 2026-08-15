@@ -7,7 +7,13 @@ import { HashRouter } from 'react-router-dom';
 // ~120 Noto subsets would add several MB to the installer for no gain.
 import '@fontsource-variable/inter';
 import App from './App';
+import { initI18n } from './i18n';
+import { detectLanguage } from './i18n/languages';
 import './index.css';
+
+// Start in the system language; the store switches to the stored one as soon as
+// settings come back from Rust.
+initI18n(detectLanguage());
 
 const queryClient = new QueryClient({
   defaultOptions: {

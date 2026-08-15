@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Rust / Cargo
+target/
+
+# Tauri
+src-tauri/gen/

@@ -1,0 +1,69 @@
+{
+  "title": "Ajustes",
+  "subtitle": "Cómo se detecta, cuándo se registra y a dónde se envía.",
+  "account": {
+    "title": "Cuenta",
+    "noUser": "Sin usuario",
+    "web": "Web",
+    "server": "Servidor",
+    "newKey": "Nueva API key",
+    "replace": "Reemplazar",
+    "signOut": "Desconectar cuenta"
+  },
+  "anime": {
+    "title": "Anime",
+    "detect": "Detectar reproductores de vídeo",
+    "detectHint": "mpv, mpv.net, MPC-HC/BE, VLC, PotPlayer, GOM, KMPlayer, SMPlayer.",
+    "usePosition": "Usar la posición real del reproductor",
+    "usePositionHint": "mpv por IPC y MPC-HC/BE por su interfaz web. Sin esto se cuenta el tiempo con la ventana abierta, que un vídeo en pausa también suma.",
+    "mpvIpc": "Socket IPC de mpv",
+    "mpvIpcHint": "La misma ruta que tengas en input-ipc-server de mpv.conf. En Windows se traduce sola a named pipe.",
+    "mpcPort": "Puerto web de MPC",
+    "mpcPortHint": "Opciones → Reproductor → Interfaz web → Escuchar en el puerto.",
+    "autoLog": "Registrar sin confirmar",
+    "autoLogHint": "Con esto apagado el episodio espera en Pendientes hasta que lo apruebes.",
+    "logTime": "Enviar el tiempo medido",
+    "logTimeHint": "La web ya acredita 24 min por episodio; actívalo solo si quieres el tiempo real.",
+    "threshold": "Umbral: {{percent}}% del episodio",
+    "episodeMinutes": "Duración por defecto (min)"
+  },
+  "vn": {
+    "title": "Novelas visuales",
+    "detect": "Detectar novelas registradas",
+    "detectHint": "Al abrir el ejecutable empieza la sesión y se abre el texthooker.",
+    "requireFocus": "Solo contar con la ventana en primer plano",
+    "openTexthooker": "Abrir el texthooker automáticamente",
+    "confirm": "Confirmar antes de registrar la sesión",
+    "confirmHint": "Al cerrar la novela el registro pasa por Pendientes.",
+    "afk": "Pausa por inactividad: {{seconds}}s",
+    "afkHint": "0 desactiva la pausa automática."
+  },
+  "extensions": {
+    "title": "Diccionarios emergentes",
+    "enabled": "Cargar extensiones de navegador",
+    "enabledHint": "Solo en Windows: el webview puede ejecutar extensiones de Chrome sin empaquetar, así que Yomitan o JitenReader funcionan sobre el propio lector.",
+    "body": "Descarga la versión para Chrome de la extensión, descomprímela en la carpeta de abajo —una carpeta por extensión— y reinicia la app.",
+    "openFolder": "Abrir carpeta",
+    "none": "Todavía no hay ninguna extensión instalada.",
+    "settings": "Ajustes",
+    "restart": "Los cambios se aplican al reiniciar la app."
+  },
+  "app": {
+    "title": "Aplicación",
+    "language": "Idioma",
+    "autostart": "Iniciar con el sistema",
+    "startMinimized": "Arrancar minimizado",
+    "minimizeToTray": "Cerrar a la bandeja",
+    "minimizeToTrayHint": "La detección sigue funcionando con la ventana cerrada.",
+    "notifications": "Notificaciones del sistema",
+    "streakReminder": "Avisarme si mi racha está en riesgo",
+    "streakReminderHint": "Como mucho una vez al día, y solo si no has registrado nada en la zona horaria de tu cuenta. Al pulsarla se abre el formulario de registro.",
+    "streakHours": "Avisar {{count}} h antes de medianoche",
+    "streakHoursHint": "La medianoche de tu cuenta, no la de este ordenador.",
+    "streakAt": "También a una hora fija",
+    "streakAtHint": "Déjalo vacío para usar solo la ventana antes de medianoche.",
+    "theme": "Tema",
+    "poll": "Frecuencia de sondeo: {{ms}} ms",
+    "pollHint": "Más alto = menos CPU."
+  }
+}

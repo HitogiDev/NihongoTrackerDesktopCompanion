@@ -1,0 +1,67 @@
+{
+  "title": "Activity",
+  "subtitle": "Detection is running. Leave the companion open while you watch or read.",
+  "subtitleUnsupported": "Detection is not available on this platform yet.",
+  "sync": "Sync",
+  "logNow": "Log",
+  "streakAtRisk": "{{count}}-day streak at risk: nothing logged today, {{hours}} h {{minutes}} min left.",
+  "authRequired": "The server rejected the API key. Replace it to keep syncing.",
+  "authRequiredAction": "Settings",
+  "offlineWarning": "No connection to the server. Everything is stored locally and will be sent once you are back online.",
+  "offlineWarningQueued": "No connection to the server. Everything is stored locally and will be sent once you are back online ({{count}} queued).",
+  "anime": {
+    "empty": "No player detected",
+    "emptyBody": "Open mpv, MPC-HC, VLC or PotPlayer and the episode will be recognised on its own.",
+    "episode": "Episode {{episode}}",
+    "episodeRange": "Episode {{from}}–{{to}}",
+    "season": "Season {{season}}",
+    "resolving": "Looking it up on NihongoTracker…",
+    "unmatched": "No match on NihongoTracker.",
+    "link": "Link",
+    "logged": "Logged",
+    "progressPlayer": "Real position · {{percent}}% to log",
+    "progressElapsed": "Time with the player open",
+    "logNow": "Log now",
+    "paused": "Paused"
+  },
+  "vn": {
+    "empty": "No visual novel running",
+    "emptyBody": "Register your visual novels' executables in the library so they are detected when you open them.",
+    "add": "Add a novel",
+    "counting": "Counting time",
+    "autoPaused": "Auto-paused",
+    "time": "Time",
+    "characters": "Characters",
+    "speed": "Chars/hour",
+    "idleFor": "No activity for {{duration}}.",
+    "notFocused": "The window is not in the foreground.",
+    "openTexthooker": "Open texthooker"
+  },
+  "progress": {
+    "title": "Your progress",
+    "level": "Level",
+    "toNextLevel": "{{percent}}% to the next one",
+    "streak": "Streak",
+    "streakDays": "{{count}} d",
+    "longestStreak": "best {{count}} d",
+    "reading": "Reading",
+    "listening": "Listening",
+    "levelUnit": "level"
+  },
+  "summary": {
+    "title": "Summary",
+    "pending": "Pending",
+    "pendingHint": "awaiting confirmation",
+    "queued": "Queued",
+    "queuedHint": "not sent to the server yet",
+    "idle": "Idle",
+    "idleHint": "AFK at {{seconds}}s",
+    "activeWindow": "Active window"
+  },
+  "recent": {
+    "title": "Latest logs",
+    "openWeb": "Open on the web"
+  },
+  "reviewPending": "Review {{count}} pending log",
+  "reviewPending_other": "Review {{count}} pending logs"
+}

@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::api::MediaHit;
 use crate::config::Settings;
-use crate::db::{PendingLog, TextLine, TextState, VnApp};
+use crate::db::{BlacklistEntry, PendingLog, TextHistoryEntry, TextLine, TextState, VnApp};
 use crate::state::{AppState, HookerCommand, HookerState, MediaMatch, TrackerSnapshot};
 use crate::sync;
 use crate::texthooker;
@@ -30,16 +30,32 @@ pub async fn save_settings(
     settings: Settings,
 ) -> CmdResult<Settings> {
     state.db.save_settings(&settings).map_err(err)?;
-    let reconnect = {
+    let (reconnect, language_changed) = {
         let mut current = state.settings.write().await;
-        let changed = current.texthooker_ws_url != settings.texthooker_ws_url
+        let reconnect = current.texthooker_ws_url != settings.texthooker_ws_url
             || current.texthooker_autoconnect != settings.texthooker_autoconnect;
+        let language_changed = current.language != settings.language;
         *current = settings.clone();
-        changed
+        (reconnect, language_changed)
     };
+
+    // The tray menu is built in Rust, so it has to be redrawn by hand.
+    if language_changed {
+        if let Some(tray) = app.tray_by_id("main-tray") {
+            if let Ok(menu) = crate::tray_menu(&app, &settings.language) {
+                let _ = tray.set_menu(Some(menu));
+            }
+        }
+    }
 
     // A new server or key invalidates whatever we matched before.
     state.media_cache.write().await.clear();
+    // Saving is the only way back from a revoked key, so let the streak
+    // reminder try again and drop the streak it read with the old one.
+    state
+        .streak_auth_failed
+        .store(false, std::sync::atomic::Ordering::Release);
+    *state.streak.write().await = Default::default();
 
     if reconnect {
         let cmd = if settings.texthooker_autoconnect {
@@ -60,6 +76,10 @@ pub async fn save_settings(
             manager.disable()
         };
     }
+    // Starts, restarts or tears down the presence — including wiping it when
+    // the toggle goes off.
+    crate::discord::apply_settings(&app, &settings).await;
+
     let _ = app.emit("settings://changed", &settings);
     Ok(settings)
 }
@@ -289,6 +309,39 @@ pub async fn recent_logs(state: State<'_, AppState>, limit: Option<u32>) -> CmdR
 }
 
 #[tauri::command]
+pub async fn ranking(
+    state: State<'_, AppState>,
+    page: Option<u32>,
+    limit: Option<u32>,
+    filter: Option<String>,
+    time_filter: Option<String>,
+    timezone: Option<String>,
+) -> CmdResult<Value> {
+    state
+        .client()
+        .await
+        .ranking(
+            page.unwrap_or(1),
+            limit.unwrap_or(25),
+            filter.as_deref().unwrap_or("userXp"),
+            time_filter.as_deref().unwrap_or("all-time"),
+            // The server buckets by day in the caller's timezone; the webview
+            // knows it (Intl), Rust would have to guess.
+            timezone.as_deref().unwrap_or("UTC"),
+        )
+        .await
+        .map_err(err)
+}
+
+/// Whether the streak is about to be lost, for the in-app warning. Shares the
+/// reminder loop's cache, so opening the screen repeatedly costs no requests.
+#[tauri::command]
+pub async fn streak_status(app: AppHandle) -> CmdResult<Option<crate::streak::StreakStatus>> {
+    let allowed_age = crate::streak::budget(&app).await;
+    crate::streak::refresh(&app, allowed_age).await.map_err(err)
+}
+
+#[tauri::command]
 pub async fn user_stats(state: State<'_, AppState>) -> CmdResult<Value> {
     let settings = state.settings_snapshot().await;
     let username = settings
@@ -296,6 +349,54 @@ pub async fn user_stats(state: State<'_, AppState>) -> CmdResult<Value> {
         .clone()
         .ok_or_else(|| "no username configured".to_string())?;
     state.client().await.user_stats(&username).await.map_err(err)
+}
+
+// ── Discord Rich Presence ──────────────────────────────────────────────
+
+/// Exactly what Discord would show right now, decided by the same function the
+/// watcher uses — the settings preview is the real thing, not a mock-up.
+#[tauri::command]
+pub async fn discord_preview(state: State<'_, AppState>) -> CmdResult<Value> {
+    let settings = state.settings_snapshot().await;
+    let blacklist = state.db.discord_blacklist().unwrap_or_default();
+    let snapshot = state.tracker.read().await.clone();
+    let decision = crate::discord::decide(&snapshot, &settings, &blacklist);
+    let connected = state
+        .discord
+        .read()
+        .await
+        .as_ref()
+        .is_some_and(|d| d.connected.load(std::sync::atomic::Ordering::Acquire));
+    Ok(json!({
+        "decision": decision,
+        "connected": connected,
+    }))
+}
+
+#[tauri::command]
+pub async fn discord_blacklist(state: State<'_, AppState>) -> CmdResult<Vec<BlacklistEntry>> {
+    state.db.discord_blacklist().map_err(err)
+}
+
+#[tauri::command]
+pub async fn add_discord_blacklist(
+    state: State<'_, AppState>,
+    entry: BlacklistEntry,
+) -> CmdResult<Vec<BlacklistEntry>> {
+    if entry.key.trim().is_empty() {
+        return Err("an entry needs a media id or an executable".into());
+    }
+    state.db.add_discord_blacklist(&entry).map_err(err)?;
+    state.db.discord_blacklist().map_err(err)
+}
+
+#[tauri::command]
+pub async fn remove_discord_blacklist(
+    state: State<'_, AppState>,
+    key: String,
+) -> CmdResult<Vec<BlacklistEntry>> {
+    state.db.delete_discord_blacklist(&key).map_err(err)?;
+    state.db.discord_blacklist().map_err(err)
 }
 
 // ── media ──────────────────────────────────────────────────────────────
@@ -482,7 +583,17 @@ pub async fn hooker_totals(state: State<'_, AppState>, content_id: String) -> Cm
 
 #[tauri::command]
 pub async fn hooker_ingest(app: AppHandle, text: String) -> CmdResult<()> {
-    texthooker::ingest(&app, &text).await;
+    texthooker::ingest(&app, &text, texthooker::IngestSource::Socket).await;
+    Ok(())
+}
+
+/// The reader owns its clock; ingestion needs to know whether it is running to
+/// honour the "allow during pause" and autostart settings.
+#[tauri::command]
+pub async fn hooker_set_timer_active(state: State<'_, AppState>, active: bool) -> CmdResult<()> {
+    state
+        .hooker_timer_active
+        .store(active, std::sync::atomic::Ordering::Release);
     Ok(())
 }
 
@@ -525,6 +636,21 @@ pub async fn hooker_attach_media(
     let snapshot = state.hooker.read().await.clone();
     let _ = app.emit(texthooker::EVT_STATUS, &snapshot);
     Ok(snapshot)
+}
+
+/// Put a deleted line back (the reader's undo).
+#[tauri::command]
+pub async fn hooker_restore_line(state: State<'_, AppState>, line: TextLine) -> CmdResult<()> {
+    state.db.insert_line(&line).map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hooker_history(
+    state: State<'_, AppState>,
+    content_id: String,
+) -> CmdResult<Vec<TextHistoryEntry>> {
+    state.db.text_history(&content_id).map_err(err)
 }
 
 #[tauri::command]
@@ -632,6 +758,18 @@ pub async fn log_text_session(
 
     // Baseline moves to "everything so far is logged".
     let (lines, chars) = state.db.text_totals(&args.content_id);
+
+    // Same row locally, so the reader's history works offline.
+    let previous = state.db.get_text_state(&args.content_id);
+    let _ = state.db.add_text_history(&TextHistoryEntry {
+        id: sync::new_id(),
+        content_id: args.content_id.clone(),
+        logged_at: chrono::Utc::now().to_rfc3339(),
+        chars: args.chars,
+        lines: (lines - previous.baseline_lines).max(0),
+        seconds: args.seconds,
+        speed,
+    });
     let mut st = state.db.get_text_state(&args.content_id);
     st.baseline_chars = chars;
     st.baseline_lines = lines;
@@ -665,6 +803,137 @@ pub async fn remote_text_session(
     content_id: String,
 ) -> CmdResult<Value> {
     state.client().await.get_session(&content_id).await.map_err(err)
+}
+
+#[derive(Serialize)]
+pub struct InstalledExtension {
+    pub folder: String,
+    pub name: String,
+    pub version: String,
+    /// Manifest V3 extensions need a recent WebView2 runtime.
+    pub manifest_version: u64,
+    /// Chrome-style id, derived from the install path.
+    pub id: String,
+    /// `chrome-extension://<id>/<options page>`, when the manifest has one.
+    pub options_url: Option<String>,
+}
+
+/// Chromium derives an unpacked extension's id from its absolute path:
+/// SHA-256 of the path, first 16 bytes hex-encoded, then each hex digit mapped
+/// `0-f` → `a-p`. On Windows the path is hashed as UTF-16LE. Verified against a
+/// real WebView2 profile — this is how we can link to an extension's own pages,
+/// since the webview has no toolbar to click.
+fn extension_id_for_path(path: &std::path::Path) -> String {
+    use sha2::{Digest, Sha256};
+
+    let bytes: Vec<u8> = if cfg!(windows) {
+        path.to_string_lossy()
+            .encode_utf16()
+            .flat_map(|unit| unit.to_le_bytes())
+            .collect()
+    } else {
+        path.to_string_lossy().as_bytes().to_vec()
+    };
+
+    let digest = Sha256::digest(&bytes);
+    digest[..16]
+        .iter()
+        .flat_map(|byte| [byte >> 4, byte & 0x0f])
+        .map(|nibble| (b'a' + nibble) as char)
+        .collect()
+}
+
+/// Unpacked extensions sitting in the extensions folder, read straight from
+/// their `manifest.json`.
+#[tauri::command]
+pub fn list_extensions(app: AppHandle) -> CmdResult<Vec<InstalledExtension>> {
+    let dir = crate::extensions_dir(&app);
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let mut found = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        let Ok(raw) = std::fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(manifest) = serde_json::from_str::<Value>(&raw) else {
+            continue;
+        };
+        let folder = entry.file_name().to_string_lossy().to_string();
+        let id = extension_id_for_path(&entry.path());
+        let options_page = manifest
+            .get("options_ui")
+            .and_then(|v| v.get("page"))
+            .or_else(|| manifest.get("options_page"))
+            .and_then(|v| v.as_str())
+            .map(|page| format!("chrome-extension://{id}/{page}"));
+        // Store-built extensions localise their name; fall back to the folder.
+        let name = manifest
+            .get("name")
+            .and_then(|v| v.as_str())
+            .filter(|n| !n.starts_with("__MSG_"))
+            .unwrap_or(&folder)
+            .to_string();
+        found.push(InstalledExtension {
+            folder,
+            name,
+            version: manifest
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string(),
+            manifest_version: manifest
+                .get("manifest_version")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            id,
+            options_url: options_page,
+        });
+    }
+    found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(found)
+}
+
+#[tauri::command]
+pub fn extensions_folder(app: AppHandle) -> CmdResult<String> {
+    Ok(crate::extensions_dir(&app).to_string_lossy().to_string())
+}
+
+/// Open an extension's own settings page in its own window. There is no
+/// toolbar in a webview, so this is the only way in.
+#[tauri::command]
+pub fn open_extension_options(app: AppHandle, url: String) -> CmdResult<()> {
+    if !url.starts_with("chrome-extension://") {
+        return Err("not an extension URL".into());
+    }
+    let parsed = url.parse().map_err(|_| "invalid extension URL".to_string())?;
+
+    // Same extension flags as the main window: wry requires webviews that
+    // differ on this to use separate data directories.
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        format!("ext-{}", uuid::Uuid::new_v4()),
+        tauri::WebviewUrl::External(parsed),
+    )
+    .title("Extension settings")
+    .inner_size(1000.0, 760.0)
+    .browser_extensions_enabled(true)
+    .extensions_path(crate::extensions_dir(&app))
+    .build()
+    .map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_extensions_folder(app: AppHandle) -> CmdResult<()> {
+    let dir = crate::extensions_dir(&app);
+    tauri_plugin_opener::open_path(dir, None::<&str>).map_err(err)
 }
 
 #[tauri::command]

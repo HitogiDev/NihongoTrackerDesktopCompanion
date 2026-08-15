@@ -1,0 +1,15 @@
+{
+  "success": "Log guardado",
+  "monthlyRanking": "Clasificación mensual",
+  "streak": "racha de {{count}} día",
+  "streak_other": "racha de {{count}} días",
+  "level": "Nivel {{level}}",
+  "passed": "Has adelantado a",
+  "andMore": "y a {{count}} más",
+  "next": "Siguiente",
+  "done": "¡Genial!",
+  "mute": "Silenciar sonidos",
+  "unmute": "Activar sonidos",
+  "achievements": "{{count}} logro nuevo",
+  "achievements_other": "{{count}} logros nuevos"
+}

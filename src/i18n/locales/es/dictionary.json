@@ -1,0 +1,6 @@
+{
+  "back": "Volver",
+  "depth": "{{count}} atrás",
+  "loading": "Buscando…",
+  "noResults": "No hay nada para {{term}}."
+}

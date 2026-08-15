@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   BookOpenText,
@@ -8,18 +9,21 @@ import {
   Library,
   Settings as SettingsIcon,
   Plug,
+  Trophy,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 
 const NAV = [
-  { to: '/', label: 'Actividad', icon: Activity, end: true },
-  { to: '/queue', label: 'Pendientes', icon: Inbox, badge: 'pending' as const },
-  { to: '/library', label: 'Biblioteca', icon: Library },
-  { to: '/texthooker', label: 'Texthooker', icon: BookOpenText },
-  { to: '/settings', label: 'Ajustes', icon: SettingsIcon },
+  { to: '/', labelKey: 'activity', icon: Activity, end: true },
+  { to: '/queue', labelKey: 'pending', icon: Inbox, badge: 'pending' as const },
+  { to: '/library', labelKey: 'library', icon: Library },
+  { to: '/ranking', labelKey: 'ranking', icon: Trophy },
+  { to: '/texthooker', labelKey: 'texthooker', icon: BookOpenText },
+  { to: '/settings', labelKey: 'settings', icon: SettingsIcon },
 ];
 
 export function Sidebar() {
+  const { t } = useTranslation('nav');
   const tracker = useAppStore((s) => s.tracker);
   const hooker = useAppStore((s) => s.hooker);
   const online = useAppStore((s) => s.online);
@@ -35,7 +39,7 @@ export function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto p-2">
         <ul className="menu menu-sm w-full gap-1">
-          {NAV.map(({ to, label, icon: Icon, end, badge }) => (
+          {NAV.map(({ to, labelKey, icon: Icon, end, badge }) => (
             <li key={to}>
               <NavLink
                 to={to}
@@ -49,7 +53,7 @@ export function Sidebar() {
                 }
               >
                 <Icon className="w-4 h-4" />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1">{t(labelKey)}</span>
                 {badge === 'pending' && pending > 0 ? (
                   <span className="badge badge-sm badge-warning">{pending}</span>
                 ) : null}
@@ -67,7 +71,11 @@ export function Sidebar() {
             <CloudOff className="w-4 h-4 text-warning" />
           )}
           <span className="opacity-80">
-            {online === null ? 'Comprobando…' : online ? 'Conectado' : 'Sin conexión'}
+            {online === null
+              ? t('status.checking')
+              : online
+                ? t('status.online')
+                : t('status.offline')}
           </span>
           {queued > 0 ? (
             <span className="badge badge-xs badge-warning ml-auto">{queued}</span>
@@ -85,10 +93,10 @@ export function Sidebar() {
           />
           <span className="opacity-80 truncate">
             {hooker?.status === 'connected'
-              ? 'Texthooker activo'
+              ? t('status.hookerConnected')
               : hooker?.status === 'connecting'
-                ? 'Conectando hook…'
-                : 'Hook desconectado'}
+                ? t('status.hookerConnecting')
+                : t('status.hookerOffline')}
           </span>
         </div>
       </div>

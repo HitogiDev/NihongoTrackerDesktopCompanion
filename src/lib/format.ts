@@ -32,34 +32,24 @@ export function readingSpeed(chars: number, seconds: number): number {
   return Math.round((chars * 3600) / seconds);
 }
 
+import i18n from '../i18n';
+
 export function relativeDate(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
   const diff = Date.now() - then;
   const minutes = Math.round(diff / 60000);
-  if (minutes < 1) return 'ahora';
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return i18n.t('common:relative.now');
+  if (minutes < 60) return i18n.t('common:relative.minutes', { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return i18n.t('common:relative.hours', { count: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `hace ${days} d`;
-  return new Date(iso).toLocaleDateString();
+  if (days < 30) return i18n.t('common:relative.days', { count: days });
+  return new Date(iso).toLocaleDateString(i18n.language);
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  anime: 'Anime',
-  manga: 'Manga',
-  reading: 'Lectura',
-  vn: 'Novela visual',
-  video: 'Vídeo',
-  movie: 'Película',
-  'tv show': 'Serie',
-  audio: 'Audio',
-  game: 'Juego',
-  book: 'Libro',
-  other: 'Otro',
-};
-
 export function logTypeLabel(type?: string | null): string {
-  return TYPE_LABELS[type ?? 'other'] ?? type ?? 'Otro';
+  const key = type ?? 'other';
+  const label = i18n.t(`common:logType.${key}`, { defaultValue: '' });
+  return label || key;
 }

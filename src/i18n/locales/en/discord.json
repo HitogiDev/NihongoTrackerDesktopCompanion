@@ -1,0 +1,39 @@
+{
+  "title": "Discord Rich Presence",
+  "enable": "Show my immersion on Discord",
+  "enableHint": "Off until you turn it on. Nothing is published and no connection is opened while it is off.",
+  "appId": "Application ID",
+  "appIdHint": "Create an application in the Discord Developer Portal, upload your icons under Rich Presence → Art Assets, and paste its ID here.",
+  "largeImage": "Fallback image",
+  "largeImageHint": "Asset key of the image used when there is no cover, or when showing one would give away the title.",
+  "connected": "Connected to Discord.",
+  "disconnected": "Not connected. Discord may be closed; it will be retried on its own.",
+  "genericMode": "Activity only, never a title",
+  "genericModeHint": "Always publishes \"Japanese immersion\" with no title and no cover, whatever you are on.",
+  "profileButton": "Add the \"View profile\" button",
+  "profileButtonHint": "Links to your public NihongoTracker profile.",
+  "preview": {
+    "title": "What other people see",
+    "hint": "Not a mock-up: this is the exact presence that would be published right now.",
+    "off": "Rich Presence is off. Nothing is published.",
+    "idle": "Nothing is being watched or read, so the presence is empty.",
+    "blocked": "\"{{label}}\" is on your blacklist: nothing at all is published.",
+    "elapsed": "{{time}} elapsed",
+    "reason": {
+      "adult": "Marked 18+ on NihongoTracker, so the title and the cover are stripped.",
+      "unresolved": "The media could not be resolved, so the file name is never published.",
+      "generic": "Activity-only mode is on."
+    }
+  },
+  "blacklist": {
+    "title": "Never show these",
+    "hint": "A work or a program on this list publishes nothing at all — not even a generic activity.",
+    "addMedia": "Add a work",
+    "processPlaceholder": "game.exe or mpv",
+    "empty": "Nothing hidden yet.",
+    "kind": {
+      "media": "Work",
+      "process": "Program"
+    }
+  }
+}

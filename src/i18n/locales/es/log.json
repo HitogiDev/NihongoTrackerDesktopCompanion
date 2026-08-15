@@ -1,0 +1,20 @@
+{
+  "title": "Registrar inmersión",
+  "submit": "Registrar",
+  "type": "Tipo",
+  "description": "Descripción",
+  "descriptionHint": "El servidor siempre la exige, aunque la obra esté vinculada.",
+  "descriptionPlaceholder": "¿Qué leíste o viste?",
+  "linked": "Obra vinculada",
+  "unlink": "Desvincular",
+  "streakReason": "Hoy no hay nada registrado y tu racha está a punto de romperse.",
+  "estimatedXp": "{{xp}} XP estimados",
+  "required": "{{field}} es obligatorio para este tipo.",
+  "requiredAny": "Rellena al menos uno: {{fields}}.",
+  "amount": {
+    "episodes": "Episodios",
+    "time": "Minutos",
+    "chars": "Caracteres",
+    "pages": "Páginas"
+  }
+}

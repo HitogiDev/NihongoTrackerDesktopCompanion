@@ -1,17 +1,25 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  BlacklistEntry,
+  DiscordPreview,
   HookerState,
   HookerTotals,
+  InstalledExtension,
   LogPayload,
   MediaHit,
   MediaMatch,
   OutboxItem,
   PendingItem,
   ProcessEntry,
+  RankingRow,
+  RecentLog,
   Settings,
+  StreakStatus,
+  TextHistoryEntry,
   TextLine,
   TextSessionSummary,
   TrackerSnapshot,
+  UserSummary,
   VnApp,
 } from './types';
 
@@ -28,12 +36,18 @@ export const ipc = {
       apiKey,
     }),
   connectionStatus: () =>
-    invoke<{ ok: boolean; reason?: string; user?: Record<string, unknown> }>('connection_status'),
+    invoke<{ ok: boolean; reason?: string; user?: { valid?: boolean; user?: UserSummary } }>(
+      'connection_status'
+    ),
 
   // tracker
   getTrackerState: () => invoke<TrackerSnapshot>('get_tracker_state'),
   listProcesses: () => invoke<ProcessEntry[]>('list_processes'),
   platformSupported: () => invoke<boolean>('platform_supported'),
+  listExtensions: () => invoke<InstalledExtension[]>('list_extensions'),
+  extensionsFolder: () => invoke<string>('extensions_folder'),
+  openExtensionsFolder: () => invoke<void>('open_extensions_folder'),
+  openExtensionOptions: (url: string) => invoke<void>('open_extension_options', { url }),
   /** Log the episode currently on screen without waiting for the threshold. */
   logCurrentAnime: () => invoke<{ pending: boolean }>('log_current_anime'),
   parseReleaseName: (name: string) => invoke('parse_release_name', { name }),
@@ -54,8 +68,30 @@ export const ipc = {
   createLog: (payload: LogPayload) => invoke<{ outboxId: string }>('create_log', { payload }),
   previewXp: (payload: LogPayload) =>
     invoke<{ xp: number; xpBreakdown?: unknown }>('preview_xp', { payload }),
-  recentLogs: (limit = 10) => invoke<{ logs?: unknown[] } | unknown[]>('recent_logs', { limit }),
+  recentLogs: (limit = 10) => invoke<RecentLog[]>('recent_logs', { limit }),
   userStats: () => invoke<Record<string, unknown>>('user_stats'),
+  /** Shares the reminder loop's cache, so calling it often costs no requests. */
+  streakStatus: () => invoke<StreakStatus | null>('streak_status'),
+  ranking: (args: {
+    page?: number;
+    limit?: number;
+    filter?: string;
+    timeFilter?: string;
+  }) =>
+    invoke<RankingRow[]>('ranking', {
+      ...args,
+      // The server buckets by day in this timezone.
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+
+  // Discord Rich Presence
+  /** The very same decision the watcher publishes, for the settings preview. */
+  discordPreview: () => invoke<DiscordPreview>('discord_preview'),
+  discordBlacklist: () => invoke<BlacklistEntry[]>('discord_blacklist'),
+  addDiscordBlacklist: (entry: BlacklistEntry) =>
+    invoke<BlacklistEntry[]>('add_discord_blacklist', { entry }),
+  removeDiscordBlacklist: (key: string) =>
+    invoke<BlacklistEntry[]>('remove_discord_blacklist', { key }),
 
   // media
   searchMedia: (query: string, mediaType: string) =>
@@ -84,6 +120,8 @@ export const ipc = {
     invoke<TextLine[]>('hooker_lines', { contentId, limit }),
   hookerTotals: (contentId: string) => invoke<HookerTotals>('hooker_totals', { contentId }),
   hookerIngest: (text: string) => invoke<void>('hooker_ingest', { text }),
+  hookerSetTimerActive: (active: boolean) =>
+    invoke<void>('hooker_set_timer_active', { active }),
   hookerAttachMedia: (
     fromContentId: string,
     contentId: string,
@@ -97,6 +135,9 @@ export const ipc = {
       mediaType,
     }),
   hookerDeleteLine: (id: string) => invoke<void>('hooker_delete_line', { id }),
+  hookerRestoreLine: (line: TextLine) => invoke<void>('hooker_restore_line', { line }),
+  hookerHistory: (contentId: string) =>
+    invoke<TextHistoryEntry[]>('hooker_history', { contentId }),
   hookerClear: (contentId: string) => invoke<void>('hooker_clear', { contentId }),
   hookerSetTimer: (contentId: string, seconds: number) =>
     invoke<void>('hooker_set_timer', { contentId, seconds }),
@@ -119,7 +160,14 @@ export const events = {
   vnEnded: 'vn://ended',
   hookerLine: 'texthooker://line',
   hookerStatus: 'texthooker://status',
+  hookerTimer: 'texthooker://timer',
   outbox: 'outbox://changed',
   pending: 'pending://changed',
   settings: 'settings://changed',
+  celebration: 'log://celebration',
+  streakReminder: 'streak://reminder',
+  /** The notification (or the tray) asking for the log form. */
+  streakOpenLog: 'streak://open-log',
+  streakAuthRequired: 'streak://auth-required',
+  discordStatus: 'discord://status',
 } as const;

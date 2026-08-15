@@ -175,6 +175,25 @@ impl ApiClient {
         self.send(req).await
     }
 
+    /// `GET /api/users/ranking` — the leaderboard the web app shows.
+    pub async fn ranking(
+        &self,
+        page: u32,
+        limit: u32,
+        filter: &str,
+        time_filter: &str,
+        timezone: &str,
+    ) -> Result<Value> {
+        let req = self.auth(self.http.get(self.url("users/ranking")).query(&[
+            ("page", page.to_string()),
+            ("limit", limit.to_string()),
+            ("filter", filter.to_string()),
+            ("timeFilter", time_filter.to_string()),
+            ("timezone", timezone.to_string()),
+        ]))?;
+        self.send(req).await
+    }
+
     pub async fn user_stats(&self, username: &str) -> Result<Value> {
         let req = self.auth(self.http.get(self.url(&format!("users/{username}/stats"))))?;
         self.send(req).await

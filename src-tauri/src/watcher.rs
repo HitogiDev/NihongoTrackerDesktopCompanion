@@ -14,7 +14,10 @@ use crate::db::TextState;
 use crate::parser;
 use crate::platform;
 use crate::players;
-use crate::state::{AnimeSession, AppState, MediaMatch, TrackerSnapshot, VnSession};
+use crate::playback::PlaybackSource;
+use crate::state::{
+    AnimeSession, AppState, MediaMatch, PlaybackSnapshot, TrackerSnapshot, VnSession,
+};
 use crate::sync;
 
 pub const EVT_TRACKER: &str = "tracker://state";
@@ -114,6 +117,9 @@ async fn tick(
 
     *state.tracker.write().await = snapshot.clone();
     let _ = app.emit(EVT_TRACKER, &snapshot);
+    // Hands the presence to its own thread, which owns the rate limit and the
+    // socket; nothing here can block on Discord.
+    crate::discord::update(app, &snapshot, settings).await;
 }
 
 // ── anime ──────────────────────────────────────────────────────────────
@@ -135,6 +141,8 @@ async fn update_anime(
         // Player closed or went idle: drop the session (an unfinished episode
         // is simply not logged).
         snapshot.anime = None;
+        let state = app.state::<AppState>();
+        *state.playback.write().await = None;
         return;
     };
 
@@ -156,7 +164,7 @@ async fn update_anime(
         let title = parsed.title.clone();
         snapshot.anime = Some(AnimeSession {
             key: key.clone(),
-            player: player_name,
+            player: player_name.clone(),
             file_name: file_name.clone(),
             resolved: false,
             unmatched: false,
@@ -164,6 +172,12 @@ async fn update_anime(
             media: None,
             elapsed_secs: 0,
             threshold_secs: threshold_for(settings, None),
+            threshold_percent: settings.anime_threshold_percent.clamp(1, 100),
+            position_secs: None,
+            duration_secs: None,
+            paused: false,
+            source: PlaybackSource::Elapsed,
+            progress: 0.0,
             logged: false,
             started_at: crate::db::now_iso(),
         });
@@ -184,7 +198,37 @@ async fn update_anime(
         }
     }
 
-    session.elapsed_secs += tick_secs.round() as u64;
+    // Where the player said it was on the previous tick. Probing runs off the
+    // tick (see `request_playback`), so this is at most one second stale — which
+    // does not matter over a 24-minute episode.
+    let reported = {
+        let state = app.state::<AppState>();
+        let cell = state.playback.read().await;
+        cell.as_ref()
+            .filter(|snapshot| snapshot.player == player_name)
+            .map(|snapshot| snapshot.playback.clone())
+    };
+    request_playback(app, &player_name);
+
+    match reported {
+        Some(playback) => {
+            session.position_secs = Some(playback.position_secs);
+            session.duration_secs = Some(playback.duration_secs);
+            session.paused = playback.paused;
+            session.source = PlaybackSource::Player;
+            if !playback.paused {
+                session.elapsed_secs += tick_secs.round() as u64;
+            }
+        }
+        None => {
+            session.position_secs = None;
+            session.duration_secs = None;
+            session.paused = false;
+            session.source = PlaybackSource::Elapsed;
+            session.elapsed_secs += tick_secs.round() as u64;
+        }
+    }
+    session.progress = session.compute_progress();
 
     if session.ready() && !session.logged {
         session.logged = true;
@@ -254,11 +298,8 @@ pub async fn commit_anime(
 
     let _ = state.db.remember_logged(&dedup_key);
 
-    let episode_label = session
-        .parsed
-        .episode
-        .map(|e| format!("ep. {e}"))
-        .unwrap_or_else(|| "episodio".into());
+    let lang = settings.language.as_str();
+    let episode_label = crate::i18n::episode_label(lang, session.parsed.episode);
 
     // Pressing "log now" is itself the confirmation, so it skips the queue.
     let send_now = forced || (settings.anime_auto_log && session.media.is_some());
@@ -268,7 +309,7 @@ pub async fn commit_anime(
         notify(
             app,
             settings,
-            "Episodio registrado",
+            crate::i18n::episode_logged(lang),
             &format!("{title} — {episode_label}"),
         );
         flush_later(app);
@@ -277,7 +318,7 @@ pub async fn commit_anime(
         notify(
             app,
             settings,
-            "Listo para registrar",
+            crate::i18n::ready_to_log(lang),
             &format!("{title} — {episode_label}"),
         );
     }
@@ -339,6 +380,7 @@ async fn update_vn(
             media_title: vn_app.media_title.clone(),
             media_type: vn_app.media_type.clone(),
             image: vn_app.image.clone(),
+            is_adult: vn_app.is_adult,
             elapsed_secs: 0,
             counting: false,
             started_at: crate::db::now_iso(),
@@ -381,8 +423,8 @@ async fn update_vn(
         notify(
             app,
             settings,
-            "Sesión iniciada",
-            &format!("{} detectada", vn_app.media_title),
+            crate::i18n::session_started(&settings.language),
+            &crate::i18n::detected(&settings.language, &vn_app.media_title),
         );
     }
 
@@ -466,29 +508,20 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
         "image": session.image,
     });
 
+    let lang = settings.language.as_str();
+    let summary = format!(
+        "{} — {}",
+        session.media_title,
+        crate::i18n::session_summary(lang, minutes, session.session_chars)
+    );
+
     if settings.vn_confirm_before_log {
         sync::add_pending(app, &payload, "vn");
-        notify(
-            app,
-            settings,
-            "Sesión terminada",
-            &format!(
-                "{} — {} min, {} car.",
-                session.media_title, minutes, session.session_chars
-            ),
-        );
+        notify(app, settings, crate::i18n::session_ended(lang), &summary);
     } else {
         sync::enqueue_log(app, &payload);
         queue_history(app, &session.content_id, &session, minutes);
-        notify(
-            app,
-            settings,
-            "Sesión registrada",
-            &format!(
-                "{} — {} min, {} car.",
-                session.media_title, minutes, session.session_chars
-            ),
-        );
+        notify(app, settings, crate::i18n::session_logged(lang), &summary);
         flush_later(app);
     }
 
@@ -530,6 +563,35 @@ pub fn queue_history(app: &AppHandle, content_id: &str, session: &VnSession, min
 }
 
 // ── helpers ────────────────────────────────────────────────────────────
+
+/// Ask the player where it is, off the tick. A named pipe or a local HTTP call
+/// is fast but not instant, and a hung player must not freeze detection.
+fn request_playback(app: &AppHandle, player: &str) {
+    let player = player.to_string();
+    let app = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        // One probe in flight at a time.
+        if state
+            .playback_probing
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return;
+        }
+
+        let settings = state.settings_snapshot().await;
+        let result = crate::playback::probe(&player, &settings).await;
+        *state.playback.write().await = result.map(|playback| PlaybackSnapshot {
+            player: player.clone(),
+            playback,
+        });
+
+        state
+            .playback_probing
+            .store(false, std::sync::atomic::Ordering::Release);
+    });
+}
 
 /// Push the outbox without blocking the detection tick.
 fn flush_later(app: &AppHandle) {

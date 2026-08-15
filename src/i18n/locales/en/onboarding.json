@@ -1,0 +1,9 @@
+{
+  "title": "Connect your account",
+  "subtitle": "The companion uses an API key, not your password.",
+  "server": "Server",
+  "apiKey": "API key",
+  "apiKeyHint": "Settings → API keys on NihongoTracker. It starts with ntk_ and is shown only once.",
+  "connect": "Connect",
+  "createKey": "Create an API key"
+}

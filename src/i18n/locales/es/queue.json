@@ -1,0 +1,25 @@
+{
+  "title": "Pendientes",
+  "subtitle": "Confirma lo detectado y revisa lo que aún no llegó al servidor.",
+  "retryAll": "Reintentar envíos",
+  "awaiting": "Esperando confirmación",
+  "empty": "Nada por confirmar",
+  "emptyBody": "Cuando termines un episodio o una sesión de lectura aparecerá aquí.",
+  "unlinked": "Sin vincular",
+  "log": "Registrar",
+  "discard": "Descartar",
+  "outbox": "Cola de envío",
+  "outboxQueued": "En cola",
+  "attempts": "{{count}} intento",
+  "attempts_other": "{{count}} intentos",
+  "sent": "Enviados recientemente",
+  "edit": {
+    "title": "Editar registro",
+    "description": "Descripción",
+    "episodes": "Episodios",
+    "minutes": "Minutos",
+    "characters": "Caracteres",
+    "mediaId": "Media ID",
+    "mediaIdHint": "Vacío = el registro quedará sin vincular en la web."
+  }
+}

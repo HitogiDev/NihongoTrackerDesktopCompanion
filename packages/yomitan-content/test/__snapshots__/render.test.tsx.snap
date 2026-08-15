@@ -1,0 +1,1491 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`rendering real entries > renders ○【まる】 (#3) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>circle</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">sometimes used for zero</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>丸<rt>まる</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① circle</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>&quot;correct&quot;</li>
+<li>&quot;good&quot;</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">when marking a test, homework, etc.</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>二<rt>に</rt>
+</ruby>
+<ruby>重<rt>じゅう</rt>
+</ruby>
+<ruby>丸<rt>まる</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">double circle (indicating &quot;very good&quot; on a piece of school work)</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="unc" title="unclassified" class="text-info badge badge-xs badge-ghost align-middle mr-1">unclass</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;③&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>*</li>
+<li>_</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">placeholder used to censor individual characters or indicate a space to be filled in</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>〇<rt>まる</rt>
+</ruby>
+<ruby>〇<rt>まる</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① symbol used as a placeholder (either because a number of other words could be used in that position, or because of censorship)</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;④&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>period</li>
+<li>full stop</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>句<rt>く</rt>
+</ruby>
+<ruby>点<rt>てん</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">period; full stop</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;⑤&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>handakuten (diacritic)</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>半<rt>はん</rt>
+</ruby>
+<ruby>濁<rt>だく</rt>
+</ruby>
+<ruby>点<rt>てん</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">handakuten</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>○</li>
+<li>〇</li>
+</ul>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 〃【おなじ】 (#2) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>ditto mark</li>
+</ul>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>〃おなじ<span title="valid form/reading combination">
+</span>おなじく<span title="valid form/reading combination">
+</span>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 々【のま】 (#8) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="unc" title="unclassified" class="text-info badge badge-xs badge-ghost align-middle mr-1">unclass</span>
+<div data-sc-content="sense">
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="info-gloss" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="info-gloss-label" data-sc-class="extra-label">Explanation</div>
+<div data-sc-content="info-gloss-content" data-sc-class="extra-content">kanji repetition mark</div>
+</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>同<rt>どう</rt>
+</ruby>の<ruby>字<rt>じ</rt>
+</ruby>
+<ruby>点<rt>てん</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">kanji iteration mark</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>々</li>
+<li>ノマ</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あおば【あおば】 (#12) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="obs" title="obsolete term" class="text-warning badge badge-xs badge-ghost align-middle mr-1">obsolete</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>(former) regular (stops at every station) Tōhoku-line Shinkansen</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">やまびこ</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">skips-most-stations Tōhoku-line Shinkansen</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あからさま【あからさま】 (#13) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-na" title="adjectival nouns or quasi-adjectives (keiyodoshi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">na-adj</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-no" title="nouns which may take the genitive case particle &#x27;no&#x27;" class="text-info badge badge-xs badge-ghost align-middle mr-1">no-adj</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>plain</li>
+<li>frank</li>
+<li>candid</li>
+<li>open</li>
+<li>direct</li>
+<li>straightforward</li>
+<li>unabashed</li>
+<li>blatant</li>
+<li>flagrant</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あからさまに</span>
+<ruby>言<rt>い</rt>
+</ruby>えば<ruby>彼<rt>かれ</rt>
+</ruby>は<ruby>嫌<rt>きら</rt>
+</ruby>いだ。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">Frankly, I don&#x27;t like him.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span data-sc-class="form-special" title="no associated kanji forms">∅</span>
+<span title="ateji (phonetic) reading">
+<span data-sc-class="form-special">〈</span>明白<span data-sc-class="form-special">〉</span>
+</span>
+<span title="ateji (phonetic) reading">
+<span data-sc-class="form-special">〈</span>偸閑<span data-sc-class="form-special">〉</span>
+</span>
+<span title="ateji (phonetic) reading">
+<span data-sc-class="form-special">〈</span>白地<span data-sc-class="form-special">〉</span>
+</span>あからさま<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>
+<span title="rarely used form">
+</span>
+<span title="rarely used form">
+</span>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あかん【あかん】 (#14) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="exp" title="expressions (phrases, clauses, etc.)" class="text-info badge badge-xs badge-ghost align-middle mr-1">exp</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<span data-sc-content="dialect-info" data-sc-class="tag" data-sc-code="ksb" title="Kansai-ben" class="badge badge-xs badge-ghost align-middle mr-1">Kansai</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>useless</li>
+<li>no good</li>
+<li>hopeless</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">commonly used with i-adjective inflections, e.g. あかんかった, あかんくない</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>cannot</li>
+<li>must not</li>
+<li>not allowed</li>
+</ul>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span data-sc-class="form-special" title="no associated kanji forms">∅</span>明かんあかん<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>アカン<span title="valid form/reading combination">
+</span>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あしらう【あしらう】 (#17) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="v5u" title="Godan verb with &#x27;u&#x27; ending" class="text-info badge badge-xs badge-ghost align-middle mr-1">5-dan</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="vt" title="transitive verb" class="text-info badge badge-xs badge-ghost align-middle mr-1">transitive</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>to treat</li>
+<li>to handle</li>
+<li>to deal with</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>彼<rt>かれ</rt>
+</ruby>はいいかげんに<span data-sc-content="example-keyword" class="font-bold text-primary">あしらえない</span>
+<ruby>人<rt>ひと</rt>
+</ruby>である。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">He is not a man to trifle with.</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>to arrange</li>
+<li>to decorate (with)</li>
+<li>to adorn (with)</li>
+<li>to dress (with)</li>
+<li>to garnish (with)</li>
+</ul>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span data-sc-class="form-special" title="no associated kanji forms">∅</span>遇うあしらう<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あそこ【あそこ】 (#19) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" style="list-style-type:&quot;①&quot;" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="pn" title="pronoun" class="text-info badge badge-xs badge-ghost align-middle mr-1">pronoun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>there</li>
+<li>over there</li>
+<li>that place</li>
+<li>yonder</li>
+<li>you-know-where</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">place physically distant from both speaker and listener</div>
+</div>
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あそこ</span>から<ruby>人<rt>ひと</rt>
+</ruby>
+<ruby>影<rt>かげ</rt>
+</ruby>が<ruby>見<rt>み</rt>
+</ruby>えた。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">A form appeared from over there.</span>
+<span data-sc-content="attribution-footnote" class="text-xs text-base-content/40 align-super">[1]</span>
+</div>
+</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">どこ</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① where; what place</div>
+</div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">ここ</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① here; this place</div>
+</div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">そこ</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① there (place relatively near listener)</div>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense-group" style="list-style-type:&quot;②&quot;" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="col" title="colloquial" class="text-warning badge badge-xs badge-ghost align-middle mr-1">colloquial</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="euph" title="euphemistic" class="text-warning badge badge-xs badge-ghost align-middle mr-1">euphemism</span>
+<span title="valid only for these forms and/or readings">
+<span data-sc-class="form-special">〔</span>
+<span lang="ja">あそこ・あすこ・アソコ only</span>
+<span data-sc-class="form-special">〕</span>
+</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>genitals</li>
+<li>private parts</li>
+<li>nether regions</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>先<rt>せん</rt>
+</ruby>
+<ruby>生<rt>せい</rt>
+</ruby>、<span data-sc-content="example-keyword" class="font-bold text-primary">アソコ</span>がかゆいんです。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">Doctor, I&#x27;ve got an itch in my crotch.</span>
+<span data-sc-content="attribution-footnote" class="text-xs text-base-content/40 align-super">[2]</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense-group" style="list-style-type:&quot;③&quot;" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>that far</li>
+<li>that much</li>
+<li>that point</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">something psychologically distant from both speaker and listener</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">あれほど</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">to that extent</div>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span data-sc-class="form-special" title="no associated kanji forms">∅</span>彼処彼所<span title="reading applies to every sense number above">＊</span>あそこ<span title="high priority form">
+</span>
+<span title="rarely used form">
+</span>
+<span title="rarely used form">
+</span>
+<span title="reading applies to every sense number above">＊</span>あすこ<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>
+<span title="rarely used form">
+</span>
+<span title="reading applies only to these sense numbers">①③</span>かしこ<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>
+<span title="rarely used form">
+</span>
+<span title="reading applies to every sense number above">＊</span>アソコ<span title="valid form/reading combination">
+</span>
+<span title="reading applies only to these sense numbers">①③</span>あしこ<span title="archaic or obsolete reading">
+</span>
+<span title="archaic or obsolete reading">
+</span>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | Tatoeba <span>[1]</span>
+<span>[2]</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あっさり【あっさり】 (#20) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adv" title="adverb (fukushi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">adverb</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adv-to" title="adverb taking the &#x27;to&#x27; particle" class="text-info badge badge-xs badge-ghost align-middle mr-1">to-adverb</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="vs" title="noun or participle which takes the aux. verb suru" class="text-info badge badge-xs badge-ghost align-middle mr-1">suru</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="on-mim" title="onomatopoeic or mimetic word" class="text-warning badge badge-xs badge-ghost align-middle mr-1">mimetic</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>easily</li>
+<li>readily</li>
+<li>quickly</li>
+<li>flatly (refuse)</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>彼<rt>かれ</rt>
+</ruby>は<span data-sc-content="example-keyword" class="font-bold text-primary">あっさり</span>
+<ruby>罪<rt>つみ</rt>
+</ruby>を<ruby>白<rt>はく</rt>
+</ruby>
+<ruby>状<rt>じょう</rt>
+</ruby>した。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">He confessed his crime frankly.</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>lightly (seasoned food, applied make-up, etc.)</li>
+<li>plainly</li>
+<li>simply</li>
+</ul>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>あっさり</li>
+<li>アッサリ</li>
+</ul>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あっという間に【あっというまに】 (#21) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="exp" title="expressions (phrases, clauses, etc.)" class="text-info badge badge-xs badge-ghost align-middle mr-1">exp</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adv" title="adverb (fukushi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">adverb</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>in an instant</li>
+<li>in a flash</li>
+<li>in the blink of an eye</li>
+<li>in no time at all</li>
+<li>just like that</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>休<rt>きゅう</rt>
+</ruby>
+<ruby>暇<rt>か</rt>
+</ruby>は<span data-sc-content="example-keyword" class="font-bold text-primary">あっという<ruby>間<rt>ま</rt>
+</ruby>に</span>
+<ruby>終<rt>お</rt>
+</ruby>わった。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">The holiday ended all too soon.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>あっという間に</li>
+<li>あっと言う間に</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あっぷあっぷ【あっぷあっぷ】 (#22) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adv" title="adverb (fukushi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">adverb</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adv-to" title="adverb taking the &#x27;to&#x27; particle" class="text-info badge badge-xs badge-ghost align-middle mr-1">to-adverb</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="vs" title="noun or participle which takes the aux. verb suru" class="text-info badge badge-xs badge-ghost align-middle mr-1">suru</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>floundering while nearly drowning</li>
+</ul>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>suffering</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">３日連続で徹夜してるから、もう<span data-sc-content="example-keyword" class="font-bold text-primary">アップアップ</span>だよ。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">After three straight late nights at work, I feel like I&#x27;m drowning in work.</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あの【あの】 (#23) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-pn" title="pre-noun adjectival (rentaishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">adjectival</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>that</li>
+<li>those</li>
+<li>the</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">someone or something distant from both speaker and listener, or situation unfamiliar to both speaker and listener</div>
+</div>
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あの</span>おいしいワインをなぜ<ruby>飲<rt>の</rt>
+</ruby>まないんだい。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">Why not try that delicious wine?</span>
+</div>
+</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">どの</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">which; what (way)</div>
+</div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">この</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① this</div>
+</div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">その</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">① that; the</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span data-sc-class="form-special" title="no associated kanji forms">∅</span>彼のあの<span title="high priority form">
+</span>
+<span title="rarely used form">
+</span>あん<span title="valid form/reading combination">
+</span>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あの【あの】 (#24) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="int" title="interjection (kandoushi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">interjection</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>say</li>
+<li>well</li>
+<li>um</li>
+<li>er</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あの〜</span>郵便局はどちらでしょうか。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">Uh..., where&#x27;s the post office?</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>あの</li>
+<li>あのー</li>
+<li>あのう</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あの人【あのひと】 (#25) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="pn" title="pronoun" class="text-info badge badge-xs badge-ghost align-middle mr-1">pronoun</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>he</li>
+<li>she</li>
+<li>that person</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div data-sc-content="sense-note" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="sense-note-label" data-sc-class="extra-label">Note</div>
+<div data-sc-content="sense-note-content" data-sc-class="extra-content">sometimes of one&#x27;s spouse or partner</div>
+</div>
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>冗<rt>じょう</rt>
+</ruby>
+<ruby>談<rt>だん</rt>
+</ruby>じゃないよ。<span data-sc-content="example-keyword" class="font-bold text-primary">あの<ruby>人<rt>ひと</rt>
+</ruby>
+</span>は<ruby>私<rt>わたし</rt>
+</ruby>
+<ruby>同<rt>どう</rt>
+</ruby>
+<ruby>様<rt>よう</rt>
+</ruby>
+<ruby>医<rt>い</rt>
+</ruby>
+<ruby>者<rt>しゃ</rt>
+</ruby>なんかじゃないよ。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">You can&#x27;t be serious! He&#x27;s no more a doctor than I am.</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="arch" title="archaic" class="text-warning badge badge-xs badge-ghost align-middle mr-1">archaic</span>
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>you</li>
+</ul>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>あの人</li>
+<li>彼の人</li>
+</ul>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あの方【あのかた】 (#26) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="pn" title="pronoun" class="text-info badge badge-xs badge-ghost align-middle mr-1">pronoun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="hon" title="honorific or respectful (sonkeigo) language" class="text-warning badge badge-xs badge-ghost align-middle mr-1">honorific</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>that gentleman</li>
+<li>that lady</li>
+<li>he</li>
+<li>she</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あの<ruby>方<rt>かた</rt>
+</ruby>
+</span>たちに<ruby>大<rt>たい</rt>
+</ruby>
+<ruby>変<rt>へん</rt>
+</ruby>うれしいです。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">I am very pleased to meet them.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>あの方</li>
+<li>彼の方</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あべこべ【あべこべ】 (#27) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-no" title="nouns which may take the genitive case particle &#x27;no&#x27;" class="text-info badge badge-xs badge-ghost align-middle mr-1">no-adj</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-na" title="adjectival nouns or quasi-adjectives (keiyodoshi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">na-adj</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="on-mim" title="onomatopoeic or mimetic word" class="text-warning badge badge-xs badge-ghost align-middle mr-1">mimetic</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>contrary</li>
+<li>opposite</li>
+<li>inverse</li>
+<li>reverse</li>
+<li>back-to-front</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">あなたはシャツを<span data-sc-content="example-keyword" class="font-bold text-primary">あべこべに</span>
+<ruby>着<rt>き</rt>
+</ruby>ている。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">You are wearing your shirt inside out.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders あやす【あやす】 (#30) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="v5s" title="Godan verb with &#x27;su&#x27; ending" class="text-info badge badge-xs badge-ghost align-middle mr-1">5-dan</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="vt" title="transitive verb" class="text-info badge badge-xs badge-ghost align-middle mr-1">transitive</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>to cuddle</li>
+<li>to comfort</li>
+<li>to rock</li>
+<li>to soothe</li>
+<li>to dandle</li>
+<li>to humor</li>
+<li>to humour</li>
+<li>to lull</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">赤ん坊を膝の上で<span data-sc-content="example-keyword" class="font-bold text-primary">あやした</span>。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">I dandled the baby on my knee.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders ヽ【ヽ】 (#1) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="unc" title="unclassified" class="text-info badge badge-xs badge-ghost align-middle mr-1">unclass</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>repetition mark in katakana</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>一<rt>いち</rt>
+</ruby>の<ruby>字<rt>じ</rt>
+</ruby>
+<ruby>点<rt>てん</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">kana iteration mark</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders ヾ【ヾ】 (#7) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="unc" title="unclassified" class="text-info badge badge-xs badge-ghost align-middle mr-1">unclass</span>
+<div data-sc-content="sense">
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="info-gloss" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="info-gloss-label" data-sc-class="extra-label">Explanation</div>
+<div data-sc-content="info-gloss-content" data-sc-class="extra-content">voiced repetition mark in katakana</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 悪どい【あくどい】 (#15) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="adj-i" title="adjective (keiyoushi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">adjective</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>gaudy</li>
+<li>showy</li>
+<li>garish</li>
+<li>loud</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>王<rt>おう</rt>
+</ruby>
+<ruby>女<rt>じょ</rt>
+</ruby>が<span data-sc-content="example-keyword" class="font-bold text-primary">あくどい</span>
+<ruby>化<rt>け</rt>
+</ruby>
+<ruby>粧<rt>しょう</rt>
+</ruby>をしていた。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">The princess was wearing too much makeup.</span>
+<span data-sc-content="attribution-footnote" class="text-xs text-base-content/40 align-super">[1]</span>
+</div>
+</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">アクが<ruby>強<rt>つよ</rt>
+</ruby>い</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">② excessively strong-willed; fiercely individualistic; strongly idiosyncratic</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>crooked</li>
+<li>vicious</li>
+<li>wicked</li>
+<li>nasty</li>
+<li>unscrupulous</li>
+<li>dishonest</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<span data-sc-content="example-keyword" class="font-bold text-primary">あくどい</span>
+<ruby>事<rt>こと</rt>
+</ruby>をするな。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">Don&#x27;t do wicked things.</span>
+<span data-sc-content="attribution-footnote" class="text-xs text-base-content/40 align-super">[2]</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<span title="ateji (phonetic) reading">
+<span data-sc-class="form-special">〈</span>悪どい<span data-sc-class="form-special">〉</span>
+</span>灰汁どいあくどい<span title="valid form/reading combination">
+</span>
+<span title="rarely used form">
+</span>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | Tatoeba <span>[1]</span>
+<span>[2]</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 甘子【あまご】 (#29) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>land-locked variety of red-spotted masu trout (Oncorhynchus masou ishikawae)</li>
+<li>amago</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">
+<ruby>皐<rt>さつき</rt>
+</ruby>
+<ruby>月<rt>ま</rt>
+</ruby>
+<ruby>鱒<rt>す</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">sea-run variety of red-spotted masu trout (subspecies of cherry salmon, Oncorhynchus masou ishikawae); red-spotted masu salmon</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>甘子</li>
+<li>天魚</li>
+<li>雨子</li>
+<li>アマゴ</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 論う【あげつらう】 (#16) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="v5u" title="Godan verb with &#x27;u&#x27; ending" class="text-info badge badge-xs badge-ghost align-middle mr-1">5-dan</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="vt" title="transitive verb" class="text-info badge badge-xs badge-ghost align-middle mr-1">transitive</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<ol>
+<li data-sc-content="sense" style="list-style-type:&quot;①&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>to discuss</li>
+</ul>
+</li>
+<li data-sc-content="sense" style="list-style-type:&quot;②&quot;">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>to find fault with</li>
+<li>to criticize</li>
+<li>to criticise</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>彼<rt>かれ</rt>
+</ruby>はいろいろ<ruby>他<rt>た</rt>
+</ruby>
+<ruby>人<rt>にん</rt>
+</ruby>の<ruby>欠<rt>けっ</rt>
+</ruby>
+<ruby>点<rt>てん</rt>
+</ruby>を<span data-sc-content="example-keyword" class="font-bold text-primary">あげつらう</span>のにうんざりしてしまった。そこで<ruby>彼<rt>かれ</rt>
+</ruby>らの<ruby>言<rt>い</rt>
+</ruby>うことは<ruby>何<rt>なん</rt>
+</ruby>でも、たとえどんなにくだらなくてもそのまま<ruby>認<rt>みと</rt>
+</ruby>めることにしている。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">He got tired of being the devil&#x27;s advocate and now agrees with every idea they suggest, no matter how dumb.</span>
+</div>
+</div>
+</div>
+</div>
+</li>
+</ol>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 阿吽の呼吸【あうんのこきゅう】 (#11) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="exp" title="expressions (phrases, clauses, etc.)" class="text-info badge badge-xs badge-ghost align-middle mr-1">exp</span>
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="id" title="idiomatic expression" class="text-warning badge badge-xs badge-ghost align-middle mr-1">idiom</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>the harmonizing, mentally and physically, of two parties engaged in an activity</li>
+<li>singing from the same hymn-sheet</li>
+<li>dancing to the same beat</li>
+</ul>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>
+<ul>
+<li>阿吽の呼吸</li>
+<li>あうんの呼吸</li>
+</ul>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 阿呆陀羅【あほんだら】 (#28) 1`] = `
+"<div class="yomitan-content text-base-content">
+<ul data-sc-content="sense-groups" lang="ja" class="space-y-2">
+<li data-sc-content="sense-group" style="list-style-type:&quot;①&quot;" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<span data-sc-content="dialect-info" data-sc-class="tag" data-sc-code="ksb" title="Kansai-ben" class="badge badge-xs badge-ghost align-middle mr-1">Kansai</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>fool</li>
+<li>oaf</li>
+<li>airhead</li>
+</ul>
+</div>
+</li>
+<li data-sc-content="sense-group" style="list-style-type:&quot;②&quot;" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="abbr" title="abbreviation" class="text-warning badge badge-xs badge-ghost align-middle mr-1">abbr.</span>
+<span title="valid only for these forms and/or readings">
+<span data-sc-class="form-special">〔</span>
+<span lang="ja">あほだら only</span>
+<span data-sc-class="form-special">〕</span>
+</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>mock Buddhist sutra</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="info-gloss" data-sc-class="extra-box" class="surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="info-gloss-label" data-sc-class="extra-label">Explanation</div>
+<div data-sc-content="info-gloss-content" data-sc-class="extra-content">type of fast-paced humorous singing mimicking the chanting of a Buddhist sutra, usually with lyrics satirizing current events</div>
+</div>
+</div>
+<div>
+<div data-sc-content="xref" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="xref-content" class="inline">
+<span data-sc-content="reference-label" lang="en" class="text-xs font-medium text-base-content/60 mr-1">See also</span>
+<button lang="ja" type="button" class="link link-primary cursor-pointer text-start">あほだら<ruby>経<rt>きょう</rt>
+</ruby>
+</button>
+</div>
+<div data-sc-content="xref-glossary" class="text-base-content/60 ml-1">mock Buddhist sutra; ahodarakyō</div>
+</div>
+</div>
+</div>
+</div>
+</li>
+<li data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>阿呆陀羅<span data-sc-class="form-special" title="no associated kanji forms">∅</span>
+<span title="reading applies only to this sense number">①</span>あほんだら<span title="valid form/reading combination">
+</span>
+<span title="reading applies to every sense number above">＊</span>あほだら<span title="valid form/reading combination">
+</span>
+<span title="reading applies only to this sense number">①</span>アホンダラ<span title="valid form/reading combination">
+</span>
+</li>
+</ul>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders 馬酔木【あせび】 (#18) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="uk" title="word usually written using kana alone" class="text-warning badge badge-xs badge-ghost align-middle mr-1">kana</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>Japanese andromeda (Pieris japonica)</li>
+<li>lily-of-the-valley</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="graphic">
+<div data-sc-content="graphic-attribution">
+<span>Pieris japonica at the University of California Botanical Garden</span> by <span>Stan Shebs</span> (<span>CC BY-SA 3.0</span>)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>馬酔木<span data-sc-class="form-special" title="no associated kanji forms">∅</span>あせび<span title="valid form/reading combination">
+</span>あしび<span title="valid form/reading combination">
+</span>あせぼ<span title="valid form/reading combination">
+</span>あせぶ<span title="valid form/reading combination">
+</span>アセビ<span title="valid form/reading combination">
+</span>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders ＡＢＣ順【エービーシーじゅん】 (#9) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>alphabetical order</li>
+</ul>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders ＣＤプレーヤー【シーディープレーヤー】 (#4) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>CD player</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">
+<ruby>私<rt>わたし</rt>
+</ruby>は、この<span data-sc-content="example-keyword" class="font-bold text-primary">
+<ruby>ＣＤ<rt>シーディー</rt>
+</ruby>プレイヤー</span>をただで<ruby>得<rt>え</rt>
+</ruby>ました。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">I got this CD player for free.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="forms" class="text-sm text-base-content/70 mt-2">
+<span data-sc-content="forms-label" data-sc-class="tag" title="spelling and reading variants" class="text-base-content/60 badge badge-xs badge-ghost align-middle mr-1">forms</span>ＣＤプレーヤーＣＤプレイヤーシーディープレーヤー<span title="high priority form">
+</span>シーディープレイヤー<span title="valid form/reading combination">
+</span>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders Ｎ響【エヌきょう】 (#5) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<span data-sc-content="misc-info" data-sc-class="tag" data-sc-code="abbr" title="abbreviation" class="text-warning badge badge-xs badge-ghost align-middle mr-1">abbr.</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>NHK Symphony Orchestra</li>
+</ul>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span>
+</div>
+</div>"
+`;
+
+exports[`rendering real entries > renders Ｎ響【】 (#6) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="redirect-glossary" lang="ja" class="text-base-content/70 italic">⟶<button type="button" class="link link-primary cursor-pointer text-start">
+<ruby>Ｎ<rt>エヌ</rt>
+</ruby>
+<ruby>響<rt>きょう</rt>
+</ruby>
+</button>
+</div>
+</div>
+
+<div class="yomitan-content text-base-content">
+</div>"
+`;
+
+exports[`rendering real entries > renders Ｔシャツ【ティーシャツ】 (#10) 1`] = `
+"<div class="yomitan-content text-base-content">
+<div data-sc-content="sense-group" class="space-y-1">
+<span data-sc-content="part-of-speech-info" data-sc-class="tag" data-sc-code="n" title="noun (common) (futsuumeishi)" class="text-info badge badge-xs badge-ghost align-middle mr-1">noun</span>
+<div data-sc-content="sense">
+<ul data-sc-content="glossary" class="space-y-0.5">
+<li>T-shirt</li>
+<li>tee shirt</li>
+</ul>
+<div data-sc-content="extra-info" class="mt-1">
+<div>
+<div data-sc-content="example-sentence" data-sc-class="extra-box" class="text-sm surface-muted rounded-box px-2 py-1 mt-1">
+<div data-sc-content="example-sentence-a">
+<span lang="ja">この<span data-sc-content="example-keyword" class="font-bold text-primary">
+<ruby>Ｔ<rt>ティー</rt>
+</ruby>シャツ</span>はバーゲンで<ruby>買<rt>か</rt>
+</ruby>ったんだ。</span>
+</div>
+<div data-sc-content="example-sentence-b" class="text-base-content/60">
+<span lang="en">I bought this T-shirt on sale.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div data-sc-content="attribution" class="text-xs text-base-content/50 mt-2">
+<span>JMdict</span> | <span>Tatoeba</span>
+</div>
+</div>"
+`;

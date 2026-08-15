@@ -12,6 +12,7 @@ use crate::state::AppState;
 
 pub const EVT_OUTBOX: &str = "outbox://changed";
 pub const EVT_PENDING: &str = "pending://changed";
+pub const EVT_CELEBRATION: &str = "log://celebration";
 
 pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
@@ -43,7 +44,21 @@ async fn deliver(app: &AppHandle, kind: &str, payload: &str) -> Result<(), ApiEr
 
     match kind {
         "log" => {
-            client.create_log(&value).await?;
+            let created = client.create_log(&value).await?;
+            // The server answers with the celebration payload (XP, level-up,
+            // rank overtakes) and any achievements the log unlocked. Forward it
+            // so the UI can play the same sequence as the web app.
+            let celebration = created.get("celebration").cloned();
+            let achievements = created.get("newAchievements").cloned();
+            if celebration.is_some() || achievements.is_some() {
+                let _ = app.emit(
+                    EVT_CELEBRATION,
+                    json!({
+                        "celebration": celebration,
+                        "newAchievements": achievements,
+                    }),
+                );
+            }
             Ok(())
         }
         "texthooker_lines" => {

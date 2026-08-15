@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { Button } from './Button';
 
@@ -23,6 +24,7 @@ export function Modal({
   className?: string;
   children: ReactNode;
 }) {
+  const { t } = useTranslation('common');
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -50,7 +52,13 @@ export function Modal({
           <div className="flex items-start justify-between gap-4 mb-4">
             {title ? <h3 className="text-lg font-bold">{title}</h3> : <span />}
             {dismissable && (
-              <Button appearance="ghost" size="sm" shape="circle" aria-label="Cerrar" onClick={onClose}>
+              <Button
+                appearance="ghost"
+                size="sm"
+                shape="circle"
+                aria-label={t('close')}
+                onClick={onClose}
+              >
                 <X className="w-4 h-4" />
               </Button>
             )}

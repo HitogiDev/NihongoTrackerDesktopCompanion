@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import {
   Check,
@@ -8,6 +9,7 @@ import {
   RefreshCw,
   Send,
   Trash2,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -21,6 +23,7 @@ import { events, ipc } from '../lib/ipc';
 import type { LogPayload, PendingItem } from '../lib/types';
 
 export default function Queue() {
+  const { t } = useTranslation(['queue', 'common']);
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<PendingItem | null>(null);
 
@@ -66,8 +69,8 @@ export default function Queue() {
 
   return (
     <Page
-      title="Pendientes"
-      description="Confirma lo detectado y revisa lo que aún no llegó al servidor."
+      title={t('title')}
+      description={t('subtitle')}
       actions={
         <Button
           appearance="outline"
@@ -76,21 +79,17 @@ export default function Queue() {
           onClick={() => flush.mutate()}
         >
           <RefreshCw className="w-4 h-4" />
-          Reintentar envíos
+          {t('retryAll')}
         </Button>
       }
     >
       <SectionTitle aside={<span className="text-xs text-base-content/50">{items.length}</span>}>
-        Esperando confirmación
+        {t('awaiting')}
       </SectionTitle>
 
       {items.length === 0 ? (
         <div className="surface">
-          <EmptyState
-            icon={Inbox}
-            title="Nada por confirmar"
-            description="Cuando termines un episodio o una sesión de lectura aparecerá aquí."
-          />
+          <EmptyState icon={Inbox} title={t('empty')} description={t('emptyBody')} />
         </div>
       ) : (
         <ul className="space-y-3">
@@ -109,7 +108,7 @@ export default function Queue() {
 
       {outboxItems.length > 0 ? (
         <>
-          <SectionTitle>Cola de envío</SectionTitle>
+          <SectionTitle>{t('outbox')}</SectionTitle>
           <ul className="space-y-2">
             {outboxItems.map((item) => (
               <li key={item.id} className="surface p-3 flex items-center gap-3">
@@ -123,7 +122,8 @@ export default function Queue() {
                     {(item.payload as LogPayload).description ?? item.kind}
                   </p>
                   <p className="text-xs text-base-content/60 truncate">
-                    {item.status === 'failed' ? item.lastError : 'En cola'} · {item.attempts} intento(s)
+                    {item.status === 'failed' ? item.lastError : t('outboxQueued')} ·{' '}
+                    {t('attempts', { count: item.attempts })}
                   </p>
                 </div>
                 <Button
@@ -148,7 +148,7 @@ export default function Queue() {
 
       {sentItems.length > 0 ? (
         <>
-          <SectionTitle>Enviados recientemente</SectionTitle>
+          <SectionTitle>{t('sent')}</SectionTitle>
           <ul className="space-y-1.5">
             {sentItems.map((item) => (
               <li
@@ -191,9 +191,23 @@ function PendingCard({
   onDiscard: () => void;
   busy: boolean;
 }) {
+  const { t } = useTranslation(['queue', 'common']);
   const payload = item.payload;
   const type = getMediaTypeClasses(payload.type);
   const detected = payload._detected;
+
+  // The server owns XP (the calculateXp middleware overwrites whatever a client
+  // sends), so ask it for the estimate instead of guessing. Offline: no badge.
+  const { data: xp } = useQuery({
+    queryKey: ['preview-xp', item.id],
+    queryFn: () => {
+      const { _detected, ...body } = payload;
+      void _detected;
+      return ipc.previewXp(body);
+    },
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
 
   return (
     <li className={`surface overflow-hidden border ${type.borderColor}`}>
@@ -210,18 +224,28 @@ function PendingCard({
           <div className="flex flex-wrap gap-1.5 mt-2">
             {payload.episodes ? (
               <span className={`badge badge-soft badge-sm ${type.bgColor} ${type.color}`}>
-                {payload.episodes} ep.
+                {t('common:episodesShort', { count: payload.episodes })}
                 {detected?.episode ? ` (#${detected.episode})` : ''}
               </span>
             ) : null}
             {payload.time ? (
-              <span className="badge badge-soft badge-sm">{payload.time} min</span>
+              <span className="badge badge-soft badge-sm">
+                {t('common:minutesShort', { count: payload.time })}
+              </span>
             ) : null}
             {payload.chars ? (
-              <span className="badge badge-soft badge-sm">{payload.chars} car.</span>
+              <span className="badge badge-soft badge-sm">
+                {t('common:charsShort', { count: payload.chars })}
+              </span>
             ) : null}
             {!payload.mediaId ? (
-              <span className="badge badge-warning badge-sm">Sin vincular</span>
+              <span className="badge badge-warning badge-sm">{t('unlinked')}</span>
+            ) : null}
+            {typeof xp?.xp === 'number' ? (
+              <span className={`badge badge-outline badge-sm ${type.color} gap-1`}>
+                <TrendingUp className="w-3 h-3" />
+                {xp.xp} XP
+              </span>
             ) : null}
           </div>
           {detected?.file ? (
@@ -231,14 +255,14 @@ function PendingCard({
         <div className="flex flex-col gap-1.5 shrink-0">
           <Button variant="primary" size="sm" disabled={busy} onClick={onConfirm}>
             <Check className="w-4 h-4" />
-            Registrar
+            {t('log')}
           </Button>
           <Button size="sm" appearance="outline" disabled={busy} onClick={onEdit}>
-            Editar
+            {t('common:edit')}
           </Button>
           <Button size="sm" appearance="ghost" disabled={busy} onClick={onDiscard}>
             <X className="w-4 h-4" />
-            Descartar
+            {t('discard')}
           </Button>
         </div>
       </div>
@@ -257,6 +281,7 @@ function EditPendingModal({
   onSave: (payload: LogPayload) => void;
   saving: boolean;
 }) {
+  const { t } = useTranslation(['queue', 'common']);
   const [draft, setDraft] = useState<LogPayload | null>(null);
 
   useEffect(() => {
@@ -273,20 +298,20 @@ function EditPendingModal({
     <Modal
       open={Boolean(item)}
       onClose={onClose}
-      title="Editar registro"
+      title={t('edit.title')}
       actions={
         <>
           <Button appearance="ghost" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </Button>
           <Button variant="primary" loading={saving} onClick={() => onSave(draft)}>
-            Registrar
+            {t('log')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label="Descripción">
+        <Field label={t('edit.description')}>
           {(id) => (
             <input
               id={id}
@@ -297,7 +322,7 @@ function EditPendingModal({
           )}
         </Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Episodios">
+          <Field label={t('edit.episodes')}>
             {(id) => (
               <input
                 id={id}
@@ -311,7 +336,7 @@ function EditPendingModal({
               />
             )}
           </Field>
-          <Field label="Minutos">
+          <Field label={t('edit.minutes')}>
             {(id) => (
               <input
                 id={id}
@@ -325,7 +350,7 @@ function EditPendingModal({
               />
             )}
           </Field>
-          <Field label="Caracteres">
+          <Field label={t('edit.characters')}>
             {(id) => (
               <input
                 id={id}
@@ -340,7 +365,7 @@ function EditPendingModal({
             )}
           </Field>
         </div>
-        <Field label="Media ID" hint="Vacío = el registro quedará sin vincular en la web.">
+        <Field label={t('edit.mediaId')} hint={t('edit.mediaIdHint')}>
           {(id) => (
             <input
               id={id}
