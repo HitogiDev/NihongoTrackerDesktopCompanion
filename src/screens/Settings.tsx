@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
   ExternalLink,
-  FolderOpen,
   LogOut,
-  Puzzle,
   XCircle,
 } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -52,8 +49,6 @@ export default function SettingsScreen() {
   const online = useAppStore((s) => s.online);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const refreshConnection = useAppStore((s) => s.refreshConnection);
-
-  const extensions = useQuery({ queryKey: ['extensions'], queryFn: ipc.listExtensions });
 
   const [newKey, setNewKey] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
@@ -282,72 +277,6 @@ export default function SettingsScreen() {
       </div>
 
       <DiscordSettings settings={settings} onChange={(patch) => void updateSettings(patch)} />
-
-      <SectionTitle>{t('extensions.title')}</SectionTitle>
-      <div className="surface p-2 divide-y divide-base-300/50">
-        <Toggle
-          label={t('extensions.enabled')}
-          description={t('extensions.enabledHint')}
-          checked={settings.extensions_enabled}
-          onChange={(v) => void updateSettings({ extensions_enabled: v })}
-        />
-        <div className="p-3 space-y-3">
-          <p className="text-sm text-base-content/70">{t('extensions.body')}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" appearance="outline" onClick={() => void ipc.openExtensionsFolder()}>
-              <FolderOpen className="w-4 h-4" />
-              {t('extensions.openFolder')}
-            </Button>
-            <Button
-              size="sm"
-              appearance="ghost"
-              onClick={() => void openUrl('https://yomitan.wiki/')}
-            >
-              <ExternalLink className="w-4 h-4" />
-              Yomitan
-            </Button>
-            <Button
-              size="sm"
-              appearance="ghost"
-              onClick={() => void openUrl('https://github.com/Sirush/JitenReader')}
-            >
-              <ExternalLink className="w-4 h-4" />
-              JitenReader
-            </Button>
-          </div>
-
-          {(extensions.data ?? []).length === 0 ? (
-            <p className="text-xs text-base-content/50">{t('extensions.none')}</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {(extensions.data ?? []).map((ext) => (
-                <li
-                  key={ext.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-field bg-base-200/60"
-                >
-                  <Puzzle className="w-4 h-4 text-base-content/50 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium truncate">{ext.name}</span>
-                    <span className="block text-xs text-base-content/50 font-mono truncate">
-                      v{ext.version} · MV{ext.manifest_version} · {ext.id}
-                    </span>
-                  </span>
-                  {ext.options_url ? (
-                    <Button
-                      size="xs"
-                      appearance="outline"
-                      onClick={() => void ipc.openExtensionOptions(ext.options_url!)}
-                    >
-                      {t('extensions.settings')}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="text-xs text-base-content/50">{t('extensions.restart')}</p>
-        </div>
-      </div>
 
       <SectionTitle>{t('app.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">

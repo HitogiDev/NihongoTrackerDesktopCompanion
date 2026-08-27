@@ -1,4 +1,0 @@
-[submodule "crates/nihongo-dict/vendor"]
-	path = crates/nihongo-dict/vendor
-	url = https://github.com/Manhhao/hoshidicts.git
-	branch = main-mit

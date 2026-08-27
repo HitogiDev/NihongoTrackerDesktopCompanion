@@ -180,10 +180,6 @@ pub fn run() {
             commands::log_text_session,
             commands::media_detail,
             commands::remote_text_session,
-            commands::list_extensions,
-            commands::extensions_folder,
-            commands::open_extensions_folder,
-            commands::open_extension_options,
             commands::platform_supported,
             commands::parse_release_name,
         ])
@@ -198,41 +194,15 @@ pub fn run() {
         });
 }
 
-/// Where unpacked browser extensions are loaded from.
-pub fn extensions_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .join("extensions");
-    let _ = std::fs::create_dir_all(&dir);
-    dir
-}
-
-/// The main window is built here rather than declared in `tauri.conf.json`
-/// because loading browser extensions needs `extensions_path`, which the config
-/// file does not expose.
-///
-/// Popup dictionaries (Yomitan, JitenReader) are ordinary Chrome extensions, so
-/// with this the reader gets the same hover-a-word experience as a browser —
-/// on Windows, where WebView2 supports extensions. Elsewhere the flags are
-/// ignored and the window is otherwise identical.
-fn build_main_window(app: &tauri::AppHandle, settings: &config::Settings) -> tauri::Result<()> {
-    let mut builder =
-        tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
-            .title("NihongoTracker Companion")
-            .inner_size(1100.0, 720.0)
-            .min_inner_size(900.0, 600.0)
-            .resizable(true)
-            .center();
-
-    if settings.extensions_enabled {
-        builder = builder
-            .browser_extensions_enabled(true)
-            .extensions_path(extensions_dir(app));
-    }
-
-    builder.build()?;
+/// The main window is built here rather than declared in `tauri.conf.json`.
+fn build_main_window(app: &tauri::AppHandle, _settings: &config::Settings) -> tauri::Result<()> {
+    tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+        .title("NihongoTracker Companion")
+        .inner_size(1100.0, 720.0)
+        .min_inner_size(900.0, 600.0)
+        .resizable(true)
+        .center()
+        .build()?;
     Ok(())
 }
 

@@ -38,16 +38,6 @@
     "afk": "Pausa por inactividad: {{seconds}}s",
     "afkHint": "0 desactiva la pausa automática."
   },
-  "extensions": {
-    "title": "Diccionarios emergentes",
-    "enabled": "Cargar extensiones de navegador",
-    "enabledHint": "Solo en Windows: el webview puede ejecutar extensiones de Chrome sin empaquetar, así que Yomitan o JitenReader funcionan sobre el propio lector.",
-    "body": "Descarga la versión para Chrome de la extensión, descomprímela en la carpeta de abajo —una carpeta por extensión— y reinicia la app.",
-    "openFolder": "Abrir carpeta",
-    "none": "Todavía no hay ninguna extensión instalada.",
-    "settings": "Ajustes",
-    "restart": "Los cambios se aplican al reiniciar la app."
-  },
   "app": {
     "title": "Aplicación",
     "language": "Idioma",

@@ -1,7 +1,6 @@
 import common from './common.json';
 import nav from './nav.json';
 import dashboard from './dashboard.json';
-import dictionary from './dictionary.json';
 import discord from './discord.json';
 import log from './log.json';
 import queue from './queue.json';
@@ -18,7 +17,6 @@ export default {
   common,
   nav,
   dashboard,
-  dictionary,
   discord,
   log,
   queue,

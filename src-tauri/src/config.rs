@@ -194,11 +194,6 @@ pub struct Settings {
     pub discord_profile_button: bool,
     #[serde(default = "d_discord_image")]
     pub discord_large_image: String,
-    /// Load unpacked browser extensions (Yomitan, JitenReader…) into the
-    /// webview. Windows only; ignored elsewhere. Changing it needs a restart,
-    /// because the flag is baked into the webview environment.
-    #[serde(default = "d_true")]
-    pub extensions_enabled: bool,
     #[serde(default = "d_theme")]
     pub theme: String,
     /// UI language: `en` or `es`, same pair the web app supports. Empty means

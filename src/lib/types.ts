@@ -73,7 +73,6 @@ export interface Settings {
   discord_generic_mode: boolean;
   discord_profile_button: boolean;
   discord_large_image: string;
-  extensions_enabled: boolean;
   theme: string;
   /** `en` | `es`, or empty to follow the system on first run. */
   language: string;
@@ -156,16 +155,6 @@ export interface HookerState {
   content_id: string | null;
   content_title: string | null;
   last_error: string | null;
-}
-
-/** An unpacked browser extension found in the extensions folder. */
-export interface InstalledExtension {
-  folder: string;
-  name: string;
-  version: string;
-  manifest_version: number;
-  id: string;
-  options_url: string | null;
 }
 
 /** `celebration` from the `POST /api/logs` response (`ILogCelebration`). */

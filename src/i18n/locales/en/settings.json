@@ -38,16 +38,6 @@
     "afk": "Idle pause: {{seconds}}s",
     "afkHint": "0 disables the automatic pause."
   },
-  "extensions": {
-    "title": "Popup dictionaries",
-    "enabled": "Load browser extensions",
-    "enabledHint": "Windows only: the webview can run unpacked Chrome extensions, so Yomitan or JitenReader work over the reader itself.",
-    "body": "Download the extension's Chrome build, unzip it into the folder below — one folder per extension — and restart the app.",
-    "openFolder": "Open folder",
-    "none": "No extensions installed yet.",
-    "settings": "Settings",
-    "restart": "Changes apply after restarting the app."
-  },
   "app": {
     "title": "Application",
     "language": "Language",
