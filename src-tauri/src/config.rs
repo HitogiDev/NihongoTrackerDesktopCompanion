@@ -259,7 +259,6 @@ impl Default for Settings {
             discord_generic_mode: false,
             discord_profile_button: true,
             discord_large_image: d_discord_image(),
-            extensions_enabled: true,
             theme: d_theme(),
             language: String::new(),
         }
