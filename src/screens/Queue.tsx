@@ -17,6 +17,7 @@ import { EmptyState } from '../components/ui/Empty';
 import { Modal } from '../components/ui/Modal';
 import { Field } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
+import { MediaWebLink } from '../components/MediaWebLink';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import { logTypeLabel, relativeDate } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
@@ -97,8 +98,7 @@ export default function Queue() {
             <PendingCard
               key={item.id}
               item={item}
-              onConfirm={() => confirm.mutate({ id: item.id })}
-              onEdit={() => setEditing(item)}
+              onLog={() => setEditing(item)}
               onDiscard={() => discard.mutate(item.id)}
               busy={confirm.isPending || discard.isPending}
             />
@@ -119,7 +119,9 @@ export default function Queue() {
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">
-                    {(item.payload as LogPayload).description ?? item.kind}
+                    <MediaWebLink type={(item.payload as LogPayload).type} mediaId={(item.payload as LogPayload).mediaId}>
+                      {(item.payload as LogPayload).mediaTitle || (item.payload as LogPayload).description || item.kind}
+                    </MediaWebLink>
                   </p>
                   <p className="text-xs text-base-content/60 truncate">
                     {item.status === 'failed' ? item.lastError : t('outboxQueued')} ·{' '}
@@ -157,7 +159,9 @@ export default function Queue() {
               >
                 <Check className="w-4 h-4 text-success shrink-0" />
                 <span className="text-sm truncate flex-1">
-                  {(item.payload as LogPayload).description ?? item.kind}
+                  <MediaWebLink type={(item.payload as LogPayload).type} mediaId={(item.payload as LogPayload).mediaId}>
+                    {(item.payload as LogPayload).mediaTitle || (item.payload as LogPayload).description || item.kind}
+                  </MediaWebLink>
                 </span>
                 <span className="text-xs text-base-content/50">
                   {relativeDate(item.createdAt)}
@@ -180,14 +184,12 @@ export default function Queue() {
 
 function PendingCard({
   item,
-  onConfirm,
-  onEdit,
+  onLog,
   onDiscard,
   busy,
 }: {
   item: PendingItem;
-  onConfirm: () => void;
-  onEdit: () => void;
+  onLog: () => void;
   onDiscard: () => void;
   busy: boolean;
 }) {
@@ -220,7 +222,9 @@ function PendingCard({
           <div className={`badge badge-outline ${type.color} gap-1`}>
             <span className="text-xs font-medium">{logTypeLabel(payload.type)}</span>
           </div>
-          <h3 className="font-bold mt-1.5 truncate">{payload.description}</h3>
+          <h3 className="font-bold mt-1.5 truncate">
+            <MediaWebLink type={payload.type} mediaId={payload.mediaId}>{payload.mediaTitle || payload.description}</MediaWebLink>
+          </h3>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {payload.episodes ? (
               <span className={`badge badge-soft badge-sm ${type.bgColor} ${type.color}`}>
@@ -253,12 +257,9 @@ function PendingCard({
           ) : null}
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
-          <Button variant="primary" size="sm" disabled={busy} onClick={onConfirm}>
+          <Button variant="primary" size="sm" disabled={busy} onClick={onLog}>
             <Check className="w-4 h-4" />
             {t('log')}
-          </Button>
-          <Button size="sm" appearance="outline" disabled={busy} onClick={onEdit}>
-            {t('common:edit')}
           </Button>
           <Button size="sm" appearance="ghost" disabled={busy} onClick={onDiscard}>
             <X className="w-4 h-4" />
@@ -288,7 +289,7 @@ function EditPendingModal({
     if (item) {
       const { _detected, ...rest } = item.payload;
       void _detected;
-      setDraft(rest);
+      setDraft(rest.mediaTitle ? rest : { ...rest, mediaTitle: rest.description, description: '' });
     }
   }, [item]);
 
@@ -304,20 +305,36 @@ function EditPendingModal({
           <Button appearance="ghost" onClick={onClose}>
             {t('common:cancel')}
           </Button>
-          <Button variant="primary" loading={saving} onClick={() => onSave(draft)}>
+          <Button variant="primary" loading={saving} disabled={!draft.mediaTitle?.trim()} onClick={() => onSave({
+            ...draft,
+            mediaTitle: draft.mediaTitle?.trim(),
+            description: draft.description.trim() || (draft.mediaId ? '' : draft.mediaTitle?.trim() ?? ''),
+          })}>
             {t('log')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label={t('edit.description')}>
+        <Field label={t('edit.mediaTitle')}>
           {(id) => (
             <input
               id={id}
               className="input w-full"
+              value={draft.mediaTitle ?? ''}
+              onChange={(e) => setDraft({ ...draft, mediaTitle: e.target.value })}
+            />
+          )}
+        </Field>
+        <Field label={t('edit.comment')}>
+          {(id) => (
+            <textarea
+              id={id}
+              className="textarea w-full"
+              rows={3}
               value={draft.description}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              placeholder={t('edit.commentPlaceholder')}
             />
           )}
         </Field>

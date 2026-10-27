@@ -22,20 +22,28 @@
     "progressPlayer": "Posición real · {{percent}}% para registrar",
     "progressElapsed": "Tiempo con el reproductor abierto",
     "logNow": "Registrar ahora",
+    "comment": "Comentario (opcional)",
+    "commentPlaceholder": "Añade una nota sobre este episodio",
     "paused": "En pausa"
   },
   "vn": {
-    "empty": "Ninguna novela visual activa",
-    "emptyBody": "Registra el ejecutable de tus novelas visuales en la biblioteca para que se detecten al abrirlas.",
-    "add": "Añadir una novela",
+    "empty": "Ninguna novela ni juego activo",
+    "emptyBody": "Registra un ejecutable en la biblioteca para seguir una novela visual o un juego al abrirlo.",
+    "add": "Añadir una obra",
     "counting": "Contando tiempo",
     "autoPaused": "En pausa automática",
+    "manuallyPaused": "En pausa desde el panel flotante.",
     "time": "Tiempo",
     "characters": "Caracteres",
     "speed": "Car./hora",
     "idleFor": "Sin actividad desde hace {{duration}}.",
     "notFocused": "La ventana no está en primer plano.",
-    "openTexthooker": "Abrir texthooker"
+    "openTexthooker": "Abrir texthooker",
+    "nativeHookStarting": "Conectando el hook de texto nativo…",
+    "nativeHookAttached": "Hook conectado, esperando diálogo.",
+    "nativeHookReceiving": "Capturando texto del juego",
+    "nativeHookError": "Falló el hook de texto nativo",
+    "nativeHookUnavailable": "El hook nativo de juegos solo está disponible en Windows."
   },
   "progress": {
     "title": "Tu progreso",
@@ -44,9 +52,8 @@
     "streak": "Racha",
     "streakDays": "{{count}} d",
     "longestStreak": "máx. {{count}} d",
-    "reading": "Lectura",
-    "listening": "Escucha",
-    "levelUnit": "nivel"
+    "reading": "Nivel de lectura",
+    "listening": "Nivel de escucha"
   },
   "summary": {
     "title": "Resumen",
@@ -63,5 +70,6 @@
     "openWeb": "Ver en la web"
   },
   "reviewPending": "Revisar {{count}} registro pendiente",
-  "reviewPending_other": "Revisar {{count}} registros pendientes"
+  "reviewPending_other": "Revisar {{count}} registros pendientes",
+  "subtitlePartial": "La detección es limitada en este sistema. En Ajustes → Seguimiento ves qué funciona."
 }

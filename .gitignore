@@ -28,3 +28,5 @@ target/
 
 # Tauri
 src-tauri/gen/
+src-tauri/resources/game-hook/*/ntdc_game_hook.exe
+src-tauri/resources/game-hook/*/*.dll

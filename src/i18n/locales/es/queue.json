@@ -15,7 +15,9 @@
   "sent": "Enviados recientemente",
   "edit": {
     "title": "Editar registro",
-    "description": "Descripción",
+    "mediaTitle": "Obra o actividad",
+    "comment": "Comentario (opcional)",
+    "commentPlaceholder": "Añade una nota sobre esta sesión",
     "episodes": "Episodios",
     "minutes": "Minutos",
     "characters": "Caracteres",

@@ -15,7 +15,9 @@
   "sent": "Recently sent",
   "edit": {
     "title": "Edit log",
-    "description": "Description",
+    "mediaTitle": "Work or activity",
+    "comment": "Comment (optional)",
+    "commentPlaceholder": "Add a note about this session",
     "episodes": "Episodes",
     "minutes": "Minutes",
     "characters": "Characters",

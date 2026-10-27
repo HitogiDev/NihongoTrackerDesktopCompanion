@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { EyeOff, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
+import { EyeOff, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from './ui/Button';
-import { Field, Toggle } from './ui/Field';
+import { Toggle } from './ui/Field';
 import { SectionTitle } from './ui/Page';
 import { MediaSearchModal } from './MediaSearchModal';
 import { events, ipc } from '../lib/ipc';
@@ -83,40 +82,18 @@ export function DiscordSettings({
         />
 
         <div className="p-3 space-y-3">
-          <Field label={t('appId')} hint={t('appIdHint')}>
-            {(id) => (
-              <div className="flex gap-2">
-                <input
-                  id={id}
-                  className="input flex-1 font-mono text-sm"
-                  value={settings.discord_app_id}
-                  placeholder="1234567890123456789"
-                  onChange={(e) => onChange({ discord_app_id: e.target.value })}
-                />
-                <Button
-                  appearance="outline"
-                  onClick={() => void openUrl('https://discord.com/developers/applications')}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </Field>
-          <Field label={t('largeImage')} hint={t('largeImageHint')}>
-            {(id) => (
-              <input
-                id={id}
-                className="input w-full font-mono text-sm"
-                value={settings.discord_large_image}
-                onChange={(e) => onChange({ discord_large_image: e.target.value })}
-              />
-            )}
-          </Field>
+          <p className="text-xs text-base-content/60">{t('configured')}</p>
           <p className="text-xs text-base-content/50">
             {preview.data?.connected ? t('connected') : t('disconnected')}
           </p>
         </div>
 
+        <Toggle
+          label={t('idlePresence')}
+          description={t('idlePresenceHint')}
+          checked={settings.discord_show_idle}
+          onChange={(v) => onChange({ discord_show_idle: v })}
+        />
         <Toggle
           label={t('genericMode')}
           description={t('genericModeHint')}

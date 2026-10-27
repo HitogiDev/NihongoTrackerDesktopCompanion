@@ -1,0 +1,17 @@
+{
+  "title": "Sesión actual",
+  "idle": "No hay obra detectada",
+  "characters": "{{count}} caracteres",
+  "counting": "Registrando",
+  "paused": "En pausa",
+  "noLine": "Todavía no hay líneas del texthooker",
+  "saved": "Frase guardada",
+  "hide": "Ocultar panel",
+  "compact": "Panel compacto",
+  "expand": "Ampliar panel",
+  "pause": "Pausar sesión",
+  "resume": "Reanudar sesión",
+  "mine": "Guardar última frase",
+  "reader": "Abrir texthooker",
+  "log": "Registro rápido"
+}

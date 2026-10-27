@@ -6,8 +6,33 @@
 
 use std::time::Duration;
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// One connection pool for every API call. Building a `reqwest::Client` sets up
+/// a new pool and re-parses the TLS root store, so a client per request paid a
+/// full TLS handshake every time. `ApiClient` is cheap to build on top of it.
+static HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent(concat!("NihongoTrackerCompanion/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("reqwest client")
+});
+
+/// For services on this machine (MPC's web interface, AnkiConnect): never
+/// through a system proxy, and each caller sets its own short timeout.
+static LOCAL_HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("reqwest client")
+});
+
+pub fn local_http() -> &'static reqwest::Client {
+    &LOCAL_HTTP
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
@@ -48,6 +73,8 @@ pub struct MediaHit {
     pub cover_image: Option<String>,
     #[serde(default, rename = "isAdult")]
     pub is_adult: bool,
+    #[serde(default, rename = "isAdultImage")]
+    pub is_adult_image: Option<bool>,
     #[serde(default)]
     pub synonyms: Option<Vec<String>>,
     #[serde(rename = "type")]
@@ -87,12 +114,8 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn new(root: String, key: Option<String>) -> Self {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent(concat!("NihongoTrackerCompanion/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .expect("reqwest client");
-        Self { http, root, key }
+        // A clone shares the pool; it is only a reference count.
+        Self { http: HTTP.clone(), root, key }
     }
 
     fn url(&self, path: &str) -> String {
@@ -150,7 +173,7 @@ impl ApiClient {
     // ── auth ───────────────────────────────────────────────────────────
 
     pub async fn verify(&self) -> Result<Value> {
-        let req = self.auth(self.http.get(self.url("auth/verify")))?;
+        let req = self.auth(self.http.get(self.url("users/me")))?;
         self.send(req).await
     }
 
@@ -183,14 +206,53 @@ impl ApiClient {
         filter: &str,
         time_filter: &str,
         timezone: &str,
+        audience: &str,
+        medium_type: Option<&str>,
+        medium_metric: Option<&str>,
     ) -> Result<Value> {
-        let req = self.auth(self.http.get(self.url("users/ranking")).query(&[
+        let path = if medium_type.is_some() { "users/ranking/media" } else { "users/ranking" };
+        let mut query = vec![
             ("page", page.to_string()),
             ("limit", limit.to_string()),
             ("filter", filter.to_string()),
             ("timeFilter", time_filter.to_string()),
             ("timezone", timezone.to_string()),
-        ]))?;
+            ("audience", audience.to_string()),
+        ];
+        if let Some(media_type) = medium_type {
+            query.push(("type", media_type.to_string()));
+            query.push(("metric", medium_metric.unwrap_or("xp").to_string()));
+        }
+        let req = self.auth(self.http.get(self.url(path)).query(&query))?;
+        self.send(req).await
+    }
+
+    /// `GET /api/activities` — authenticated social activity feed.
+    pub async fn activity_feed(
+        &self,
+        scope: &str,
+        before: Option<&str>,
+        limit: u32,
+    ) -> Result<Value> {
+        let mut query = vec![
+            ("scope", scope.to_string()),
+            ("limit", limit.to_string()),
+        ];
+        if let Some(cursor) = before.filter(|cursor| !cursor.trim().is_empty()) {
+            query.push(("before", cursor.to_string()));
+        }
+        let req = self
+            .auth(self.http.get(self.url("activities")).query(&query))?;
+        self.send(req).await
+    }
+
+    pub async fn update_immersion_presence(&self, presence: &Value) -> Result<Value> {
+        let req = self.auth(self.http.put(self.url("users/me/immersion-presence")).json(presence))?;
+        self.send(req).await
+    }
+
+    pub async fn friends_immersion_presence(&self) -> Result<Value> {
+        let req = self.auth(self.http.get(self.url("users/friends/immersion-presence")))?;
         self.send(req).await
     }
 
@@ -262,6 +324,27 @@ impl ApiClient {
     pub async fn get_session(&self, content_id: &str) -> Result<Value> {
         let req = self.auth(self.http.get(self.url(&format!("texthooker/{content_id}"))))?;
         self.send(req).await
+    }
+
+    pub async fn media_stats(&self, content_id: &str, media_type: &str) -> Result<Value> {
+        let req = self.auth(self.http.get(self.url("logs/stats/media"))
+            .query(&[("mediaId", content_id), ("type", media_type)]))?;
+        self.send(req).await
+    }
+
+    pub async fn cache_image(&self, url: &str) -> Option<String> {
+        use base64::Engine;
+        let url = reqwest::Url::parse(url).ok()?;
+        if !matches!(url.scheme(), "https" | "http") { return None; }
+        let mut response = self.http.get(url).send().await.ok()?.error_for_status().ok()?;
+        let mime = response.headers().get(reqwest::header::CONTENT_TYPE)?.to_str().ok()?.split(';').next()?.to_string();
+        if !matches!(mime.as_str(), "image/png" | "image/jpeg" | "image/webp" | "image/gif" | "image/avif") { return None; }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > 5 * 1024 * 1024 { return None; }
+            bytes.extend_from_slice(&chunk);
+        }
+        Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
     }
 }
 

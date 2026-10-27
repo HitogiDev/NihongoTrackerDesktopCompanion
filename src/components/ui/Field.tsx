@@ -17,17 +17,17 @@ export function Field({
 }) {
   const id = useId();
   return (
-    <fieldset className={`fieldset ${className}`}>
+    <fieldset className={`fieldset min-w-0 ${className}`}>
       {(label || aside) && (
-        <legend className="fieldset-legend w-full">
-          <span>{label}</span>
+        <legend className="fieldset-legend w-full min-w-0">
+          <span className="min-w-0 break-words">{label}</span>
           {aside ? <span className="ml-auto text-xs opacity-70">{aside}</span> : null}
         </legend>
       )}
       {typeof children === 'function' ? children(id) : children}
-      {hint && !error ? <p className="label text-xs opacity-70">{hint}</p> : null}
+      {hint && !error ? <p className="min-w-0 break-words text-xs leading-relaxed text-base-content/60">{hint}</p> : null}
       {error ? (
-        <p role="alert" className="label text-error text-xs">
+        <p role="alert" className="min-w-0 break-words text-xs leading-relaxed text-error">
           {error}
         </p>
       ) : null}

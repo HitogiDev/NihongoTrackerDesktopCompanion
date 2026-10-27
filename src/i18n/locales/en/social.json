@@ -1,0 +1,50 @@
+{
+  "title": "Community",
+  "subtitle": "Catch up with friends, clubs, and the wider Nihongo Tracker community.",
+  "friendActivity": "Friends are learning",
+  "immersing": { "title": "Friends immersing now", "hint": "Live sessions shared by mutual followers.", "empty": "No friends are sharing an active session.", "elapsed": "{{time}} so far" },
+  "openSocial": "View all",
+  "ranking": "View ranking",
+  "openProfile": "Open {{username}}’s profile",
+  "offline": "Connect to Nihongo Tracker to see community activity.",
+  "loadError": "Community activity could not be loaded.",
+  "retry": "Retry",
+  "loadMore": "Load more",
+  "followingHint": "Follow other learners on Nihongo Tracker to see their activity here.",
+  "scope": {
+    "following": "Following",
+    "clubs": "Clubs",
+    "global": "Everyone"
+  },
+  "empty": {
+    "following": "No recent activity from people you follow.",
+    "clubs": "No recent club activity.",
+    "global": "No recent community activity."
+  },
+  "activity": {
+    "generic": "shared an update",
+    "immersion_log": "logged immersion",
+    "notable_immersion_session": "had a focused immersion session",
+    "achievement_unlocked": "unlocked an achievement",
+    "media_started": "started a new work",
+    "media_completed": "completed a work",
+    "media_review": "reviewed a work",
+    "journal_entry": "shared a journal entry",
+    "level_milestone": "reached a new level",
+    "streak_milestone": "reached a streak milestone",
+    "personal_record": "set a personal record",
+    "goal_completed": "completed a goal",
+    "challenge_joined": "joined a challenge",
+    "challenge_completed": "completed a challenge",
+    "club_milestone": "celebrated a club milestone",
+    "club_challenge_started": "started a club challenge",
+    "cooperative_goal_progress": "made progress on a shared goal",
+    "cooperative_goal_completed": "completed a shared goal"
+  },
+  "metrics": {
+    "characters": "characters",
+    "minutes": "min",
+    "episodes": "episodes",
+    "pages": "pages"
+  }
+}

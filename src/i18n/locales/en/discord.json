@@ -2,6 +2,7 @@
   "title": "Discord Rich Presence",
   "enable": "Show my immersion on Discord",
   "enableHint": "Off until you turn it on. Nothing is published and no connection is opened while it is off.",
+  "configured": "Uses the NihongoTracker Companion Discord application and its built-in artwork.",
   "appId": "Application ID",
   "appIdHint": "Create an application in the Discord Developer Portal, upload your icons under Rich Presence → Art Assets, and paste its ID here.",
   "largeImage": "Fallback image",
@@ -10,6 +11,8 @@
   "disconnected": "Not connected. Discord may be closed; it will be retried on its own.",
   "genericMode": "Activity only, never a title",
   "genericModeHint": "Always publishes \"Japanese immersion\" with no title and no cover, whatever you are on.",
+  "idlePresence": "Keep the presence while a VN is in the background",
+  "idlePresenceHint": "When a detected visual novel is not focused (or you are AFK), it shows \"Idling in <title>\" instead of going empty. Turn off to clear it like before.",
   "profileButton": "Add the \"View profile\" button",
   "profileButtonHint": "Links to your public NihongoTracker profile.",
   "preview": {
@@ -20,9 +23,10 @@
     "blocked": "\"{{label}}\" is on your blacklist: nothing at all is published.",
     "elapsed": "{{time}} elapsed",
     "reason": {
-      "adult": "Marked 18+ on NihongoTracker, so the title and the cover are stripped.",
+      "adult": "This work is classified as adult. For VNs, the previous rule applies until the cover rating is available.",
       "unresolved": "The media could not be resolved, so the file name is never published.",
-      "generic": "Activity-only mode is on."
+      "generic": "Activity-only mode is on.",
+      "adultimage": "This VN cover is classified as adult on NihongoTracker, so the title and cover are hidden."
     }
   },
   "blacklist": {

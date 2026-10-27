@@ -6,11 +6,14 @@ import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   AlertTriangle,
+  AppWindow,
   BookOpenText,
   Check,
   Clock,
+  CloudUpload,
   Film,
   Flame,
+  Headphones,
   Inbox,
   KeyRound,
   MonitorPlay,
@@ -18,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Type,
+  Trophy,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/Empty';
@@ -36,6 +40,14 @@ import { useAppStore } from '../store/useAppStore';
 import type { AnimeSession, VnSession } from '../lib/types';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { useQuickLogStore } from '../store/useQuickLogStore';
+import { SocialActivityFeed } from '../components/SocialActivityFeed';
+import { FriendsImmersing } from '../components/FriendsImmersing';
+
+function xpLevelProgress(xp?: number, from?: number, to?: number): number | null {
+  // The API gives absolute XP thresholds, so the bar needs both ends.
+  if (xp === undefined || from === undefined || to === undefined || to <= from) return null;
+  return Math.min(100, Math.max(0, Math.round(((xp - from) / (to - from)) * 100)));
+}
 
 export default function Dashboard() {
   const { t } = useTranslation('dashboard');
@@ -98,19 +110,22 @@ export default function Dashboard() {
   });
 
   const stats = user?.stats ?? null;
-  // The API gives absolute XP thresholds, so the bar needs both ends.
-  const levelProgress = (() => {
-    const xp = stats?.userXp;
-    const from = stats?.userXpToCurrentLevel;
-    const to = stats?.userXpToNextLevel;
-    if (xp === undefined || from === undefined || to === undefined || to <= from) return null;
-    return Math.min(100, Math.max(0, Math.round(((xp - from) / (to - from)) * 100)));
-  })();
+  const levelProgress = xpLevelProgress(
+    stats?.userXp, stats?.userXpToCurrentLevel, stats?.userXpToNextLevel,
+  );
+  const readingProgress = xpLevelProgress(
+    stats?.readingXp, stats?.readingXpToCurrentLevel, stats?.readingXpToNextLevel,
+  );
+  const listeningProgress = xpLevelProgress(
+    stats?.listeningXp, stats?.listeningXpToCurrentLevel, stats?.listeningXpToNextLevel,
+  );
 
   return (
     <Page
       title={t('title')}
-      description={tracker?.platform_supported ? t('subtitle') : t('subtitleUnsupported')}
+      description={!tracker?.platform_supported
+        ? t('subtitleUnsupported')
+        : tracker.capabilities.window_titles && tracker.capabilities.foreground ? t('subtitle') : t('subtitlePartial')}
       actions={
         <>
           <Button variant="primary" size="sm" onClick={() => openQuickLog('manual')}>
@@ -128,9 +143,9 @@ export default function Dashboard() {
         <div className="alert alert-error">
           <KeyRound className="w-5 h-5" />
           <span className="text-sm">{t('authRequired')}</span>
-          <Link to="/settings" className="btn btn-sm">
+          <button type="button" onClick={() => void ipc.openAuxWindow('settings')} className="btn btn-sm">
             {t('authRequiredAction')}
-          </Link>
+          </button>
         </div>
       ) : null}
 
@@ -162,17 +177,19 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {anime ? <AnimeCard session={anime} /> : <IdleCard kind="anime" />}
+        {anime ? <AnimeCard key={anime.key} session={anime} /> : <IdleCard kind="anime" />}
         {vn ? <VnCard session={vn} idleSeconds={idle} /> : <IdleCard kind="vn" />}
       </div>
 
       {stats ? (
-        <>
-          <SectionTitle>{t('progress.title')}</SectionTitle>
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <section className="space-y-3" aria-labelledby="dashboard-progress">
+          <h2 id="dashboard-progress" className="text-base font-semibold">{t('progress.title')}</h2>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <StatTile
+              icon={Trophy}
               label={t('progress.level')}
               value={stats.userLevel ?? 0}
+              progress={levelProgress}
               hint={
                 levelProgress !== null
                   ? t('progress.toNextLevel', { percent: levelProgress })
@@ -181,54 +198,71 @@ export default function Dashboard() {
               accent="text-primary"
             />
             <StatTile
+              icon={Flame}
               label={t('progress.streak')}
               value={t('progress.streakDays', { count: stats.currentStreak ?? 0 })}
               hint={t('progress.longestStreak', { count: stats.longestStreak ?? 0 })}
-              accent="text-secondary"
             />
             <StatTile
+              icon={BookOpenText}
               label={t('progress.reading')}
               value={stats.readingLevel ?? 0}
-              hint={t('progress.levelUnit')}
-              accent="text-accent"
+              progress={readingProgress}
+              hint={readingProgress !== null
+                ? t('progress.toNextLevel', { percent: readingProgress })
+                : undefined}
             />
             <StatTile
+              icon={Headphones}
               label={t('progress.listening')}
               value={stats.listeningLevel ?? 0}
-              hint={t('progress.levelUnit')}
-              accent="text-info"
+              progress={listeningProgress}
+              hint={listeningProgress !== null
+                ? t('progress.toNextLevel', { percent: listeningProgress })
+                : undefined}
             />
           </div>
-        </>
+        </section>
       ) : null}
 
-      <SectionTitle>{t('summary.title')}</SectionTitle>
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label={t('summary.pending')}
-          value={tracker?.pending_count ?? 0}
-          hint={t('summary.pendingHint')}
-          accent="text-warning"
-        />
-        <StatTile
-          label={t('summary.queued')}
-          value={tracker?.queued_count ?? 0}
-          hint={t('summary.queuedHint')}
-          accent="text-info"
-        />
-        <StatTile
-          label={t('summary.idle')}
-          value={formatDuration(idle)}
-          hint={t('summary.idleHint', { seconds: settings?.afk_timeout_secs ?? 0 })}
-          accent="text-base-content"
-        />
-        <StatTile
-          label={t('summary.activeWindow')}
-          value={<span className="text-sm font-medium">{tracker?.active_process ?? '—'}</span>}
-          hint={tracker?.active_window ?? undefined}
-          accent="text-base-content"
-        />
-      </div>
+      <section className="space-y-3" aria-labelledby="dashboard-summary">
+        <h2 id="dashboard-summary" className="text-base font-semibold">{t('summary.title')}</h2>
+        <div className="surface grid grid-cols-2 xl:grid-cols-4">
+          <StatTile
+            compact
+            icon={Inbox}
+            label={t('summary.pending')}
+            value={tracker?.pending_count ?? 0}
+            hint={t('summary.pendingHint')}
+          />
+          <StatTile
+            compact
+            icon={CloudUpload}
+            label={t('summary.queued')}
+            value={tracker?.queued_count ?? 0}
+            hint={t('summary.queuedHint')}
+          />
+          <StatTile
+            compact
+            icon={Clock}
+            label={t('summary.idle')}
+            value={formatDuration(idle)}
+            hint={t('summary.idleHint', { seconds: settings?.afk_timeout_secs ?? 0 })}
+            accent="text-base-content"
+          />
+          <StatTile
+            compact
+            icon={AppWindow}
+            label={t('summary.activeWindow')}
+            value={<span className="block truncate text-base font-semibold" title={tracker?.active_process ?? undefined}>{tracker?.active_process ?? '-'}</span>}
+            hint={tracker?.active_window ?? undefined}
+            accent="text-base-content"
+          />
+        </div>
+      </section>
+
+      <FriendsImmersing />
+      <SocialActivityFeed compact />
 
       {recent.length > 0 ? (
         <>
@@ -252,6 +286,7 @@ export default function Dashboard() {
           <ul className="space-y-1.5">
             {recent.map((log) => {
               const logType = getMediaTypeClasses(log.type);
+              const title = log.mediaTitle || log.media?.title?.contentTitleRomaji || log.media?.title?.contentTitleEnglish || log.media?.title?.contentTitleNative || log.description;
               return (
                 <li
                   key={log._id}
@@ -260,8 +295,9 @@ export default function Dashboard() {
                   <span className={`w-1.5 h-8 rounded-full shrink-0 ${logType.accentColor}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium truncate">
-                      {log.description}
+                      {title}
                     </span>
+                    {log.description && log.description !== title ? <span className="block text-xs text-base-content/70 truncate">{log.description}</span> : null}
                     <span className="block text-xs text-base-content/55">
                       {logTypeLabel(log.type)}
                       {log.episodes ? ` · ${log.episodes} ep.` : ''}
@@ -319,6 +355,7 @@ function AnimeCard({ session }: { session: AnimeSession }) {
   const type = getMediaTypeClasses('anime');
   const [matching, setMatching] = useState(false);
   const [logging, setLogging] = useState(false);
+  const [comment, setComment] = useState('');
   const progress = Math.round(session.progress * 100);
   const fromPlayer = session.source === 'player';
 
@@ -413,6 +450,19 @@ function AnimeCard({ session }: { session: AnimeSession }) {
         </div>
 
         {!session.logged ? (
+          <label className="block space-y-1 text-sm">
+            <span>{t('anime.comment')}</span>
+            <textarea
+              className="textarea w-full"
+              rows={2}
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              placeholder={t('anime.commentPlaceholder')}
+            />
+          </label>
+        ) : null}
+
+        {!session.logged ? (
           <Button
             size="sm"
             appearance="outline"
@@ -421,7 +471,7 @@ function AnimeCard({ session }: { session: AnimeSession }) {
             onClick={async () => {
               setLogging(true);
               try {
-                await ipc.logCurrentAnime();
+                await ipc.logCurrentAnime(comment.trim());
               } finally {
                 setLogging(false);
               }
@@ -457,6 +507,7 @@ function AnimeCard({ session }: { session: AnimeSession }) {
 
 function VnCard({ session, idleSeconds }: { session: VnSession; idleSeconds: number }) {
   const { t } = useTranslation('dashboard');
+  const gameHook = useAppStore((s) => s.tracker?.game_hook ?? null);
   const type = getMediaTypeClasses(session.media_type);
   const [, force] = useState(0);
 
@@ -503,40 +554,61 @@ function VnCard({ session, idleSeconds }: { session: VnSession; idleSeconds: num
           </div>
         </header>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
+        {(session.media_type === 'game' || session.media_type === 'vn') && gameHook && gameHook.phase !== 'inactive' ? (
+          <div className="rounded-field bg-base-200/60 px-3 py-2">
+            <p className="text-xs font-medium">
+              {gameHook.phase === 'starting'
+                ? t('vn.nativeHookStarting')
+                : gameHook.phase === 'attached'
+                  ? t('vn.nativeHookAttached')
+                  : gameHook.phase === 'receiving'
+                    ? t('vn.nativeHookReceiving')
+                    : gameHook.phase === 'unavailable'
+                      ? t('vn.nativeHookUnavailable')
+                      : t('vn.nativeHookError')}
+            </p>
+            {gameHook.message ? (
+              <p className="mt-1 text-[11px] text-base-content/60">{gameHook.message}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className={`grid gap-2 text-center ${session.media_type === 'game' ? 'grid-cols-1' : 'grid-cols-3'}`}>
           <div className="rounded-field bg-base-200/60 py-2">
             <div className="text-[10px] uppercase tracking-wide text-base-content/60">
               {t('vn.time')}
             </div>
             <div className="font-bold tabular-nums">{formatClock(session.elapsed_secs)}</div>
           </div>
-          <div className="rounded-field bg-base-200/60 py-2">
+          {session.media_type !== 'game' ? <div className="rounded-field bg-base-200/60 py-2">
             <div className="text-[10px] uppercase tracking-wide text-base-content/60">
               {t('vn.characters')}
             </div>
             <div className="font-bold tabular-nums">{numberWithCommas(session.session_chars)}</div>
-          </div>
-          <div className="rounded-field bg-base-200/60 py-2">
+          </div> : null}
+          {session.media_type !== 'game' ? <div className="rounded-field bg-base-200/60 py-2">
             <div className="text-[10px] uppercase tracking-wide text-base-content/60">
               {t('vn.speed')}
             </div>
             <div className="font-bold tabular-nums">{numberWithCommas(speed)}</div>
-          </div>
+          </div> : null}
         </div>
 
         {!session.counting ? (
           <p className="text-xs text-base-content/60 flex items-center gap-1.5">
             <Pause className="w-3 h-3" />
-            {idleSeconds > 0
+            {session.paused_by_user
+              ? t('vn.manuallyPaused')
+              : idleSeconds > 0
               ? t('vn.idleFor', { duration: formatDuration(idleSeconds) })
               : t('vn.notFocused')}
           </p>
         ) : null}
 
-        <Link to="/texthooker" className="btn btn-primary btn-sm w-full">
+        <button type="button" onClick={() => void ipc.openWorkTexthooker(session.content_id)} className="btn btn-primary btn-sm w-full">
           <Type className="w-4 h-4" />
           {t('vn.openTexthooker')}
-        </Link>
+        </button>
       </div>
     </article>
   );

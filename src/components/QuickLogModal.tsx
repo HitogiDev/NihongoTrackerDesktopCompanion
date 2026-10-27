@@ -52,7 +52,8 @@ const SEARCHABLE = ['anime', 'vn', 'manga', 'reading', 'game', 'movie', 'tv show
 
 interface Draft {
   type: string;
-  description: string;
+  mediaTitle: string;
+  comment: string;
   mediaId: string;
   image: string | null;
   episodes: string;
@@ -63,7 +64,8 @@ interface Draft {
 
 const EMPTY: Draft = {
   type: 'anime',
-  description: '',
+  mediaTitle: '',
+  comment: '',
   mediaId: '',
   image: null,
   episodes: '',
@@ -80,8 +82,8 @@ function amount(value: string): number | undefined {
 function toPayload(draft: Draft): LogPayload {
   const payload: LogPayload = {
     type: draft.type,
-    // Always required, even though the schema calls it optional.
-    description: draft.description.trim(),
+    mediaTitle: draft.mediaTitle.trim(),
+    description: draft.comment.trim() || (draft.mediaId.trim() ? '' : draft.mediaTitle.trim()),
     date: new Date().toISOString(),
   };
   if (draft.mediaId.trim()) payload.mediaId = draft.mediaId.trim();
@@ -95,7 +97,7 @@ function toPayload(draft: Draft): LogPayload {
 
 /** `null` when the draft is ready to send, otherwise the key of what's missing. */
 function missing(draft: Draft): string | null {
-  if (!draft.description.trim()) return 'description';
+  if (!draft.mediaTitle.trim()) return 'mediaTitle';
   const rule = RULES[draft.type] ?? { fields: [] };
   for (const field of rule.all ?? []) {
     if (amount(draft[field]) === undefined) return field;
@@ -200,20 +202,33 @@ export function QuickLogModal({
             )}
           </Field>
 
-          <Field label={t('description')} hint={t('descriptionHint')}>
+          <Field label={t('mediaTitle')} hint={t('mediaTitleHint')}>
             {(id) => (
               <div className="flex gap-2">
                 <input
                   id={id}
                   className="input flex-1"
-                  value={draft.description}
-                  onChange={(e) => set({ description: e.target.value })}
-                  placeholder={t('descriptionPlaceholder')}
+                  value={draft.mediaTitle}
+                  onChange={(e) => set({ mediaTitle: e.target.value })}
+                  placeholder={t('mediaTitlePlaceholder')}
                 />
                 <Button appearance="outline" onClick={() => setPicking(true)}>
                   <Search className="w-4 h-4" />
                 </Button>
               </div>
+            )}
+          </Field>
+
+          <Field label={t('comment')} hint={t('commentHint')}>
+            {(id) => (
+              <textarea
+                id={id}
+                className="textarea w-full"
+                rows={3}
+                value={draft.comment}
+                onChange={(e) => set({ comment: e.target.value })}
+                placeholder={t('commentPlaceholder')}
+              />
             )}
           </Field>
 
@@ -263,7 +278,7 @@ export function QuickLogModal({
                   ? t('requiredAny', {
                       fields: (rule.any ?? []).map((f) => t(`amount.${f}`)).join(', '),
                     })
-                  : t('required', { field: t(`amount.${problem}`, t('description')) })}
+                  : t('required', { field: t(`amount.${problem}`, t('mediaTitle')) })}
               </span>
             ) : typeof preview?.xp === 'number' ? (
               <span className={`badge badge-outline badge-sm gap-1 ${type.color}`}>
@@ -283,14 +298,14 @@ export function QuickLogModal({
         open={picking}
         onClose={() => setPicking(false)}
         mediaType={SEARCHABLE.includes(draft.type) ? draft.type : 'anime'}
-        initialQuery={draft.description}
+        initialQuery={draft.mediaTitle}
         onPick={(hit: MediaHit, pickedType: string) => {
           set({
             type: pickedType,
             mediaId: hit.contentId,
             image: hit.contentImage ?? hit.coverImage,
-            description:
-              hit.title.contentTitleRomaji || hit.title.contentTitleNative || draft.description,
+            mediaTitle:
+              hit.title.contentTitleRomaji || hit.title.contentTitleNative || draft.mediaTitle,
           });
           setPicking(false);
         }}

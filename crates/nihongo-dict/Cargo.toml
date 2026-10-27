@@ -1,0 +1,15 @@
+[package]
+name = "nihongo-dict"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Yomitan dictionary lookup for Japanese, over the Hoshidicts main engine"
+publish = false
+
+[dependencies]
+cxx = "1"
+lru = "0.12"
+
+[build-dependencies]
+cc = "1"
+cxx-build = "1"

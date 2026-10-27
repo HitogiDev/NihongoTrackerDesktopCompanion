@@ -1,0 +1,27 @@
+{
+  "title": "Sentence mining",
+  "subtitle": "Save Japanese lines from the texthooker and send them to Anki.",
+  "mineLatest": "Save latest line",
+  "shortcut": "Ctrl + Shift + M saves the latest line even while another window is active. On Windows, it also captures a screenshot when the linked game or novel is in focus.",
+  "deck": "Anki deck",
+  "deckHint": "Anki Desktop and AnkiConnect must be running. Note type and field mapping are configured in Settings.",
+  "saved": "Saved sentences ({{count}})",
+  "freeSession": "Free session",
+  "exported": "In Anki",
+  "hasScreenshot": "Screenshot",
+  "preview": "Preview image",
+  "screenshotAlt": "Screenshot of the source window",
+  "sendToAnki": "Send to Anki",
+  "delete": "Delete saved sentence",
+  "empty": "No saved sentences yet. Save a line from the texthooker or use the shortcut.",
+  "errors": {
+    "lineNotFound": "That texthooker line is no longer available.",
+    "noJapanese": "This line has no Japanese text.",
+    "noLine": "There is no line in this session yet.",
+    "sentenceNotFound": "This saved sentence was not found.",
+    "deckMissing": "Choose an Anki deck and note type first.",
+    "ankiModelMissing": "Choose an Anki deck and note type first.",
+    "ankiUnavailable": "Could not connect to AnkiConnect. Open Anki Desktop and check the add-on.",
+    "ankiInvalidResponse": "AnkiConnect returned an invalid response."
+  }
+}

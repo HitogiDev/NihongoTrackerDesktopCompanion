@@ -41,6 +41,18 @@ fn d_line_spacing() -> f32 {
 fn d_line_gap() -> u32 {
     16
 }
+fn d_dictionary_popup_delay_ms() -> u32 {
+    75
+}
+fn d_intelligence_mode() -> String {
+    "automatic".into()
+}
+fn d_intelligence_manual_threshold() -> u32 {
+    40
+}
+fn d_intelligence_afk_threshold() -> u32 {
+    300
+}
 fn d_hooker_theme() -> String {
     "system".into()
 }
@@ -58,6 +70,14 @@ fn d_streak_hours() -> u8 {
 fn d_discord_image() -> String {
     "nihongotracker".into()
 }
+fn d_discord_app_id() -> String { "1378024719672016977".into() }
+fn d_anki_deck() -> String {
+    "Default".into()
+}
+fn d_anki_model() -> String { "Basic".into() }
+fn d_anki_field_sources() -> std::collections::BTreeMap<String, String> {
+    [("Front".into(), "word".into()), ("Back".into(), "meaning".into())].into()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -67,6 +87,8 @@ pub struct Settings {
     pub api_base_url: String,
     pub api_key: Option<String>,
     pub username: Option<String>,
+    #[serde(default = "d_true")]
+    pub auto_reconnect: bool,
 
     // ── Anime detection ────────────────────────────────────────────────
     #[serde(default = "d_true")]
@@ -95,6 +117,9 @@ pub struct Settings {
     // ── Visual novels ──────────────────────────────────────────────────
     #[serde(default = "d_true")]
     pub detect_visual_novels: bool,
+    /// Track registered games without opening the texthooker automatically.
+    #[serde(default = "d_true")]
+    pub detect_games: bool,
     /// Stop counting after this many seconds without input. 0 disables.
     #[serde(default = "d_afk")]
     pub afk_timeout_secs: u64,
@@ -107,6 +132,15 @@ pub struct Settings {
     /// Ask before logging a VN session instead of logging on exit.
     #[serde(default = "d_true")]
     pub vn_confirm_before_log: bool,
+    /// Show the floating session window above other applications.
+    #[serde(default)]
+    pub overlay_enabled: bool,
+    #[serde(default = "d_anki_deck")]
+    pub anki_deck: String,
+    #[serde(default = "d_anki_model")]
+    pub anki_model: String,
+    #[serde(default = "d_anki_field_sources")]
+    pub anki_field_sources: std::collections::BTreeMap<String, String>,
 
     // ── Texthooker ─────────────────────────────────────────────────────
     #[serde(default = "d_ws")]
@@ -117,6 +151,10 @@ pub struct Settings {
     /// paste path the web texthooker relies on.
     pub texthooker_clipboard: bool,
     pub texthooker_prevent_duplicates: bool,
+    /// Drop Chinese lines from hooks that send a translation along with the
+    /// Japanese (AIR and other dual-language releases). Every input source.
+    pub texthooker_filter_chinese: bool,
+    pub native_hook_text_filters: crate::text_filters::NativeHookTextFilters,
     #[serde(default = "d_font_size")]
     pub texthooker_font_size: u32,
     #[serde(default = "d_font_family")]
@@ -151,6 +189,16 @@ pub struct Settings {
     #[serde(default = "d_true")]
     pub texthooker_allow_clipboard_during_pause: bool,
     pub texthooker_pause_on_disconnect: bool,
+    /// Delay before showing a dictionary lookup while holding its hotkey.
+    #[serde(default = "d_dictionary_popup_delay_ms")]
+    pub dictionary_popup_delay_ms: u32,
+    pub reading_overlay: ReadingOverlaySettings,
+    #[serde(default = "d_intelligence_mode")]
+    pub texthooker_intelligence_mode: String,
+    #[serde(default = "d_intelligence_manual_threshold")]
+    pub texthooker_intelligence_manual_threshold_seconds: u32,
+    #[serde(default = "d_intelligence_afk_threshold")]
+    pub texthooker_intelligence_afk_threshold_seconds: u32,
     /// Shared-room mode: `local`, `host` or `guest`.
     #[serde(default = "d_room_mode")]
     pub texthooker_room_mode: String,
@@ -166,6 +214,10 @@ pub struct Settings {
     pub minimize_to_tray: bool,
     #[serde(default = "d_true")]
     pub notifications: bool,
+    /// Look for a new GitHub release on start and every few hours. Installing
+    /// always waits for the user.
+    #[serde(default = "d_true")]
+    pub auto_update_check: bool,
     /// Warn when the streak is about to be lost. On by default — a reminder
     /// nobody asked for is annoying, but a streak lost in silence is worse.
     #[serde(default = "d_true")]
@@ -183,7 +235,7 @@ pub struct Settings {
     pub discord_rpc: bool,
     /// Application id from the Discord Developer Portal. Without it there is
     /// nothing to connect to.
-    #[serde(default)]
+    #[serde(default = "d_discord_app_id")]
     pub discord_app_id: String,
     /// Publish the activity but never a title or a cover, whatever it is.
     #[serde(default)]
@@ -194,6 +246,13 @@ pub struct Settings {
     pub discord_profile_button: bool,
     #[serde(default = "d_discord_image")]
     pub discord_large_image: String,
+    /// Keep an explicit "idling" presence while a VN is detected but out of
+    /// focus (or AFK) instead of wiping it. Off restores the privacy-first
+    /// behaviour of clearing the presence whenever time is not being counted.
+    #[serde(default = "d_true")]
+    pub discord_show_idle: bool,
+    #[serde(default)]
+    pub share_activity: bool,
     #[serde(default = "d_theme")]
     pub theme: String,
     /// UI language: `en` or `es`, same pair the web app supports. Empty means
@@ -208,6 +267,7 @@ impl Default for Settings {
             api_base_url: d_api_url(),
             api_key: None,
             username: None,
+            auto_reconnect: true,
             detect_players: true,
             anime_auto_log: false,
             anime_threshold_percent: d_threshold(),
@@ -217,14 +277,21 @@ impl Default for Settings {
             mpv_ipc_path: d_mpv_ipc(),
             mpc_web_port: d_mpc_port(),
             detect_visual_novels: true,
+            detect_games: true,
             afk_timeout_secs: d_afk(),
             vn_require_focus: true,
             vn_open_texthooker: true,
             vn_confirm_before_log: true,
+            overlay_enabled: false,
+            anki_deck: d_anki_deck(),
+            anki_model: d_anki_model(),
+            anki_field_sources: d_anki_field_sources(),
             texthooker_ws_url: d_ws(),
             texthooker_autoconnect: true,
             texthooker_clipboard: false,
             texthooker_prevent_duplicates: false,
+            texthooker_filter_chinese: false,
+            native_hook_text_filters: Default::default(),
             texthooker_font_size: d_font_size(),
             texthooker_font_family: d_font_family(),
             texthooker_line_spacing: d_line_spacing(),
@@ -244,6 +311,11 @@ impl Default for Settings {
             texthooker_allow_line_during_pause: true,
             texthooker_allow_clipboard_during_pause: true,
             texthooker_pause_on_disconnect: false,
+            dictionary_popup_delay_ms: d_dictionary_popup_delay_ms(),
+            reading_overlay: ReadingOverlaySettings::default(),
+            texthooker_intelligence_mode: d_intelligence_mode(),
+            texthooker_intelligence_manual_threshold_seconds: d_intelligence_manual_threshold(),
+            texthooker_intelligence_afk_threshold_seconds: d_intelligence_afk_threshold(),
             texthooker_room_mode: d_room_mode(),
             texthooker_room_id: String::new(),
             poll_interval_ms: d_poll(),
@@ -251,16 +323,99 @@ impl Default for Settings {
             start_minimized: false,
             minimize_to_tray: true,
             notifications: true,
+            auto_update_check: true,
             streak_reminder: true,
             streak_reminder_hours: d_streak_hours(),
             streak_reminder_at: String::new(),
             discord_rpc: false,
-            discord_app_id: String::new(),
+            discord_app_id: d_discord_app_id(),
             discord_generic_mode: false,
             discord_profile_button: true,
             discord_large_image: d_discord_image(),
+            discord_show_idle: true,
+            share_activity: false,
             theme: d_theme(),
             language: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ReadingOverlaySettings {
+    pub font_size: u32,
+    pub font_family: String,
+    pub font_weight: u16,
+    pub text_outline_width: f32,
+    pub text_outline_color: String,
+    pub text_shadow_color: String,
+    pub text_shadow_opacity: u32,
+    pub text_shadow_blur: u32,
+    pub center_text: bool,
+    pub opacity: u32,
+    pub idle_opacity: u32,
+    pub text_visibility: OverlayTextVisibility,
+    pub always_on_top: bool,
+    pub hide_when_unfocused: bool,
+    pub toolbar_title_hover_only: bool,
+    pub lookup_delay_ms: u32,
+    pub popup_enabled: bool,
+    pub popup_background_opacity: u32,
+    pub popup_close_delay_ms: u32,
+    pub toggle_shortcut: String,
+    pub interaction_shortcut: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayTextVisibility {
+    #[default]
+    Always,
+    HoverOnly,
+    DimWhenIdle,
+}
+
+impl Default for ReadingOverlaySettings {
+    fn default() -> Self {
+        Self {
+            font_size: 24,
+            font_family: d_font_family(),
+            font_weight: 400,
+            text_outline_width: 0.0,
+            text_outline_color: "#ffffff".into(),
+            text_shadow_color: "#000000".into(),
+            text_shadow_opacity: 0,
+            text_shadow_blur: 6,
+            center_text: false,
+            opacity: 65,
+            idle_opacity: 35,
+            text_visibility: OverlayTextVisibility::Always,
+            always_on_top: true,
+            hide_when_unfocused: true,
+            toolbar_title_hover_only: false,
+            lookup_delay_ms: d_dictionary_popup_delay_ms(),
+            popup_enabled: true,
+            popup_background_opacity: 100,
+            popup_close_delay_ms: 500,
+            toggle_shortcut: "Ctrl+Shift+O".into(),
+            interaction_shortcut: "Ctrl+Shift+I".into(),
+        }
+    }
+}
+
+impl ReadingOverlaySettings {
+    pub fn normalize_text_style(&mut self) {
+        self.popup_background_opacity = self.popup_background_opacity.min(100);
+        self.popup_close_delay_ms = self.popup_close_delay_ms.min(5000);
+        self.text_outline_width = if self.text_outline_width.is_finite() {
+            self.text_outline_width.clamp(0.0, 6.0)
+        } else { 0.0 };
+        self.text_shadow_opacity = self.text_shadow_opacity.min(100);
+        self.text_shadow_blur = self.text_shadow_blur.min(40);
+        for (color, fallback) in [(&mut self.text_outline_color, "#ffffff"), (&mut self.text_shadow_color, "#000000")] {
+            if color.len() != 7 || !color.starts_with('#') || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                *color = fallback.into();
+            }
         }
     }
 }
@@ -278,6 +433,30 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::Settings;
+
+    #[test]
+    fn overlay_text_style_preserves_defaults_and_limits_saved_values() {
+        let legacy: super::ReadingOverlaySettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy.text_outline_width, 0.0);
+        assert_eq!(legacy.text_shadow_opacity, 0);
+        assert!(legacy.popup_enabled);
+        assert_eq!(legacy.popup_background_opacity, 100);
+        assert_eq!(legacy.popup_close_delay_ms, 500);
+        let mut style = super::ReadingOverlaySettings {
+            popup_background_opacity: 200, popup_close_delay_ms: 6000,
+            text_outline_width: 20.0, text_outline_color: "invalid".into(),
+            text_shadow_color: "#123abc".into(), text_shadow_opacity: 200, text_shadow_blur: 100,
+            ..Default::default()
+        };
+        style.normalize_text_style();
+        assert_eq!(style.text_outline_width, 6.0);
+        assert_eq!(style.text_outline_color, "#ffffff");
+        assert_eq!(style.text_shadow_color, "#123abc");
+        assert_eq!(style.text_shadow_opacity, 100);
+        assert_eq!(style.text_shadow_blur, 40);
+        assert_eq!(style.popup_background_opacity, 100);
+        assert_eq!(style.popup_close_delay_ms, 5000);
+    }
 
     #[test]
     fn api_root_tolerates_trailing_slash() {
@@ -302,5 +481,12 @@ mod tests {
         let parsed: Settings = serde_json::from_str(r#"{"api_key":"ntk_x"}"#).unwrap();
         assert_eq!(parsed.anime_threshold_percent, 70);
         assert_eq!(parsed.texthooker_ws_url, "ws://localhost:6677");
+        assert!(parsed.auto_reconnect);
+        assert_eq!(parsed.reading_overlay.font_size, 24);
+        assert_eq!(parsed.reading_overlay.opacity, 65);
+        assert_eq!(parsed.reading_overlay.font_weight, 400);
+        assert_eq!(parsed.reading_overlay.idle_opacity, 35);
+        assert!(parsed.reading_overlay.always_on_top);
+        assert_eq!(parsed.reading_overlay.toggle_shortcut, "Ctrl+Shift+O");
     }
 }

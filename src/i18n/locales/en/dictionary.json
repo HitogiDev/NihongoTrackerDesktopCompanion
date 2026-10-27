@@ -1,0 +1,16 @@
+{
+  "title": "Dictionary",
+  "back": "Back",
+  "close": "Close",
+  "audioUnavailable": "Audio is not available yet",
+  "depth": "{{count}} back",
+  "loading": "Looking it up...",
+  "noResults": "Nothing found for {{term}}.",
+  "unknownDictionary": "Dictionary",
+  "deinflected": "Base form",
+  "process": "Form",
+  "frequencies": "Frequency",
+  "mineToAnki": "Add word to Anki",
+  "mined": "Added to Anki",
+  "resize": "Resize dictionary"
+}

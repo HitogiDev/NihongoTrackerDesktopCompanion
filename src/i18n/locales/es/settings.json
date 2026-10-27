@@ -1,14 +1,54 @@
 {
   "title": "Ajustes",
   "subtitle": "Cómo se detecta, cuándo se registra y a dónde se envía.",
+  "tabs": {
+    "label": "Secciones de ajustes",
+    "account": "Cuenta",
+    "tracking": "Seguimiento",
+    "anki": "Anki",
+    "app": "App"
+  },
+  "anki": {
+    "title": "Minería de frases para Anki",
+    "deck": "Mazo de Anki",
+    "noteType": "Tipo de nota",
+    "noteTypeHint": "Los tipos de nota y sus campos se leen desde AnkiConnect. Elige una fuente para cada campo.",
+    "field": "{{field}}",
+    "unavailable": "Abre Anki Desktop con AnkiConnect activado para cargar los tipos de nota.",
+    "sources": {
+      "word": "Palabra",
+      "reading": "Lectura",
+      "meaning": "Significado",
+      "sentence": "Frase",
+      "media": "Título de la obra",
+      "empty": "Dejar vacío"
+    }
+  },
+  "social": {
+    "title": "Amistades",
+    "share": "Compartir lo que estoy viendo o leyendo",
+    "shareHint": "Tus seguidores mutuos pueden ver la obra que sigues mientras esta opción esté activa. Las actualizaciones paran al pausar el seguimiento o cerrar el companion."
+  },
   "account": {
     "title": "Cuenta",
     "noUser": "Sin usuario",
+    "checking": "Comprobando conexión…",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
     "web": "Web",
     "server": "Servidor",
+    "currentKey": "API key actual",
     "newKey": "Nueva API key",
     "replace": "Reemplazar",
+    "reconnect": "Reconectar ahora",
+    "autoReconnect": "Reconectar automáticamente",
     "signOut": "Desconectar cuenta"
+  },
+  "game": {
+    "title": "Juegos",
+    "detect": "Seguir juegos registrados",
+    "detectHint": "Cuenta el tiempo activo de los juegos vinculados en la biblioteca.",
+    "rules": "La sesión se pausa cuando el juego pierde el foco o estás ausente. Al terminar, pasa a Pendientes para confirmarla."
   },
   "anime": {
     "title": "Anime",
@@ -18,6 +58,7 @@
     "usePositionHint": "mpv por IPC y MPC-HC/BE por su interfaz web. Sin esto se cuenta el tiempo con la ventana abierta, que un vídeo en pausa también suma.",
     "mpvIpc": "Socket IPC de mpv",
     "mpvIpcHint": "La misma ruta que tengas en input-ipc-server de mpv.conf. En Windows se traduce sola a named pipe.",
+    "mpvIpcHelp": "Añade `input-ipc-server=/tmp/mpv-socket` a mpv.conf (o configura una ruta de named pipe en Windows). mpv publica la posición por este socket para que el companion cuente solo el tiempo de vídeo reproducido.",
     "mpcPort": "Puerto web de MPC",
     "mpcPortHint": "Opciones → Reproductor → Interfaz web → Escuchar en el puerto.",
     "autoLog": "Registrar sin confirmar",
@@ -35,10 +76,12 @@
     "openTexthooker": "Abrir el texthooker automáticamente",
     "confirm": "Confirmar antes de registrar la sesión",
     "confirmHint": "Al cerrar la novela el registro pasa por Pendientes.",
-    "afk": "Pausa por inactividad: {{seconds}}s",
+    "afk": "Pausa por inactividad (segundos)",
     "afkHint": "0 desactiva la pausa automática."
   },
   "app": {
+    "overlay": "Panel flotante de sesión",
+    "overlayHint": "Muestra una ventana siempre visible con controles y la última línea.",
     "title": "Aplicación",
     "language": "Idioma",
     "autostart": "Iniciar con el sistema",
@@ -55,5 +98,74 @@
     "theme": "Tema",
     "poll": "Frecuencia de sondeo: {{ms}} ms",
     "pollHint": "Más alto = menos CPU."
+  },
+  "dictionary": {
+    "title": "Diccionarios offline",
+    "hint": "Importa un zip de diccionario de Yomitan. Se guarda en este equipo y las búsquedas funcionan sin conexión.",
+    "import": "Importar diccionario",
+    "entries": "entradas",
+    "none": "Todavía no hay diccionarios importados.",
+    "remove": "Eliminar diccionario"
+  },
+  "filters": {
+    "title": "Filtros de texto",
+    "duplicates": "Remover oraciones duplicadas",
+    "duplicatesHint": "Remueve frases duplicadas consecutivas dentro de cada línea, como こんにちはこんにちは → こんにちは. Conserva caracteres sueltos y puntuación repetidos, como ああ……. Se aplica a todas las fuentes.",
+    "chinese": "Filtrar las líneas en chino",
+    "chineseHint": "Para versiones que hookean una traducción al chino junto al japonés, como AIR. Descarta las líneas sin kana que parecen chino; los nombres, lugares y otras líneas cortas solo con kanji se conservan. Se aplica a todas las fuentes, también al overlay de lectura.",
+    "scope": "Estas reglas de eliminación se aplican a LunaHook en todas las obras. El texto eliminado no se envía al lector ni cuenta como caracteres en los logs. Las líneas anteriores se conservan.",
+    "words": "Palabras o nombres excluidos",
+    "wordsHint": "Una entrada por línea. Elimina todas las coincidencias exactas, también dentro del diálogo. Distingue mayúsculas.",
+    "wordsPlaceholder": "太郎\n花子",
+    "regex": "Reglas de eliminación con regex",
+    "regexHint": "Una regex por línea, sin delimitadores /. Se aplican de arriba abajo antes de las palabras excluidas. Sintaxis de Rust, sin lookaround ni referencias a grupos.",
+    "regexPlaceholder": "^.*?：\n\\[[^\\]]*\\]",
+    "regexError": "Regex inválida en la línea {{line}}: {{message}}",
+    "test": "Probar los filtros",
+    "input": "Texto de ejemplo",
+    "sample": "太郎「今日は雨だ。」",
+    "preview": "Vista previa",
+    "empty": "Esta línea se ignorará.",
+    "characters": "Caracteres japoneses restantes: {{count}}",
+    "save": "Guardar filtros",
+    "saved": "Filtros guardados",
+    "failed": "No se pudieron aplicar los filtros: {{message}}"
+  },
+  "platform": {
+    "title": "Compatibilidad del sistema",
+    "available": "disponible",
+    "unavailable": "no disponible",
+    "os": {
+      "windows": "Windows",
+      "linux": "Linux",
+      "macos": "macOS"
+    },
+    "features": {
+      "window_titles": "Reproductores detectados por el título de su ventana",
+      "media_sessions": "Reproductores detectados por los controles multimedia del sistema (MPRIS)",
+      "foreground": "Ventana activa (tiempo solo con foco, tiempo de juego, overlay de lectura)",
+      "idle": "Detección de inactividad (tiempo AFK)",
+      "screenshots": "Captura del juego en las frases minadas",
+      "actionable_notifications": "Botón «Registrar» en el aviso de racha",
+      "native_hook": "Hook nativo de juegos (LunaHook)"
+    },
+    "missing": {
+      "window_titles": "Aquí no se pueden leer los títulos de las ventanas.",
+      "window_titles_linux": "Wayland no deja que una app lea las demás ventanas. Los reproductores se siguen por MPRIS.",
+      "window_titles_macos": "Permite la grabación de pantalla para que el companion pueda leer los títulos.",
+      "media_sessions": "Los reproductores se detectan por el título de su ventana.",
+      "media_sessions_linux": "No se ha encontrado el bus de sesión de D-Bus.",
+      "foreground": "Aquí no se puede saber qué ventana tiene el foco.",
+      "foreground_linux": "Wayland oculta qué ventana tiene el foco, así que las sesiones cuentan como enfocadas.",
+      "idle": "No se puede medir la inactividad, así que el tiempo AFK está desactivado.",
+      "idle_linux": "Tu compositor no informa de la inactividad (GNOME y KDE sí), así que el tiempo AFK está desactivado.",
+      "screenshots": "Aquí no se pueden hacer capturas.",
+      "screenshots_linux": "La captura de ventanas necesita una sesión X11.",
+      "screenshots_macos": "Necesita el permiso de grabación de pantalla.",
+      "actionable_notifications": "El aviso aparece sin botón; abre el formulario desde la bandeja.",
+      "native_hook": "LunaHook se inyecta en procesos de Windows. Con Wine o Proton, ejecuta Textractor dentro del prefijo del juego y conéctalo por WebSocket."
+    },
+    "screenRecordingHint": "macOS oculta los títulos de las ventanas de otras apps hasta que permites la grabación de pantalla en Ajustes del Sistema → Privacidad y seguridad. Reinicia el companion después de concederla.",
+    "screenRecordingAction": "Pedir acceso"
   }
 }

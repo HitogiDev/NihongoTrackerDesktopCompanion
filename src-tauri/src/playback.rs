@@ -161,7 +161,7 @@ async fn mpv_inner(path: &str) -> Option<Playback> {
 
 async fn mpc(port: u16) -> Option<Playback> {
     let url = format!("http://127.0.0.1:{port}/variables.html");
-    let body = reqwest::Client::new()
+    let body = crate::api::local_http()
         .get(url)
         .timeout(Duration::from_millis(600))
         .send()

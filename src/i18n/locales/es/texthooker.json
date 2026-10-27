@@ -1,4 +1,9 @@
 {
+  "mining": {
+    "saveLatest": "Guardar última frase",
+    "saveLine": "Guardar frase",
+    "saved": "Frase guardada"
+  },
   "topbar": {
     "timer": "Cronómetro",
     "speed": "Caracteres por hora",
@@ -16,8 +21,14 @@
     "undo": "Deshacer el borrado",
     "stats": "Ver estadísticas",
     "settings": "Ajustes",
+    "dictionary": "Buscar la última línea o el texto seleccionado",
     "sessions": "Sesiones",
-    "back": "Volver"
+    "back": "Volver",
+    "hideWindow": "Ocultar ventana del texthooker",
+    "websocketDisabled": "WebSocket desactivado mientras se usa LunaHook",
+    "inputSource": "Origen del texto",
+    "websocketSource": "WebSocket",
+    "sourceFailed": "No se pudo cambiar el origen del texto."
   },
   "timer": {
     "title": "Fijar cronómetro",
@@ -26,7 +37,8 @@
     "seconds": "Segundos",
     "resetConfirm": "¿Reiniciar el cronómetro?",
     "resetBody": "El tiempo de esta sesión vuelve a cero. Las líneas no se tocan.",
-    "resetAction": "Reiniciar"
+    "resetAction": "Reiniciar",
+    "saveFailed": "No se pudo actualizar el cronómetro. Inténtalo de nuevo."
   },
   "stats": {
     "title": "Estadísticas de la sesión",
@@ -43,13 +55,34 @@
     "noHistory": "Todavía no has registrado ninguna sesión.",
     "lines": "Líneas",
     "logSession": "Registrar sesión",
+    "comment": "Comentario (opcional)",
+    "commentPlaceholder": "Añade una nota sobre esta sesión de lectura",
     "logged": "Registrado",
-    "session": "sesión"
+    "session": "sesión",
+    "intelligence": {
+      "title": "Inteligencia de sesión",
+      "disabled": "La inteligencia de sesión está desactivada en los ajustes.",
+      "focus": "Enfoque",
+      "focused": "Concentrado",
+      "distracted": "Distraído",
+      "afk": "AFK excluido",
+      "rate": "Caracteres japoneses por minuto",
+      "charsPerMinute": "caracteres japoneses/min",
+      "distractionCount": "{{count}} distracción(es)",
+      "waiting": "Lee otra línea para estimar la concentración.",
+      "minute": "Minuto {{minute}}: {{count}} caracteres japoneses",
+      "minuteLabel": "Minuto {{minute}}"
+    },
+    "progress": "Progreso de lectura",
+    "progressCharacters": "{{current}} / {{total}} caracteres",
+    "progressUnavailable": "El total de caracteres no está disponible.",
+    "offlineCache": "Mostrando los datos guardados sin conexión."
   },
   "settings": {
     "title": "Ajustes del texthooker",
     "tabDisplay": "Visualización",
     "tabBehavior": "Comportamiento",
+    "tabIntelligence": "Inteligencia de sesión",
     "displayHeading": "Visualización",
     "verticalText": "Texto vertical",
     "alwaysVerticalBar": "Barra siempre vertical",
@@ -67,6 +100,8 @@
     "behaviorHeading": "Comportamiento y conexión",
     "autoPause": "Pausa automática (segundos sin líneas)",
     "autoPauseHint": "0 la desactiva. No afecta a las sesiones que lleva la detección de novelas.",
+    "dictionaryPopupDelay": "Retardo del popup del diccionario (milisegundos)",
+    "dictionaryPopupDelayHint": "0 lo abre de inmediato. Mantén Shift sobre texto japonés para buscarlo.",
     "runtime": "En ejecución",
     "clipboard": "Leer del portapapeles",
     "allowLine": "Aceptar líneas en pausa",
@@ -74,12 +109,25 @@
     "autostartByLine": "Arrancar el reloj con una línea",
     "autostartByClipboard": "Arrancar el reloj al copiar",
     "pauseOnDisconnect": "Pausar al desconectar",
-    "preventDuplicates": "Evitar líneas duplicadas",
+    "preventDuplicates": "Remover oraciones duplicadas",
     "autoconnect": "Reconectar solo",
     "websocketUrl": "WebSocket",
     "copyAllLines": "Copiar todas las líneas",
     "clearAllLines": "Borrar todas las líneas",
-    "useAppTheme": "Usar el tema de la app"
+    "clearConfirmTitle": "¿Borrar todas las líneas?",
+    "clearConfirmBody": "Se eliminarán todas las líneas de la sesión actual del texthooker. ¿Continuar?",
+    "clearFailed": "No se pudieron borrar las líneas. Inténtalo de nuevo.",
+    "useAppTheme": "Usar el tema de la app",
+    "intelligence": {
+      "title": "Inteligencia de sesión",
+      "mode": "Modo de detección",
+      "hint": "Estima la concentración a partir de las pausas entre líneas. El análisis se queda en este dispositivo.",
+      "automatic": "Automático",
+      "manual": "Umbral manual",
+      "off": "Desactivado",
+      "manualThreshold": "Umbral de distracción (segundos)",
+      "afkThreshold": "Umbral para excluir AFK (segundos)"
+    }
   },
   "classHelp": {
     "title": "Clases para el CSS personalizado",
@@ -114,6 +162,30 @@
     "title": "Sesiones",
     "free": "Sesión libre",
     "linkAnother": "Vincular otra obra"
+  },
+  "hookSelection": {
+    "title": "Elegir un hook de LunaHook",
+    "description": "Elige la fuente que contenga el diálogo que quieres. NTDC recordará tu selección para este juego.",
+    "choose": "Elegir hook de LunaHook",
+    "button": "LunaHook",
+    "enable": "Activar LunaHook para este juego",
+    "enableFailed": "No se pudo activar LunaHook para este juego.",
+    "noGame": "Abre un juego o novela visual registrado en tu biblioteca con la detección activada.",
+    "trackingRequired": "Activa el seguimiento y la detección de juegos o novelas visuales en Configuración para iniciar LunaHook.",
+    "waiting": "Avanza el diálogo del juego. Aquí aparecerán los hooks detectados y sus muestras de texto.",
+    "saved": "Hook guardado: {{code}}",
+    "status": {
+      "inactive": "LunaHook está inactivo.",
+      "starting": "Conectando LunaHook al juego...",
+      "attached": "LunaHook está conectado. Esperando texto del juego...",
+      "receiving": "LunaHook está recibiendo texto del juego.",
+      "error": "LunaHook no pudo capturar el texto del juego.",
+      "unavailable": "LunaHook no está disponible."
+    },
+    "unnamed": "Hook sin nombre",
+    "save": "Guardar hook",
+    "saving": "Guardando...",
+    "saveFailed": "No se pudo guardar el hook seleccionado."
   },
   "deleteLine": "Borrar línea"
 }

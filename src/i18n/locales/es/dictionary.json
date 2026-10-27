@@ -1,0 +1,16 @@
+{
+  "title": "Diccionario",
+  "back": "Volver",
+  "close": "Cerrar",
+  "audioUnavailable": "El audio todavía no está disponible",
+  "depth": "{{count}} atrás",
+  "loading": "Buscando...",
+  "noResults": "No hay resultados para {{term}}.",
+  "unknownDictionary": "Diccionario",
+  "deinflected": "Forma base",
+  "process": "Forma",
+  "frequencies": "Frecuencia",
+  "mineToAnki": "Añadir palabra a Anki",
+  "mined": "Añadido a Anki",
+  "resize": "Cambiar tamaño del diccionario"
+}

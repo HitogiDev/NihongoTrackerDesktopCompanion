@@ -1,21 +1,29 @@
+import { NativeHookTextFilters } from '../components/NativeHookTextFilters';
+import { useReadingOverlay } from '../hooks/useReadingOverlay';
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   Activity,
   BarChart2,
   BookOpen,
+  BookmarkPlus,
+  Brain,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -28,9 +36,12 @@ import {
   Link as LinkIcon,
   Monitor,
   Pause,
+  PanelTop,
   Play,
   RotateCcw,
   Save,
+  SlidersHorizontal,
+  Target,
   Settings,
   Trash2,
   Share2,
@@ -41,9 +52,15 @@ import {
   X,
 } from 'lucide-react';
 import { Field } from '../components/ui/Field';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { DictionaryPopup } from '../components/DictionaryPopup';
+import { textHitAtPoint } from '../lib/textHit';
+import { NativeHookChoices } from '../components/NativeHookChoices';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { formatClock, numberWithCommas, readingSpeed } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
+import { miningError } from '../lib/mining';
 import { useAppStore } from '../store/useAppStore';
 import {
   RoomConnection,
@@ -51,7 +68,14 @@ import {
   type RoomLine,
   type RoomMember,
 } from '../lib/room';
-import type { HookerTotals, TextLine, TextSessionSummary } from '../lib/types';
+import type {
+  DictionaryEntry,
+  HookerTotals,
+  TextLine,
+  SessionIntelligence,
+  TextSessionSummary,
+} from '../lib/types';
+import type { LookupRequest } from '@nihongotracker/yomitan-content';
 
 const LOCAL_SESSION = 'local';
 
@@ -65,12 +89,82 @@ const HOOKER_THEME_OPTIONS: Array<{ value: string; label?: string; labelKey?: st
   { value: 'bumblebee', label: 'Bumblebee' },
   { value: 'emerald', label: 'Emerald' },
   { value: 'corporate', label: 'Corporate' },
+  { value: 'synthwave', label: 'Synthwave' },
   { value: 'retro', label: 'Retro' },
+  { value: 'valentine', label: 'Valentine' },
+  { value: 'halloween', label: 'Halloween' },
   { value: 'garden', label: 'Garden' },
   { value: 'forest', label: 'Forest' },
+  { value: 'dracula', label: 'Dracula' },
+  { value: 'cmyk', label: 'CMYK' },
+  { value: 'night', label: 'Night' },
   { value: 'winter', label: 'Winter' },
+  { value: 'dim', label: 'Dim' },
   { value: 'sunset', label: 'Sunset' },
+  { value: 'abyss', label: 'Abyss' },
 ];
+
+function analyzeSession(
+  lines: TextLine[],
+  mode: SessionIntelligence['detectionMode'],
+  manualThreshold: number,
+  afkThreshold: number
+): SessionIntelligence {
+  const japanese = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
+  const chronological = lines
+    .map((line) => ({ ...line, timestamp: Date.parse(line.created_at) }))
+    .filter((line) => Number.isFinite(line.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const gaps = chronological.slice(1).map((line, index) =>
+    Math.max(0, Math.round((line.timestamp - chronological[index].timestamp) / 1000))
+  );
+  const baselineGaps = gaps.filter((gap) => gap > 0 && gap < afkThreshold).sort((a, b) => a - b);
+  const baseline = baselineGaps.length ? baselineGaps[Math.floor(baselineGaps.length / 2)] : null;
+  const threshold = mode === 'manual' ? manualThreshold : mode === 'automatic' && baseline !== null ? Math.max(40, baseline * 2) : null;
+  let focusedSeconds = 0;
+  let distractedSeconds = 0;
+  let afkSeconds = 0;
+  let distractionCount = 0;
+  let longestDistractionSeconds = 0;
+  gaps.forEach((gap) => {
+    if (mode === 'off') return;
+    if (gap >= afkThreshold) afkSeconds += gap;
+    else if (threshold !== null && gap > threshold) {
+      const distraction = gap - threshold;
+      focusedSeconds += threshold;
+      distractedSeconds += distraction;
+      distractionCount += 1;
+      longestDistractionSeconds = Math.max(longestDistractionSeconds, distraction);
+    } else focusedSeconds += gap;
+  });
+  const firstTimestamp = chronological[0]?.timestamp ?? 0;
+  const charactersPerMinute: number[] = [];
+  chronological.forEach((line) => {
+    const minute = Math.min(1439, Math.floor(Math.max(0, line.timestamp - firstTimestamp) / 60_000));
+    while (charactersPerMinute.length <= minute) charactersPerMinute.push(0);
+    charactersPerMinute[minute] += (line.text.match(japanese) ?? []).length;
+  });
+  const attentionSeconds = focusedSeconds + distractedSeconds;
+  return {
+    detectionMode: mode,
+    baselineIntervalSeconds: baseline,
+    distractionThresholdSeconds: threshold,
+    afkThresholdSeconds: afkThreshold,
+    focusedSeconds,
+    distractedSeconds,
+    afkSeconds,
+    distractionCount,
+    longestDistractionSeconds,
+    focusPercentage: attentionSeconds ? Math.round((focusedSeconds / attentionSeconds) * 100) : 0,
+    charactersPerMinute,
+  };
+}
+
+function durationLabel(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
 
 const FONT_FAMILY_OPTIONS = [
   { value: 'Noto Sans JP', label: 'Noto Sans JP' },
@@ -102,23 +196,53 @@ export default function TexthookerScreen() {
   const updateSettings = useAppStore((s) => s.updateSettings);
   const hooker = useAppStore((s) => s.hooker);
   const tracker = useAppStore((s) => s.tracker);
+  const readingOverlay = useReadingOverlay();
+  const online = useAppStore((s) => s.online);
 
   const contentId = hooker?.content_id ?? LOCAL_SESSION;
+  const contentIdRef = useRef(contentId);
+  contentIdRef.current = contentId;
+  const reloadRequestRef = useRef(0);
+  const displayedContentIdRef = useRef(contentId);
 
   const [lines, setLines] = useState<TextLine[]>([]);
   const [totals, setTotals] = useState<HookerTotals | null>(null);
   const [undoStack, setUndoStack] = useState<TextLine[][]>([]);
+  const [miningFeedback, setMiningFeedback] = useState<string | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'display' | 'behavior'>('display');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'display' | 'behavior' | 'intelligence'>('display');
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [expandedIntelligenceId, setExpandedIntelligenceId] = useState<string | null>(null);
   const [isTimerEditOpen, setIsTimerEditOpen] = useState(false);
   const [isResetTimerConfirmOpen, setIsResetTimerConfirmOpen] = useState(false);
+  const [savingTimer, setSavingTimer] = useState(false);
+  const [timerError, setTimerError] = useState(false);
+  const [clearTarget, setClearTarget] = useState<string | null>(null);
+  const [clearingLines, setClearingLines] = useState(false);
+  const [clearError, setClearError] = useState(false);
   const [isClassHelpOpen, setIsClassHelpOpen] = useState(false);
   const [isSessionPickerOpen, setIsSessionPickerOpen] = useState(false);
+  const [isHookPickerOpen, setIsHookPickerOpen] = useState(false);
+  const [selectedHookCode, setSelectedHookCode] = useState<string | null>(null);
+  const [savingHook, setSavingHook] = useState(false);
+  const [changingInput, setChangingInput] = useState(false);
+  const [inputSourceError, setInputSourceError] = useState(false);
+  const inputSourceRequestRef = useRef(0);
+  const [hookSaveError, setHookSaveError] = useState<string | null>(null);
+  const hookPickerOpenedForPidRef = useRef<number | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
+  const [logComment, setLogComment] = useState('');
   const [isLogAnimating, setIsLogAnimating] = useState(false);
+  const [dictionaryRequest, setDictionaryRequest] = useState<LookupRequest | null>(null);
+  const [dictionaryAnchor, setDictionaryAnchor] = useState<DOMRect | null>(null);
+  const [dictionaryVertical, setDictionaryVertical] = useState(false);
+  const [dictionaryEntries, setDictionaryEntries] = useState<DictionaryEntry[] | undefined>();
+  const [dictionaryLoading, setDictionaryLoading] = useState(false);
+  const dictionaryHoverTimerRef = useRef<number | null>(null);
+  const dictionaryHoverKeyRef = useRef<string | null>(null);
+  const dictionaryPointerRef = useRef<{ element: HTMLElement; text: string; x: number; y: number; context?: { lineId: string; contentId: string } } | null>(null);
 
   const [timerEditHours, setTimerEditHours] = useState(0);
   const [timerEditMinutes, setTimerEditMinutes] = useState(0);
@@ -138,6 +262,8 @@ export default function TexthookerScreen() {
   const lastActivityRef = useRef(Date.now());
 
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const lastScrollExtentRef = useRef<number | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -148,7 +274,100 @@ export default function TexthookerScreen() {
   // A detected visual novel drives the clock from Rust; the manual timer is for
   // everything else.
   const autoSession = tracker?.vn && tracker.vn.content_id === contentId ? tracker.vn : null;
+  const nativeHook = tracker?.game_hook.exe ? tracker.game_hook : null;
+  const nativeSession = nativeHook?.content_id === contentId;
+  const nativeSelected = Boolean(nativeSession && !nativeHook.websocket_selected);
+  const nativeInput = nativeSelected && nativeHook
+    && ['starting', 'attached', 'receiving'].includes(nativeHook.phase);
+  const hookApps = useQuery({ queryKey: ['vn-apps'], queryFn: ipc.listVnApps, enabled: isHookPickerOpen });
+  const hookApp = hookApps.data?.find((entry) => entry.exe.toLowerCase() === tracker?.vn?.exe.toLowerCase());
+  const [enablingHook, setEnablingHook] = useState(false);
+  useEffect(() => {
+    inputSourceRequestRef.current += 1;
+    setChangingInput(false);
+    setInputSourceError(false);
+  }, [contentId, nativeHook?.pid]);
+
+  const openHookPicker = () => {
+    setSelectedHookCode(
+      nativeSession && nativeHook?.hooks.some((hook) => hook.selection_key === nativeHook.selected_hook_code)
+        ? nativeHook.selected_hook_code
+        : null
+    );
+    setHookSaveError(null);
+    setIsHookPickerOpen(true);
+  };
+
+  const changeInputSource = async (source: 'lunahook' | 'websocket') => {
+    if (changingInput) return;
+    const request = ++inputSourceRequestRef.current;
+    setChangingInput(true);
+    setInputSourceError(false);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const status = await Promise.race([
+        ipc.setHookerInputSource(contentId, source),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Input source change timed out')), 5000);
+        }),
+      ]);
+      if (request !== inputSourceRequestRef.current) return;
+      useAppStore.setState((state) => state.tracker
+        ? { tracker: { ...state.tracker, game_hook: status } }
+        : {});
+      if (source === 'websocket') setIsHookPickerOpen(false);
+    } catch {
+      if (request === inputSourceRequestRef.current) setInputSourceError(true);
+    } finally {
+      clearTimeout(timeout);
+      if (request === inputSourceRequestRef.current) setChangingInput(false);
+    }
+  };
+  useEffect(() => {
+    if (!nativeHook?.pid) {
+      hookPickerOpenedForPidRef.current = null;
+      return;
+    }
+    if (nativeHook.selected_hook_code) {
+      setSelectedHookCode(nativeHook.selected_hook_code);
+    }
+    if (nativeInput && !nativeHook.selected_hook_code
+      && hookPickerOpenedForPidRef.current !== nativeHook.pid) {
+      setSelectedHookCode(null);
+      setHookSaveError(null);
+      setIsHookPickerOpen(true);
+      hookPickerOpenedForPidRef.current = nativeHook.pid;
+    }
+  }, [nativeHook?.pid, nativeHook?.selected_hook_code, nativeInput]);
   const seconds = autoSession ? autoSession.elapsed_secs : manualSeconds;
+
+  const enableNativeHook = async () => {
+    if (!hookApp) return;
+    setEnablingHook(true);
+    setHookSaveError(null);
+    try {
+      const apps = await ipc.upsertVnApp({ ...hookApp, native_hook_enabled: true });
+      queryClient.setQueryData(['vn-apps'], apps);
+    } catch {
+      setHookSaveError(t('hookSelection.enableFailed'));
+    } finally {
+      setEnablingHook(false);
+    }
+  };
+
+  const saveNativeHookSelection = async () => {
+    if (!nativeHook?.exe || !selectedHookCode) return;
+    setSavingHook(true);
+    setHookSaveError(null);
+    try {
+      await ipc.selectNativeHook(nativeHook.exe, selectedHookCode);
+      setIsHookPickerOpen(false);
+    } catch {
+      setHookSaveError(t('hookSelection.saveFailed'));
+    } finally {
+      setSavingHook(false);
+    }
+  };
 
   const vertical = settings?.texthooker_vertical ?? false;
   const lineGap = settings?.texthooker_line_gap ?? 16;
@@ -160,6 +379,7 @@ export default function TexthookerScreen() {
   const isTopbarHidden = settings?.texthooker_topbar_hidden ?? false;
   const forceTopbarVertical = settings?.texthooker_force_topbar_vertical ?? false;
   const autoPauseTimeout = settings?.texthooker_auto_pause_timeout ?? 120;
+  const dictionaryPopupDelay = Math.max(0, Math.min(2000, settings?.dictionary_popup_delay_ms ?? 75));
   const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
   const connectionStatus = hooker?.status ?? 'disconnected';
   const roomMode = (settings?.texthooker_room_mode ?? 'local') as 'local' | 'host' | 'guest';
@@ -169,13 +389,101 @@ export default function TexthookerScreen() {
       ? `${settings.api_base_url.replace(/\/+$/, '')}/texthooker/session?mode=guest&roomId=${roomId}`
       : '';
 
+  const lookupDictionary = useCallback(async (request: LookupRequest) => {
+    setDictionaryLoading(true);
+    try {
+      const response = await ipc.dictionaryLookup(request.query, request.offset ?? 0);
+      setDictionaryEntries(response.entries);
+    } catch {
+      setDictionaryEntries([]);
+    } finally {
+      setDictionaryLoading(false);
+    }
+  }, []);
+
+  const [dictionaryContext, setDictionaryContext] = useState<{ lineId: string; contentId: string }>();
+  const scheduleDictionaryLookup = useCallback((element: HTMLElement, text: string, x: number, y: number, context?: { lineId: string; contentId: string }) => {
+    const hit = textHitAtPoint(element, x, y);
+    if (!hit) {
+      if (dictionaryHoverTimerRef.current !== null) window.clearTimeout(dictionaryHoverTimerRef.current);
+      dictionaryHoverTimerRef.current = null;
+      dictionaryHoverKeyRef.current = null;
+      return;
+    }
+    const { offset, rect: anchorRect } = hit;
+
+    const key = `${text}:${offset}`;
+    if (dictionaryHoverKeyRef.current === key) return;
+    dictionaryHoverKeyRef.current = key;
+    if (dictionaryHoverTimerRef.current !== null) {
+      window.clearTimeout(dictionaryHoverTimerRef.current);
+    }
+    dictionaryHoverTimerRef.current = window.setTimeout(() => {
+      setDictionaryContext(context);
+      setDictionaryAnchor(anchorRect);
+      setDictionaryVertical(hit.vertical);
+      setDictionaryEntries(undefined);
+      setDictionaryRequest({ query: text, offset });
+      dictionaryHoverTimerRef.current = null;
+    }, dictionaryPopupDelay);
+  }, [dictionaryPopupDelay]);
+
+  const openDictionaryAtPointer = useCallback((event: ReactMouseEvent<HTMLElement>, line: TextLine) => {
+    const element = event.currentTarget;
+    const text = line.text;
+    const context = { lineId: line.id, contentId: line.content_id };
+    dictionaryPointerRef.current = { element, text, x: event.clientX, y: event.clientY, context };
+    if (!event.shiftKey && !event.altKey) {
+      if (dictionaryHoverTimerRef.current !== null) {
+        window.clearTimeout(dictionaryHoverTimerRef.current);
+        dictionaryHoverTimerRef.current = null;
+      }
+      dictionaryHoverKeyRef.current = null;
+      return;
+    }
+    scheduleDictionaryLookup(element, text, event.clientX, event.clientY, context);
+  }, [scheduleDictionaryLookup]);
+
+  const cancelDictionaryHover = useCallback(() => {
+    if (dictionaryHoverTimerRef.current !== null) {
+      window.clearTimeout(dictionaryHoverTimerRef.current);
+      dictionaryHoverTimerRef.current = null;
+    }
+    dictionaryHoverKeyRef.current = null;
+    dictionaryPointerRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const lookupOnModifierPress = (event: KeyboardEvent) => {
+      if ((event.key !== 'Shift' && event.key !== 'Alt') || event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLElement &&
+        (activeElement.isContentEditable || activeElement.matches('input, textarea, select'))
+      ) {
+        return;
+      }
+      const pointer = dictionaryPointerRef.current;
+      if (pointer) scheduleDictionaryLookup(pointer.element, pointer.text, pointer.x, pointer.y, pointer.context);
+    };
+
+    document.addEventListener('keydown', lookupOnModifierPress);
+    return () => document.removeEventListener('keydown', lookupOnModifierPress);
+  }, [scheduleDictionaryLookup]);
+
   // ── data ────────────────────────────────────────────────────────────
 
   const reload = useCallback(async () => {
+    if (contentIdRef.current !== contentId) return;
+    const requestId = ++reloadRequestRef.current;
     const [nextLines, nextTotals] = await Promise.all([
       ipc.hookerLines(contentId, 5000),
       ipc.hookerTotals(contentId),
     ]);
+    if (
+      requestId !== reloadRequestRef.current ||
+      contentIdRef.current !== contentId
+    ) return;
     setLines(nextLines);
     setTotals(nextTotals);
     if (!autoSession) {
@@ -186,16 +494,27 @@ export default function TexthookerScreen() {
   }, [contentId, autoSession]);
 
   useEffect(() => {
+    if (displayedContentIdRef.current !== contentId) {
+      displayedContentIdRef.current = contentId;
+      setLines([]);
+      setTotals(null);
+      setIsTimerActive(false);
+      setUndoStack([]);
+    }
     void reload();
-  }, [reload]);
+  }, [contentId, reload]);
 
   useEffect(() => {
+    let disposed = false;
     const unlisten = listen<{ line: TextLine; totals: { lines: number; chars: number } }>(
       events.hookerLine,
       (event) => {
+        if (disposed) return;
         if (event.payload.line.content_id !== contentId) return;
+        void queryClient.invalidateQueries({ queryKey: ['text-context'] });
         lastActivityRef.current = Date.now();
-        setLines((prev) => [...prev, event.payload.line]);
+        setLines((prev) => prev.some((line) => line.id === event.payload.line.id)
+          ? prev : [...prev, event.payload.line]);
         setTotals((prev) =>
           prev
             ? {
@@ -210,9 +529,10 @@ export default function TexthookerScreen() {
       }
     );
     return () => {
+      disposed = true;
       void unlisten.then((fn) => fn());
     };
-  }, [contentId]);
+  }, [contentId, queryClient]);
 
   // A line produced locally is mirrored to the room when hosting.
   useEffect(() => {
@@ -346,7 +666,10 @@ export default function TexthookerScreen() {
   useEffect(() => () => disconnectRoom(), [disconnectRoom]);
 
   const toggleTimer = useCallback(() => {
-    if (autoSession) return;
+    if (autoSession) {
+      void ipc.setSessionPaused(!autoSession.paused_by_user);
+      return;
+    }
     setIsTimerActive((prev) => {
       if (!prev) {
         lastActivityRef.current = Date.now();
@@ -360,27 +683,41 @@ export default function TexthookerScreen() {
     setTimerEditHours(Math.floor(seconds / 3600));
     setTimerEditMinutes(Math.floor((seconds % 3600) / 60));
     setTimerEditSeconds(seconds % 60);
+    setTimerError(false);
     setIsTimerEditOpen(true);
   }, [seconds]);
 
-  const handleSaveTimerEdit = useCallback(() => {
+  const handleSaveTimerEdit = useCallback(async () => {
     const total = timerEditHours * 3600 + timerEditMinutes * 60 + timerEditSeconds;
-    secondsRef.current = total;
-    setManualSeconds(total);
-    anchorTimer(total);
-    lastActivityRef.current = Date.now();
-    void ipc.hookerSetTimer(contentId, total);
-    setIsTimerEditOpen(false);
+    setSavingTimer(true); setTimerError(false);
+    try {
+      await ipc.hookerSetTimer(contentId, total, true);
+      if (contentIdRef.current !== contentId) return;
+      secondsRef.current = total;
+      setManualSeconds(total);
+      anchorTimer(total);
+      lastActivityRef.current = Date.now();
+      setIsTimerEditOpen(false);
+    } catch { setTimerError(true); }
+    finally { setSavingTimer(false); }
   }, [timerEditHours, timerEditMinutes, timerEditSeconds, contentId, anchorTimer]);
 
-  const handleResetTimer = useCallback(() => {
-    secondsRef.current = 0;
-    setManualSeconds(0);
-    anchorTimer(0);
-    setIsTimerActive(false);
-    void ipc.hookerSetTimer(contentId, 0);
-    setIsResetTimerConfirmOpen(false);
-  }, [contentId, anchorTimer]);
+  const handleResetTimer = useCallback(async () => {
+    setSavingTimer(true); setTimerError(false);
+    try {
+      if (autoSession) await ipc.setSessionPaused(true);
+      await ipc.hookerSetTimer(contentId, 0, true);
+      if (contentIdRef.current !== contentId) return;
+      secondsRef.current = 0;
+      setManualSeconds(0);
+      anchorTimer(0);
+      setIsTimerActive(false);
+      setIsResetTimerConfirmOpen(false);
+    } catch { setTimerError(true); }
+    finally { setSavingTimer(false); }
+  }, [contentId, autoSession, anchorTimer]);
+
+  useEffect(() => { setIsTimerEditOpen(false); setIsResetTimerConfirmOpen(false); setTimerError(false); }, [contentId]);
 
   // ── lines ───────────────────────────────────────────────────────────
 
@@ -412,11 +749,23 @@ export default function TexthookerScreen() {
   }, [undoStack, reload]);
 
   const handleClearAll = useCallback(async () => {
-    if (lines.length === 0) return;
-    setUndoStack((prev) => [...prev, lines]);
-    await ipc.hookerClear(contentId);
-    await reload();
-  }, [lines, contentId, reload]);
+    if (lines.length === 0 || clearTarget !== contentId || clearingLines) return;
+    setClearingLines(true);
+    setClearError(false);
+    try {
+      await ipc.hookerClear(contentId);
+      if (contentIdRef.current !== contentId) return;
+      setUndoStack((prev) => [...prev, lines]);
+      setClearTarget(null);
+      await reload();
+    } catch {
+      if (contentIdRef.current === contentId) setClearError(true);
+    } finally {
+      setClearingLines(false);
+    }
+  }, [lines, contentId, clearTarget, clearingLines, reload]);
+
+  useEffect(() => { setClearTarget(null); setClearError(false); }, [contentId]);
 
   const handleCopyAll = useCallback(async () => {
     const combined = lines.map((line) => line.text).join('\n');
@@ -426,16 +775,59 @@ export default function TexthookerScreen() {
 
   // ── derived ─────────────────────────────────────────────────────────
 
+  const { data: context } = useQuery({
+    queryKey: ['text-context', settings?.api_base_url, settings?.username, contentId],
+    queryFn: () => ipc.hookerContext(contentId),
+  });
+  useEffect(() => {
+    void ipc.refreshHookerContext(contentId);
+  }, [contentId, isStatsOpen, settings?.api_base_url, settings?.username]);
+  useEffect(() => {
+    const changed = listen<{ contentId: string }>(events.hookerContext, (event) => {
+      if (event.payload.contentId === contentId) {
+        void queryClient.invalidateQueries({ queryKey: ['text-context'] });
+      }
+    });
+    const outbox = listen(events.outbox, () => {
+      void queryClient.invalidateQueries({ queryKey: ['text-context'] });
+    });
+    return () => { void changed.then((unlisten) => unlisten()); void outbox.then((unlisten) => unlisten()); };
+  }, [contentId, queryClient]);
   const linesNumber = totals?.lines ?? lines.length;
-  const charsNumber = totals?.chars ?? 0;
+  const charsNumber = totals?.chars ?? lines.reduce((sum, line) => sum + line.chars, 0);
+  const allTimeLines = Math.max(context?.lines ?? 0, linesNumber);
+  const allTimeChars = Math.max(context?.characters ?? 0, charsNumber);
   const currentSessionChars = autoSession?.session_chars ?? totals?.sessionChars ?? 0;
   const currentSessionLines = autoSession?.session_lines ?? totals?.sessionLines ?? 0;
+  const progressCharacters = (context?.loggedCharacters ?? 0) + currentSessionChars;
+  const progressPercent = context?.totalCharacters
+    ? Math.min(100, progressCharacters / context.totalCharacters * 100) : null;
+  const history = context?.history;
+  const cover = context?.cover ?? autoSession?.image;
+  const sessionIntelligence = useMemo(
+    () => analyzeSession(
+      currentSessionLines > 0 ? lines.slice(-currentSessionLines) : [],
+      settings?.texthooker_intelligence_mode ?? 'automatic',
+      Math.max(1, settings?.texthooker_intelligence_manual_threshold_seconds ?? 40),
+      Math.max(1, settings?.texthooker_intelligence_afk_threshold_seconds ?? 300)
+    ),
+    [currentSessionLines, lines, settings?.texthooker_intelligence_afk_threshold_seconds,
+      settings?.texthooker_intelligence_manual_threshold_seconds, settings?.texthooker_intelligence_mode]
+  );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    followLatestRef.current = true;
+    lastScrollExtentRef.current = null;
+  }, [contentId, vertical]);
+
+  useLayoutEffect(() => {
     const el = listContainerRef.current;
     if (!el) return;
-    if (vertical) el.scrollLeft = 0;
-    else el.scrollTop = el.scrollHeight;
+    if (followLatestRef.current) {
+      if (vertical) el.scrollLeft = Math.min(0, el.clientWidth - el.scrollWidth);
+      else el.scrollTop = el.scrollHeight;
+    }
+    lastScrollExtentRef.current = vertical ? el.scrollWidth : el.scrollHeight;
   }, [lines, vertical]);
 
   // Close the settings panel on an outside click or Escape, like the web one.
@@ -488,24 +880,20 @@ export default function TexthookerScreen() {
     ? { columnGap: lineGap, rowGap: lineGap, direction: 'rtl' }
     : { rowGap: lineGap };
 
-  const textBaseStyle: CSSProperties = {
-    lineHeight: lineSpacing,
-    fontSize,
-    fontFamily:
-      FONT_FAMILY_STACKS[fontFamily] ||
-      `"${fontFamily}", "Noto Sans JP Local", "Noto Sans JP", sans-serif`,
-  };
-
-  const verticalTextStyle: CSSProperties = {
-    ...textBaseStyle,
-    writingMode: 'vertical-rl',
-    textOrientation: 'mixed',
-    flexShrink: 0,
-    height: '100%',
-    direction: 'ltr',
-  };
-
-  const horizontalTextStyle: CSSProperties = { ...textBaseStyle, display: 'block' };
+  // Memoized, like the handlers below, so `LineItem` can skip the lines that did
+  // not change: this screen re-renders every second while a session counts.
+  const lineTextStyle = useMemo<CSSProperties>(() => {
+    const base: CSSProperties = {
+      lineHeight: lineSpacing,
+      fontSize,
+      fontFamily:
+        FONT_FAMILY_STACKS[fontFamily] ||
+        `"${fontFamily}", "Noto Sans JP Local", "Noto Sans JP", sans-serif`,
+    };
+    return vertical
+      ? { ...base, writingMode: 'vertical-rl', textOrientation: 'mixed', flexShrink: 0, height: '100%', direction: 'ltr' }
+      : { ...base, display: 'block' };
+  }, [lineSpacing, fontSize, fontFamily, vertical]);
 
   const topbarMetrics: Array<{ key: string; title: string; content: ReactNode }> = [];
   if (settings?.texthooker_show_timer) {
@@ -580,10 +968,13 @@ export default function TexthookerScreen() {
         content_id: contentId,
         media_type: totals.mediaType ?? 'vn',
         description: totals.mediaTitle ?? hooker?.content_title ?? t('sessions.free'),
+        comment: logComment.trim(),
         chars: currentSessionChars,
         seconds,
+        intelligence: sessionIntelligence,
       });
       setIsLogAnimating(true);
+      setLogComment('');
       setTimeout(() => setIsLogAnimating(false), 2000);
       secondsRef.current = 0;
       setManualSeconds(0);
@@ -591,20 +982,32 @@ export default function TexthookerScreen() {
       setIsTimerActive(false);
       await reload();
       void queryClient.invalidateQueries({ queryKey: ['outbox'] });
-      void queryClient.invalidateQueries({ queryKey: ['text-history', contentId] });
+      void queryClient.invalidateQueries({ queryKey: ['text-context'] });
     } finally {
       setIsLogging(false);
     }
   }
 
-  const { data: history } = useQuery({
-    queryKey: ['text-history', contentId],
-    queryFn: () => ipc.hookerHistory(contentId),
-  });
+  async function saveSentence(lineId?: string) {
+    try {
+      if (lineId) await ipc.mineLine(lineId);
+      else await ipc.mineLatestLine();
+      setMiningFeedback(t('mining.saved'));
+    } catch (error) {
+      setMiningFeedback(miningError(error));
+    }
+  }
+
+  // Stable identities for `LineItem`; they always call the latest closures.
+  const lineActions = useRef({ save: saveSentence, remove: handleDelete });
+  lineActions.current = { save: saveSentence, remove: handleDelete };
+  const saveLine = useCallback((id: string) => void lineActions.current.save(id), []);
+  const deleteLine = useCallback((id: string) => void lineActions.current.remove(id), []);
 
   return (
     <div data-theme={effectiveHookerTheme} className="bg-base-300 min-h-screen th-root">
       {customCss.trim() && <style>{customCss}</style>}
+      {miningFeedback ? <button type="button" className="fixed bottom-3 right-3 z-50 alert alert-info w-auto max-w-sm text-sm" onClick={() => setMiningFeedback(null)}>{miningFeedback}</button> : null}
 
       {/* Top Bar */}
       {isTopbarHidden && effectiveTopbarVertical ? (
@@ -657,13 +1060,46 @@ export default function TexthookerScreen() {
             ></div>
           )}
 
-          <button
+          {nativeSession || autoSession ? (
+            <>
+              <div className="join" role="group" aria-label={t('topbar.inputSource')}>
+                <button
+                  type="button"
+                  className={nativeSelected ? 'join-item btn btn-outline btn-sm btn-square relative' : 'join-item btn btn-primary btn-sm btn-square relative'}
+                  aria-pressed={!nativeSelected}
+                  disabled={changingInput}
+                  title={t('topbar.websocket', { status: connectionStatus })}
+                  aria-label={t('topbar.websocket', { status: connectionStatus })}
+                  onClick={() => nativeSelected
+                    ? void changeInputSource('websocket')
+                    : void (['connected', 'connecting'].includes(connectionStatus) ? ipc.hookerDisconnect() : ipc.hookerConnect())}
+                >
+                  {connectionStatus === 'connected' && !nativeSelected ? <LinkIcon className="h-4 w-4" /> : <Unlink className="h-4 w-4" />}
+                  {!nativeSelected && <span aria-hidden="true" className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-success' : connectionStatus === 'connecting' ? 'bg-warning' : connectionStatus === 'error' ? 'bg-error' : 'bg-base-content/40'}`} />}
+                </button>
+                <button
+                  type="button"
+                  className={nativeSelected ? 'join-item btn btn-primary btn-sm btn-square relative' : 'join-item btn btn-outline btn-sm btn-square relative'}
+                  aria-pressed={nativeSelected}
+                  disabled={changingInput}
+                  title={t(`hookSelection.status.${nativeSession ? nativeHook?.phase : 'inactive'}`)}
+                  aria-label={t('hookSelection.button')}
+                  onClick={() => !nativeSession ? openHookPicker() : !nativeSelected && void changeInputSource('lunahook')}
+                >
+                  <Target className="h-4 w-4" />
+                  {nativeSelected && <span aria-hidden="true" className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${nativeHook?.phase === 'error' || nativeHook?.phase === 'unavailable' ? 'bg-error' : nativeHook?.selected_hook_code && ['attached', 'receiving'].includes(nativeHook.phase) ? 'bg-success' : 'bg-warning'}`} />}
+                </button>
+              </div>
+              {nativeSelected && <button type="button" className={topbarIconBtnClass} title={t('hookSelection.choose')} aria-label={t('hookSelection.choose')} onClick={openHookPicker}><SlidersHorizontal className="h-4 w-4" /></button>}
+              {inputSourceError && <span className="text-error text-xs" role="alert">{t('topbar.sourceFailed')}</span>}
+            </>
+          ) : <button
             type="button"
             onClick={() =>
-              void (connectionStatus === 'connected' ? ipc.hookerDisconnect() : ipc.hookerConnect())
+              void (['connected', 'connecting'].includes(connectionStatus) ? ipc.hookerDisconnect() : ipc.hookerConnect())
             }
             className={`${topbarIconBtnClass} transition-colors duration-300 ${
-              connectionStatus === 'connected'
+              nativeInput ? 'opacity-40' : connectionStatus === 'connected'
                 ? 'text-success'
                 : connectionStatus === 'error'
                   ? 'text-error'
@@ -671,29 +1107,28 @@ export default function TexthookerScreen() {
                     ? 'text-warning'
                     : 'opacity-40'
             }`}
-            title={t('topbar.websocket', { status: connectionStatus })}
+            title={nativeInput ? t('topbar.websocketDisabled') : t('topbar.websocket', { status: connectionStatus })}
           >
-            {connectionStatus === 'connected' ? (
+            {!nativeInput && connectionStatus === 'connected' ? (
               <LinkIcon className="w-4 h-4" />
             ) : (
               <Unlink className="w-4 h-4" />
             )}
-          </button>
+          </button>}
 
           <button
             type="button"
             onClick={toggleTimer}
-            disabled={Boolean(autoSession)}
             className={topbarIconBtnClass}
             title={
               autoSession
-                ? t('topbar.autoTimer')
+                ? t(autoSession.paused_by_user ? 'topbar.resume' : 'topbar.pause')
                 : isTimerActive
                   ? t('topbar.pause')
                   : t('topbar.resume')
             }
           >
-            {(autoSession ? autoSession.counting : isTimerActive) ? (
+            {(autoSession ? !autoSession.paused_by_user : isTimerActive) ? (
               <Pause className="w-4 h-4" />
             ) : (
               <Play className="w-4 h-4" />
@@ -702,7 +1137,7 @@ export default function TexthookerScreen() {
 
           <button
             type="button"
-            onClick={() => setIsResetTimerConfirmOpen(true)}
+            onClick={() => { setTimerError(false); setIsResetTimerConfirmOpen(true); }}
             className={topbarIconBtnClass}
             title={t('topbar.reset')}
           >
@@ -756,6 +1191,14 @@ export default function TexthookerScreen() {
             <Settings className="w-4 h-4" />
           </button>
 
+          {readingOverlay?.target?.content_id === contentId && <button
+            type="button" className={topbarIconBtnClass} aria-pressed={readingOverlay.visible}
+            title={t(readingOverlay.visible ? 'readingOverlay:hide' : 'readingOverlay:open')}
+            aria-label={t(readingOverlay.visible ? 'readingOverlay:hide' : 'readingOverlay:open')}
+            onClick={() => void ipc.readingOverlayAction(readingOverlay.visible ? 'hide' : 'show')}>
+            <PanelTop className="w-4 h-4" />
+          </button>}
+
           <button
             type="button"
             onClick={() => setIsSessionPickerOpen(true)}
@@ -773,9 +1216,9 @@ export default function TexthookerScreen() {
 
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => getCurrentWindow().label === 'texthooker' ? void getCurrentWindow().hide() : navigate('/')}
             className={topbarIconBtnClass}
-            title={t('topbar.back')}
+            title={getCurrentWindow().label === 'texthooker' ? t('topbar.hideWindow') : t('topbar.back')}
           >
             <Home className="w-4 h-4" />
           </button>
@@ -882,10 +1325,11 @@ export default function TexthookerScreen() {
             <button onClick={() => setIsTimerEditOpen(false)} className="btn btn-ghost">
               {t('common:cancel')}
             </button>
-            <button onClick={handleSaveTimerEdit} className="btn btn-primary">
+            <button disabled={savingTimer} onClick={() => void handleSaveTimerEdit()} className="btn btn-primary">
               {t('common:save')}
             </button>
           </div>
+          {timerError && <p role="alert" className="mt-3 text-sm text-error">{t('timer.saveFailed')}</p>}
         </div>
         <form method="dialog" className="modal-backdrop">
           <button onClick={() => setIsTimerEditOpen(false)}>close</button>
@@ -911,10 +1355,11 @@ export default function TexthookerScreen() {
             >
               {t('common:cancel')}
             </button>
-            <button type="button" className="btn btn-error" onClick={handleResetTimer}>
+            <button type="button" disabled={savingTimer} className="btn btn-error" onClick={() => void handleResetTimer()}>
               {t('timer.resetAction')}
             </button>
           </div>
+          {timerError && <p role="alert" className="mt-3 text-sm text-error">{t('timer.saveFailed')}</p>}
         </div>
         <form method="dialog" className="modal-backdrop">
           <button onClick={() => setIsResetTimerConfirmOpen(false)}>close</button>
@@ -941,6 +1386,7 @@ export default function TexthookerScreen() {
             {totals?.mediaTitle && (
               <div className="md:w-1/3 flex-shrink-0">
                 <div className="surface-muted p-4 space-y-4">
+                  {cover && <img src={cover} alt={totals.mediaTitle} className="w-full max-h-80 object-contain rounded-box" />}
                   <div>
                     <h4 className="font-bold text-lg line-clamp-2">{totals.mediaTitle}</h4>
                     <p className="text-sm opacity-70 font-mono">{contentId}</p>
@@ -953,6 +1399,17 @@ export default function TexthookerScreen() {
                             : (totals.mediaType ?? t('stats.session'))}
                       </span>
                     </div>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{t('stats.progress')}</span>
+                      {progressPercent !== null && <strong>{progressPercent.toFixed(1)}%</strong>}
+                    </div>
+                    {progressPercent !== null ? <>
+                      <progress className="progress progress-primary w-full" value={progressPercent} max={100} />
+                      <p className="text-xs opacity-70">{t('stats.progressCharacters', { current: numberWithCommas(progressCharacters), total: numberWithCommas(context?.totalCharacters ?? 0) })}</p>
+                    </> : <p className="text-xs opacity-70">{t('stats.progressUnavailable')}</p>}
+                    {!online && context?.updatedAt && <p className="text-xs opacity-70">{t('stats.offlineCache')}</p>}
                   </div>
                 </div>
               </div>
@@ -984,6 +1441,36 @@ export default function TexthookerScreen() {
                     <div className="text-xl font-bold">{numberWithCommas(currentSessionChars)}</div>
                   </div>
                 </div>
+                <div className="surface-muted p-3 mt-3 space-y-3">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Brain className="w-4 h-4 text-primary" /> {t('stats.intelligence.title')}
+                  </div>
+                  {sessionIntelligence.detectionMode === 'off' ? (
+                    <p className="text-sm opacity-70">{t('stats.intelligence.disabled')}</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                        <div><span className="opacity-70">{t('stats.intelligence.focus')}</span><div className="font-bold">{currentSessionLines > 1 ? `${sessionIntelligence.focusPercentage}%` : '…'}</div></div>
+                        <div><span className="opacity-70">{t('stats.intelligence.focused')}</span><div className="font-bold">{durationLabel(sessionIntelligence.focusedSeconds)}</div></div>
+                        <div><span className="opacity-70">{t('stats.intelligence.distracted')}</span><div className="font-bold">{durationLabel(sessionIntelligence.distractedSeconds)}</div></div>
+                        <div><span className="opacity-70">{t('stats.intelligence.afk')}</span><div className="font-bold">{durationLabel(sessionIntelligence.afkSeconds)}</div></div>
+                      </div>
+                      {currentSessionLines < 2 && <p className="text-xs opacity-70">{t('stats.intelligence.waiting')}</p>}
+                      {sessionIntelligence.charactersPerMinute.length > 0 && <div className="space-y-1">
+                        <div className="flex justify-between gap-2 text-xs opacity-70"><span>{t('stats.intelligence.rate')}</span><span>{Math.max(...sessionIntelligence.charactersPerMinute.slice(-30))}</span></div>
+                        <div className="flex items-end gap-1 h-20 border-b border-base-content/20" aria-label={t('stats.intelligence.rate')}>
+                          {sessionIntelligence.charactersPerMinute.slice(-30).map((count, index, values) => (
+                            <div key={index} className="flex h-full flex-1 items-end justify-center">
+                              <div className="w-3 max-w-full bg-primary/70 rounded-t-sm" title={t('stats.intelligence.minute', { minute: Math.max(0, sessionIntelligence.charactersPerMinute.length - 30) + index + 1, count })} style={{ height: `${count / Math.max(1, ...values) * 100}%` }} />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex justify-between text-xs opacity-60"><span>{t('stats.intelligence.minuteLabel', { minute: Math.max(1, sessionIntelligence.charactersPerMinute.length - 29) })}</span><span>{t('stats.intelligence.minuteLabel', { minute: sessionIntelligence.charactersPerMinute.length })}</span></div>
+                      </div>}
+                      <div className="text-xs opacity-70">{t('stats.intelligence.distractionCount', { count: sessionIntelligence.distractionCount })}</div>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="divider"></div>
@@ -995,11 +1482,11 @@ export default function TexthookerScreen() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="surface-muted p-3">
                     <div className="text-xs opacity-70 mb-1">{t('stats.totalLines')}</div>
-                    <div className="text-xl font-bold">{numberWithCommas(linesNumber)}</div>
+                    <div className="text-xl font-bold">{numberWithCommas(allTimeLines)}</div>
                   </div>
                   <div className="surface-muted p-3">
                     <div className="text-xs opacity-70 mb-1">{t('stats.totalCharacters')}</div>
-                    <div className="text-xl font-bold">{numberWithCommas(charsNumber)}</div>
+                    <div className="text-xl font-bold">{numberWithCommas(allTimeChars)}</div>
                   </div>
                 </div>
               </div>
@@ -1018,11 +1505,10 @@ export default function TexthookerScreen() {
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {(history ?? []).map((entry, index) => (
                       <div key={`${entry.loggedAt}-${index}`} className="surface-muted p-3">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="text-xs opacity-70">
-                            {new Date(entry.loggedAt).toLocaleString()}
-                          </span>
-                        </div>
+                        <button type="button" className="text-xs opacity-70 mb-2 hover:text-primary" onClick={() => setExpandedIntelligenceId(expandedIntelligenceId === entry.id ? null : entry.id)}>
+                          {new Date(entry.loggedAt).toLocaleString()}
+                          {entry.intelligence && <span className="ml-2 text-primary">{t('stats.intelligence.title')}</span>}
+                        </button>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div className="flex justify-between">
                             <span className="opacity-70">{t('stats.characters')}</span>
@@ -1049,11 +1535,39 @@ export default function TexthookerScreen() {
                             </span>
                           </div>
                         </div>
+                        {entry.intelligence && expandedIntelligenceId === entry.id && (
+                          <div className="mt-3 pt-3 border-t border-base-content/10 space-y-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                              <div>{t('stats.intelligence.focus')} <strong>{entry.intelligence.focusPercentage}%</strong></div>
+                              <div>{t('stats.intelligence.focused')} <strong>{durationLabel(entry.intelligence.focusedSeconds)}</strong></div>
+                              <div>{t('stats.intelligence.distracted')} <strong>{durationLabel(entry.intelligence.distractedSeconds)}</strong></div>
+                              <div>{t('stats.intelligence.afk')} <strong>{durationLabel(entry.intelligence.afkSeconds)}</strong></div>
+                            </div>
+                            <div className="flex items-end gap-1 h-12">
+                              {(entry.intelligence.charactersPerMinute.length ? entry.intelligence.charactersPerMinute : [0]).map((count, barIndex, values) => (
+                                <div key={barIndex} className="flex-1 bg-primary/70 rounded-t-sm min-w-1" title={`${count} ${t('stats.intelligence.charsPerMinute')}`} style={{ height: `${Math.max(3, (count / Math.max(1, ...values)) * 100)}%` }} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              <Field label={t('stats.comment')}>
+                {(id) => (
+                  <textarea
+                    id={id}
+                    className="textarea w-full"
+                    rows={3}
+                    value={logComment}
+                    onChange={(event) => setLogComment(event.target.value)}
+                    placeholder={t('stats.commentPlaceholder')}
+                  />
+                )}
+              </Field>
 
               <div className="flex justify-end pt-4 border-t border-base-content/10">
                 <button
@@ -1119,6 +1633,13 @@ export default function TexthookerScreen() {
               onClick={() => setActiveSettingsTab('behavior')}
             >
               {t('settings.tabBehavior')}
+            </button>
+            <button
+              role="tab"
+              className={`tab ${activeSettingsTab === 'intelligence' ? 'tab-active' : ''}`}
+              onClick={() => setActiveSettingsTab('intelligence')}
+            >
+              {t('settings.tabIntelligence')}
             </button>
           </div>
 
@@ -1334,6 +1855,25 @@ export default function TexthookerScreen() {
                 />
               </Field>
 
+              <Field
+                label={t('settings.dictionaryPopupDelay')}
+                hint={t('settings.dictionaryPopupDelayHint')}
+              >
+                <input
+                  type="number"
+                  min={0}
+                  max={2000}
+                  step={25}
+                  value={dictionaryPopupDelay}
+                  onChange={(event) =>
+                    void updateSettings({
+                      dictionary_popup_delay_ms: Math.max(0, Math.min(2000, Number(event.target.value) || 0)),
+                    })
+                  }
+                  className="input input-sm w-full"
+                />
+              </Field>
+
               <div className="rounded-lg border border-base-content/10 bg-base-200/40 p-3">
                 <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70 mb-2">
                   En ejecución
@@ -1416,18 +1956,6 @@ export default function TexthookerScreen() {
                   </label>
 
                   <label className="flex items-center justify-between surface px-3 py-2 cursor-pointer">
-                    <span className="text-sm">{t('settings.preventDuplicates')}</span>
-                    <input
-                      type="checkbox"
-                      className="toggle toggle-primary toggle-sm"
-                      checked={settings?.texthooker_prevent_duplicates ?? false}
-                      onChange={(e) =>
-                        void updateSettings({ texthooker_prevent_duplicates: e.target.checked })
-                      }
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between surface px-3 py-2 cursor-pointer">
                     <span className="text-sm">{t('settings.autoconnect')}</span>
                     <input
                       type="checkbox"
@@ -1450,6 +1978,8 @@ export default function TexthookerScreen() {
                   placeholder="ws://localhost:6677"
                 />
               </Field>
+
+              <NativeHookTextFilters />
 
               <Field label={t('room.title')} error={roomError}>
                 {(id) => (
@@ -1552,18 +2082,79 @@ export default function TexthookerScreen() {
                 <button
                   type="button"
                   onClick={() => void handleCopyAll()}
+                  disabled={lines.length === 0}
                   className="btn btn-outline btn-sm"
                 >
                   <Copy className="w-4 h-4" /> {t('settings.copyAllLines')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleClearAll()}
+                  onClick={() => { setClearError(false); setClearTarget(contentId); }}
+                  disabled={lines.length === 0 || clearingLines}
                   className="btn btn-error btn-outline btn-sm"
                 >
                   <Trash2 className="w-4 h-4" /> {t('settings.clearAllLines')}
                 </button>
               </div>
+            </div>
+          )}
+          {activeSettingsTab === 'intelligence' && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold border-b border-base-content/10 pb-2 flex items-center gap-2">
+                <Brain className="w-4 h-4 text-primary" /> {t('settings.intelligence.title')}
+              </h4>
+              <p className="text-sm text-base-content/70">{t('settings.intelligence.hint')}</p>
+              <Field label={t('settings.intelligence.mode')}>
+                <select
+                  className="select select-sm w-full"
+                  value={settings?.texthooker_intelligence_mode ?? 'automatic'}
+                  onChange={(event) =>
+                    void updateSettings({
+                      texthooker_intelligence_mode: event.target.value as 'automatic' | 'manual' | 'off',
+                    })
+                  }
+                >
+                  <option value="automatic">{t('settings.intelligence.automatic')}</option>
+                  <option value="manual">{t('settings.intelligence.manual')}</option>
+                  <option value="off">{t('settings.intelligence.off')}</option>
+                </select>
+              </Field>
+              {settings?.texthooker_intelligence_mode === 'manual' && (
+                <Field label={t('settings.intelligence.manualThreshold')}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3600}
+                    className="input input-sm w-full"
+                    value={settings.texthooker_intelligence_manual_threshold_seconds ?? 40}
+                    onChange={(event) =>
+                      void updateSettings({
+                        texthooker_intelligence_manual_threshold_seconds: Math.max(
+                          1,
+                          Math.min(3600, Number(event.target.value) || 1)
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+              )}
+              <Field label={t('settings.intelligence.afkThreshold')}>
+                <input
+                  type="number"
+                  min={1}
+                  max={7200}
+                  className="input input-sm w-full"
+                  value={settings?.texthooker_intelligence_afk_threshold_seconds ?? 300}
+                  onChange={(event) =>
+                    void updateSettings({
+                      texthooker_intelligence_afk_threshold_seconds: Math.max(
+                        1,
+                        Math.min(7200, Number(event.target.value) || 1)
+                      ),
+                    })
+                  }
+                />
+              </Field>
             </div>
           )}
         </div>
@@ -1618,63 +2209,50 @@ export default function TexthookerScreen() {
         ref={listContainerRef}
         className={`${listContainerClasses} th-line-list`}
         style={listStyles}
-      >
-        {lines.map((line) => {
-          if (vertical) {
-            return (
-              <div
-                key={line.id}
-                className="group relative flex flex-col items-end justify-start px-2 pt-6 text-base-content shrink-0 th-line-item"
-                style={{ minHeight: COLUMN_HEIGHT, height: COLUMN_HEIGHT }}
-              >
-                <span
-                  lang="ja"
-                  className="block text-lg whitespace-pre-wrap wrap-break-word th-line-text"
-                  style={verticalTextStyle}
-                >
-                  {line.text}
-                  <button
-                    type="button"
-                    className="inline-flex justify-center items-center text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                    aria-label={t('deleteLine')}
-                    onClick={() => void handleDelete(line.id)}
-                    style={{
-                      writingMode: 'horizontal-tb',
-                      display: 'inline-flex',
-                      marginTop: '0.5rem',
-                      direction: 'ltr',
-                    }}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </span>
-              </div>
-            );
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          const extent = vertical ? el.scrollWidth : el.scrollHeight;
+          if (lastScrollExtentRef.current !== extent) {
+            lastScrollExtentRef.current = extent;
+            return;
           }
-
-          return (
-            <div
-              key={line.id}
-              className="group relative px-2 py-2 text-base-content shrink-0 th-line-item"
-            >
-              <p
-                className="whitespace-pre-wrap wrap-break-word th-line-text"
-                style={horizontalTextStyle}
-              >
-                {line.text}
-                <button
-                  type="button"
-                  className="ml-2 align-baseline text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                  aria-label={t('deleteLine')}
-                  onClick={() => void handleDelete(line.id)}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </p>
-            </div>
-          );
-        })}
+          followLatestRef.current = vertical
+            ? Math.abs(el.scrollLeft - Math.min(0, el.clientWidth - el.scrollWidth)) < 48
+            : el.scrollHeight - el.clientHeight - el.scrollTop < 48;
+        }}
+      >
+        {lines.map((line) => (
+          <LineItem
+            key={line.id}
+            line={line}
+            vertical={vertical}
+            textStyle={lineTextStyle}
+            saveLabel={t('mining.saveLine')}
+            deleteLabel={t('deleteLine')}
+            onPointer={openDictionaryAtPointer}
+            onLeave={cancelDictionaryHover}
+            onSave={saveLine}
+            onDelete={deleteLine}
+          />
+        ))}
       </div>
+
+      {dictionaryRequest ? (
+        <DictionaryPopup
+          initial={dictionaryRequest}
+          miningContext={dictionaryContext}
+          entries={dictionaryEntries}
+          loading={dictionaryLoading}
+          anchor={dictionaryAnchor}
+          vertical={dictionaryVertical}
+          theme={effectiveHookerTheme}
+          onLookup={lookupDictionary}
+          onClose={() => {
+            setDictionaryRequest(null);
+            setDictionaryAnchor(null);
+          }}
+        />
+      ) : null}
 
       <SessionPickerModal
         open={isSessionPickerOpen}
@@ -1687,6 +2265,7 @@ export default function TexthookerScreen() {
             session.mediaType ?? undefined
           );
           setIsSessionPickerOpen(false);
+          void queryClient.invalidateQueries({ queryKey: ['text-sessions'] });
           await reload();
         }}
         onSearch={() => {
@@ -1695,6 +2274,51 @@ export default function TexthookerScreen() {
         }}
       />
 
+      <Modal
+        open={clearTarget === contentId}
+        onClose={() => { if (!clearingLines) setClearTarget(null); }}
+        title={t('settings.clearConfirmTitle')}
+        dismissable={!clearingLines}
+        actions={<>
+          <Button appearance="ghost" disabled={clearingLines} onClick={() => setClearTarget(null)}>{t('common:cancel')}</Button>
+          <Button variant="error" loading={clearingLines} onClick={() => void handleClearAll()}>{t('settings.clearAllLines')}</Button>
+        </>}
+      >
+        <p>{t('settings.clearConfirmBody')}</p>
+        {clearError && <p role="alert" className="mt-3 text-sm text-error">{t('settings.clearFailed')}</p>}
+      </Modal>
+
+      <Modal
+        open={isHookPickerOpen}
+        onClose={() => setIsHookPickerOpen(false)}
+        title={t('hookSelection.title')}
+        size="lg"
+        actions={(
+          <>
+            <Button appearance="ghost" onClick={() => setIsHookPickerOpen(false)}>
+              {t('common:cancel')}
+            </Button>
+            <Button
+              onClick={() => void saveNativeHookSelection()}
+              disabled={
+                !selectedHookCode
+                || !nativeHook?.hooks.some((hook) => hook.selection_key === selectedHookCode)
+                || savingHook
+              }
+            >
+              {savingHook ? t('hookSelection.saving') : t('hookSelection.save')}
+            </Button>
+          </>
+        )}
+      >
+        <div className="max-h-[55vh] overflow-y-auto">
+          <NativeHookChoices status={nativeHook} title={tracker?.vn?.media_title} selected={selectedHookCode} onSelect={setSelectedHookCode}
+            enable={!nativeHook && tracker?.vn && !hookApp?.native_hook_enabled ? { busy: enablingHook, disabled: !hookApp || hookApps.isPending, onClick: () => void enableNativeHook() } : undefined}
+            trackingRequired={!nativeHook && Boolean(hookApp?.native_hook_enabled)} />
+        </div>
+        {hookSaveError && <p className="mt-3 text-sm text-error">{hookSaveError}</p>}
+      </Modal>
+
       <MediaSearchModal
         open={attaching}
         onClose={() => setAttaching(false)}
@@ -1702,12 +2326,12 @@ export default function TexthookerScreen() {
         initialQuery={hooker?.content_title ?? ''}
         onPick={async (hit, type) => {
           await ipc.hookerAttachMedia(
-            contentId,
             hit.contentId,
             hit.title.contentTitleRomaji || hit.title.contentTitleNative,
             hit.type ?? type
           );
           setAttaching(false);
+          void queryClient.invalidateQueries({ queryKey: ['text-sessions'] });
           await reload();
         }}
       />
@@ -1716,6 +2340,90 @@ export default function TexthookerScreen() {
 }
 
 /** Every session stored locally, plus the free-form one. */
+interface LineItemProps {
+  line: TextLine;
+  vertical: boolean;
+  textStyle: CSSProperties;
+  saveLabel: string;
+  deleteLabel: string;
+  onPointer: (event: ReactMouseEvent<HTMLElement>, line: TextLine) => void;
+  onLeave: () => void;
+  onSave: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+/** One reader line. Memoized: a long session holds thousands of them, and the
+ *  screen around them re-renders with the session timer every second. */
+const LineItem = memo(function LineItem({
+  line, vertical, textStyle, saveLabel, deleteLabel, onPointer, onLeave, onSave, onDelete,
+}: LineItemProps) {
+  if (vertical) {
+    return (
+      <div
+        className="group relative flex flex-col items-end justify-start px-2 pt-6 text-base-content shrink-0 th-line-item"
+        style={{ minHeight: COLUMN_HEIGHT, height: COLUMN_HEIGHT }}
+      >
+        <span
+          lang="ja"
+          className="block text-lg whitespace-pre-wrap wrap-break-word th-line-text selectable cursor-text"
+          style={textStyle}
+          onMouseMove={(event) => onPointer(event, line)}
+          onMouseLeave={onLeave}
+        >
+          {line.text}
+          <button
+            type="button"
+            className="inline-flex justify-center items-center text-primary text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+            aria-label={saveLabel}
+            onClick={() => onSave(line.id)}
+            style={{ writingMode: 'horizontal-tb', display: 'inline-flex', marginTop: '0.5rem', direction: 'ltr' }}
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex justify-center items-center text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+            aria-label={deleteLabel}
+            onClick={() => onDelete(line.id)}
+            style={{
+              writingMode: 'horizontal-tb',
+              display: 'inline-flex',
+              marginTop: '0.5rem',
+              direction: 'ltr',
+            }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative px-2 py-2 text-base-content shrink-0 th-line-item">
+      <p
+        className="whitespace-pre-wrap wrap-break-word th-line-text selectable cursor-text"
+        style={textStyle}
+        onMouseMove={(event) => onPointer(event, line)}
+        onMouseLeave={onLeave}
+      >
+        {line.text}
+        <button type="button" className="ml-2 align-baseline text-primary text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" aria-label={saveLabel} onClick={() => onSave(line.id)}>
+          <BookmarkPlus className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          className="ml-2 align-baseline text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+          aria-label={deleteLabel}
+          onClick={() => onDelete(line.id)}
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </p>
+    </div>
+  );
+});
+
 function SessionPickerModal({
   open,
   currentId,

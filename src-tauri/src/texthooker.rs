@@ -31,6 +31,24 @@ pub fn count_japanese(text: &str) -> i64 {
     JP.find_iter(text).count() as i64
 }
 
+pub async fn autoconnect(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let settings = state.settings_snapshot().await;
+    if !settings.texthooker_autoconnect {
+        return;
+    }
+    let session_active = state.tracker.read().await.vn.is_some();
+    let reader_visible = app.get_webview_window("texthooker")
+        .is_some_and(|window| window.is_visible().unwrap_or(false));
+    let hooker = state.hooker.read().await.clone();
+    if (session_active || reader_visible)
+        && hooker.status == HookerStatus::Disconnected
+        && !state.game_hook.status().is_active_for(hooker.content_id.as_deref())
+    {
+        let _ = state.hooker_tx.send(HookerCommand::Connect(settings.texthooker_ws_url));
+    }
+}
+
 pub fn spawn(app: AppHandle, mut rx: UnboundedReceiver<HookerCommand>) {
     tauri::async_runtime::spawn(async move {
         let mut current: Option<tauri::async_runtime::JoinHandle<()>> = None;
@@ -41,6 +59,12 @@ pub fn spawn(app: AppHandle, mut rx: UnboundedReceiver<HookerCommand>) {
             }
             match cmd {
                 HookerCommand::Connect(url) => {
+                    let state = app.state::<AppState>();
+                    let content_id = state.hooker.read().await.content_id.clone();
+                    if state.game_hook.status().is_active_for(content_id.as_deref()) {
+                        set_status(&app, HookerStatus::Disconnected, None, None).await;
+                        continue;
+                    }
                     set_status(&app, HookerStatus::Connecting, Some(url.clone()), None).await;
                     current = Some(tauri::async_runtime::spawn(connection_loop(
                         app.clone(),
@@ -124,19 +148,58 @@ async fn handle_text(app: &AppHandle, raw: &str) {
 /// Where a line came from. The reader has a separate "allow during pause"
 /// setting per input, same as the web client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IngestSource {
+pub enum IngestSource<'a> {
     Socket,
     Clipboard,
+    NativeHook { content_id: &'a str },
+}
+
+fn destination<'a>(source: IngestSource<'a>, visible: &'a str) -> &'a str {
+    match source {
+        IngestSource::NativeHook { content_id } => content_id,
+        _ => visible,
+    }
 }
 
 /// Store one line and tell the UI about it.
-pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource) {
+pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource<'_>) {
+    let text = text.trim();
+    if text.is_empty() || (matches!(source, IngestSource::NativeHook { .. }) && count_japanese(text) == 0) {
+        return;
+    }
     let state = app.state::<AppState>();
     let settings = state.settings_snapshot().await;
 
-    let timer_active = state.hooker_timer_active.load(Ordering::Acquire);
+    let visible = state.hooker.read().await.content_id.clone().unwrap_or_else(|| "local".into());
+    let content_id = destination(source, &visible).to_string();
+    let native_active = state.game_hook.status().is_active_for(Some(&content_id));
+    if (matches!(source, IngestSource::NativeHook { .. }) && !native_active)
+        || (source == IngestSource::Socket && native_active) {
+        return;
+    }
+    let filters = matches!(source, IngestSource::NativeHook { .. }).then_some(&settings.native_hook_text_filters);
+    let Ok(filtered) = crate::text_filters::normalize(text, settings.texthooker_prevent_duplicates, filters) else { return };
+    // Every source, like the duplicate filter: a dual-language hook arrives over
+    // the socket as often as through LunaHook.
+    let filtered = if settings.texthooker_filter_chinese { crate::text_filters::drop_chinese(&filtered) } else { filtered };
+    let text = filtered.as_str();
+    if text.is_empty() || (matches!(source, IngestSource::NativeHook { .. }) && count_japanese(text) == 0) {
+        return;
+    }
+    let timer_active = if matches!(source, IngestSource::NativeHook { .. }) {
+        let tracker = state.tracker.read().await;
+        let Some(session) = tracker.vn.as_ref().filter(|session| session.content_id == content_id) else { return };
+        session.counting
+    } else if source == IngestSource::Socket {
+        state.tracker.read().await.vn.as_ref()
+            .filter(|session| session.content_id == content_id)
+            .map(|session| session.counting)
+            .unwrap_or_else(|| state.hooker_timer_active.load(Ordering::Acquire))
+    } else {
+        state.hooker_timer_active.load(Ordering::Acquire)
+    };
     let allowed_while_paused = match source {
-        IngestSource::Socket => settings.texthooker_allow_line_during_pause,
+        IngestSource::Socket | IngestSource::NativeHook { .. } => settings.texthooker_allow_line_during_pause,
         IngestSource::Clipboard => settings.texthooker_allow_clipboard_during_pause,
     };
     if !timer_active && !allowed_while_paused {
@@ -145,24 +208,12 @@ pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource) {
 
     // Autostart: the first line of a sitting can start the clock for you.
     let autostart = match source {
-        IngestSource::Socket => settings.texthooker_autostart_by_line,
+        IngestSource::Socket | IngestSource::NativeHook { .. } => settings.texthooker_autostart_by_line,
         IngestSource::Clipboard => settings.texthooker_autostart_by_clipboard,
     };
-    if !timer_active && autostart {
+    if !timer_active && autostart && !matches!(source, IngestSource::NativeHook { .. }) {
         state.hooker_timer_active.store(true, Ordering::Release);
         let _ = app.emit(EVT_TIMER, json!({ "active": true }));
-    }
-
-    let content_id = state
-        .hooker
-        .read()
-        .await
-        .content_id
-        .clone()
-        .unwrap_or_else(|| "local".to_string());
-
-    if settings.texthooker_prevent_duplicates && state.db.line_text_exists(&content_id, text) {
-        return;
     }
 
     let line = TextLine {
@@ -175,6 +226,10 @@ pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource) {
     };
 
     if state.db.insert_line(&line).unwrap_or(false) {
+        crate::reading_overlay::accept_line(app, &line);
+        if matches!(source, IngestSource::NativeHook { .. }) {
+            crate::native_bridge::publish_line(app, &line).await;
+        }
         let (lines, chars) = state.db.text_totals(&content_id);
         let _ = app.emit(
             EVT_LINE,
@@ -242,7 +297,26 @@ async fn read_clipboard() -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::count_japanese;
+    use super::{count_japanese, destination, IngestSource};
+
+    #[test]
+    fn native_lines_keep_the_game_session_after_reader_switches() {
+        assert_eq!(destination(IngestSource::NativeHook { content_id: "v31055" }, "v17"), "v31055");
+        assert_eq!(destination(IngestSource::NativeHook { content_id: "v31055" }, "local"), "v31055");
+        assert_eq!(destination(IngestSource::Socket, "v17"), "v17");
+        assert_eq!(destination(IngestSource::Clipboard, "local"), "local");
+    }
+
+    #[test]
+    fn native_connection_overrides_socket_only_for_its_session() {
+        use crate::state::{NativeGameHookPhase, NativeGameHookStatus};
+        let mut native = NativeGameHookStatus { content_id: Some("v31055".into()), phase: NativeGameHookPhase::Receiving, ..Default::default() };
+        assert!(native.is_active_for(Some("v31055")));
+        assert!(!native.is_active_for(Some("v17")));
+        assert!(!native.is_active_for(None));
+        native.phase = NativeGameHookPhase::Error;
+        assert!(!native.is_active_for(Some("v31055")));
+    }
 
     #[test]
     fn counts_kana_and_kanji_only() {
@@ -271,7 +345,11 @@ pub async fn set_status(
     // an hour of nothing.
     if matches!(status, HookerStatus::Disconnected | HookerStatus::Error) {
         let settings = state.settings_snapshot().await;
+        let native = state.game_hook.status();
+        let visible = state.hooker.read().await.content_id.clone();
+        let native_active = native.is_active_for(visible.as_deref());
         if settings.texthooker_pause_on_disconnect
+            && !native_active
             && state.hooker_timer_active.swap(false, Ordering::AcqRel)
         {
             let _ = app.emit(EVT_TIMER, json!({ "active": false }));
