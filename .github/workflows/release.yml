@@ -30,7 +30,7 @@ jobs:
             os: windows-latest
             args: ''
           - name: Linux
-            # hoshidicts (glaze) needs GCC 13 for <format>/<expected>, which
+            # hoshidicts needs GCC 14 (<format>, std::ranges::to), which
             # sets the bundles' glibc floor at 2.39.
             os: ubuntu-24.04
             args: ''
@@ -47,7 +47,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev g++-14
+          # hoshidicts uses std::ranges::to, first shipped in GCC 14; 24.04
+          # defaults to 13, but its libstdc++ runtime is already 14's.
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
 
       - name: Ninja (native game hook)
         if: runner.os == 'Windows'
