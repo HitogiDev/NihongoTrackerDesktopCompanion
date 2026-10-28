@@ -35,6 +35,8 @@ jobs:
             os: ubuntu-24.04
             args: ''
           - name: macOS
+            # The x86_64 half builds for bundle.macOS.minimumSystemVersion;
+            # hoshidicts uses std::filesystem, so that must stay >= 10.15.
             os: macos-latest
             args: '--target universal-apple-darwin'
     runs-on: ${{ matrix.os }}
