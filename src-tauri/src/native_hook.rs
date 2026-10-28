@@ -275,6 +275,12 @@ impl NativeGameHookManager {
         inner.retry_after = None;
     }
 
+    /// Nothing runs off Windows; only the reported status needs resetting.
+    #[cfg(not(windows))]
+    pub fn shutdown(&self) {
+        lock(&self.inner).status = NativeGameHookStatus::default();
+    }
+
     pub fn select_hook(&self, exe: &str, hook_code: &str) -> Result<(), String> {
         let mut inner = lock(&self.inner);
         if !inner
