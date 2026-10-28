@@ -28,6 +28,8 @@ fn main() {
         .arg("Ninja")
         .arg(format!("-DCMAKE_MAKE_PROGRAM={}", ninja.display()))
         .arg("-DCMAKE_BUILD_TYPE=Release")
+        // Linked into Rust's PIE executables on Linux; without PIC, lld rejects it.
+        .arg("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
         .arg("-DHOSHIDICTS_CLI=OFF")
         .arg("-DHOSHIDICTS_BENCHMARK=OFF");
     if msvc {
