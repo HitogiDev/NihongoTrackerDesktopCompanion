@@ -1,24 +1,56 @@
 {
   "title": "Library",
-  "subtitle": "Executables linked to a work: opening one starts the session and the texthooker.",
+  "subtitle": "Linked executables start a session when opened. Games can send text directly to the texthooker.",
   "works": "Visual novels and games",
+  "filter": {
+    "search": "Search library",
+    "all": "All works"
+  },
+  "view": {
+    "grid": "Grid view",
+    "list": "List view"
+  },
+  "launch": {
+    "game": "Open work",
+    "hooker": "Open hooker",
+    "clickToRun": "Click to run"
+  },
+  "actions": {
+    "remove": "Remove {{title}} from library",
+    "edit": "Edit {{title}}",
+    "confirmTitle": "Remove this work?",
+    "confirmBody": "Are you sure you want to remove {{title}} from the library?"
+  },
   "empty": "No works registered",
-  "emptyBody": "Link a visual novel's .exe to its NihongoTracker entry to track it automatically.",
+  "emptyBody": "Link a visual novel or game's executable to its NihongoTracker entry to track it automatically.",
   "addFirst": "Add the first one",
   "disabled": "Disabled",
   "manualMappings": "Manually linked titles",
   "modal": {
     "addTitle": "Add work",
     "editTitle": "Edit work",
-    "executable": "Executable",
-    "executableHint": "The process name, for example siglusengine.exe",
+    "kind": "Type of work",
+    "executable": "Process name",
+    "executablePlaceholder": "game.exe",
+    "executableHint": "Optional when the work executable path is set. Otherwise, enter the process name to detect it.",
+    "launchPath": "Work executable path",
+    "launchPathHint": "Optional full path. Lets the companion open this work from the library.",
+    "hookerPath": "Textractor or Agent path",
+    "hookerPathHint": "Optional executable or .bat/.cmd script to start the external hooker.",
+    "nativeHook": "Capture game text with LunaHook",
+    "nativeHookHint": "Captures Japanese text from the running game with LunaHook. Windows only.",
     "choose": "Choose",
     "work": "Work on NihongoTracker",
     "notSelected": "Not selected",
-    "extraUrl": "Extra texthooker URL",
-    "extraUrlHint": "Optional: opens in the browser alongside the built-in texthooker.",
     "enabled": "Detection on",
-    "enabledHint": "Turn it off to stop tracking this work without deleting it."
+    "enabledHint": "Turn it off to stop tracking this work without deleting it.",
+    "readerMode": "Reader",
+    "readerModes": {
+      "integrated": "Integrated",
+      "browser": "Browser",
+      "overlay": "Overlay"
+    },
+    "overlayHint": "Opens only the reading overlay and enables LunaHook for this VN."
   },
   "processes": {
     "title": "Choose process",

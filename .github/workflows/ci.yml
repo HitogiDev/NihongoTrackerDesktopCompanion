@@ -1,0 +1,61 @@
+# Builds and tests on the three desktop systems. Linux and macOS code paths
+# (platform/linux_impl.rs, dbus.rs, macos_impl.rs) cannot be compiled from a
+# Windows machine, so this is where they are checked.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev g++-14
+          # hoshidicts uses std::ranges::to, first shipped in GCC 14; 24.04
+          # defaults to 13, but its libstdc++ runtime is already 14's.
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=gcc-14" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Typecheck and build the frontend
+        # `generate_context!` embeds dist/, so it must exist before cargo runs.
+        run: npm run build
+
+      - name: Native game hook (Windows)
+        if: runner.os == 'Windows'
+        run: npm run build:native-game-hook
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml

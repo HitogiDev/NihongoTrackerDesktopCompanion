@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { BookOpenText, Link2, Plus, Search, Trash2 } from 'lucide-react';
+import { BookOpenText, FolderOpen, Grid2X2, Link2, List, Pencil, Play, Plus, Search, Trash2 } from 'lucide-react';
+import { open as openFile } from '@tauri-apps/plugin-dialog';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/Empty';
 import { Field, Toggle } from '../components/ui/Field';
@@ -10,6 +11,7 @@ import { Page, SectionTitle } from '../components/ui/Page';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import { ipc } from '../lib/ipc';
+import { useAppStore } from '../store/useAppStore';
 import type { MediaHit, ProcessEntry, VnApp } from '../lib/types';
 
 export default function LibraryScreen() {
@@ -17,6 +19,10 @@ export default function LibraryScreen() {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<VnApp | null>(null);
+  const [deleting, setDeleting] = useState<VnApp | null>(null);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'vn' | 'game'>('all');
+  const [search, setSearch] = useState('');
 
   const apps = useQuery({ queryKey: ['vn-apps'], queryFn: ipc.listVnApps });
   const mappings = useQuery({ queryKey: ['title-maps'], queryFn: ipc.listTitleMappings });
@@ -32,10 +38,13 @@ export default function LibraryScreen() {
 
   const remove = useMutation({
     mutationFn: (exe: string) => ipc.deleteVnApp(exe),
-    onSuccess: (data) => queryClient.setQueryData(['vn-apps'], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['vn-apps'], data);
+      setDeleting(null);
+    },
   });
 
-  const list = apps.data ?? [];
+  const list = (apps.data ?? []).filter((app) => (mediaFilter === 'all' || app.media_type === mediaFilter) && `${app.media_title} ${app.exe}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Page
@@ -48,6 +57,11 @@ export default function LibraryScreen() {
         </Button>
       }
     >
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="input input-sm min-w-40 flex-1"><Search className="h-4 w-4 opacity-60" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('filter.search')} /></label>
+        <select className="select select-sm" value={mediaFilter} onChange={(event) => setMediaFilter(event.target.value as typeof mediaFilter)}><option value="all">{t('filter.all')}</option><option value="vn">{t('common:logType.vn')}</option><option value="game">{t('common:logType.game')}</option></select>
+        <div className="join"><button type="button" className={`join-item btn btn-sm ${view === 'grid' ? 'btn-active' : ''}`} aria-label={t('view.grid')} onClick={() => setView('grid')}><Grid2X2 className="h-4 w-4" /></button><button type="button" className={`join-item btn btn-sm ${view === 'list' ? 'btn-active' : ''}`} aria-label={t('view.list')} onClick={() => setView('list')}><List className="h-4 w-4" /></button></div>
+      </div>
       <SectionTitle aside={<span className="text-xs text-base-content/50">{list.length}</span>}>
         {t('works')}
       </SectionTitle>
@@ -67,42 +81,97 @@ export default function LibraryScreen() {
           />
         </div>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className={view === 'grid' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'space-y-2'}>
           {list.map((app) => {
             const type = getMediaTypeClasses(app.media_type);
             return (
               <li key={app.exe} className={`surface overflow-hidden border ${type.borderColor}`}>
-                <div className={`h-1 w-full ${type.accentColor}`} />
-                <div className="p-3 flex items-start gap-3">
-                  {app.image ? (
-                    <img src={app.image} alt="" className="w-12 h-16 object-cover rounded-field" />
-                  ) : (
-                    <div className="w-12 h-16 rounded-field bg-base-200 flex items-center justify-center">
-                      <BookOpenText className="w-4 h-4 text-base-content/40" />
+                {view === 'grid' ? (
+                  <>
+                    <div className={`h-1 w-full ${type.accentColor}`} />
+                    <div className="group/image relative aspect-[3/4] w-full overflow-hidden bg-base-200">
+                      {app.image ? (
+                        <img src={app.image} alt={app.media_title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <BookOpenText className="h-8 w-8 text-base-content/40" />
+                        </div>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="error"
+                        appearance="ghost"
+                        shape="square"
+                        className="absolute left-2 top-2 z-10 bg-base-100/90 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                        aria-label={t('actions.remove', { title: app.media_title })}
+                        title={t('actions.remove', { title: app.media_title })}
+                        onClick={() => setDeleting(app)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        appearance="ghost"
+                        shape="square"
+                        className="absolute right-2 top-2 z-10 bg-base-100/90 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                        aria-label={t('actions.edit', { title: app.media_title })}
+                        title={t('actions.edit', { title: app.media_title })}
+                        onClick={() => setEditing(app)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      {app.launch_path ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-neutral/45 opacity-100 transition-opacity sm:bg-neutral/45 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => void ipc.launchProgram(app.launch_path!).catch(() => undefined)}
+                          >
+                            <Play className="h-4 w-4" />
+                            {t('launch.clickToRun')}
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate">{app.media_title}</h3>
-                    <p className="text-xs text-base-content/60 font-mono truncate">{app.exe}</p>
-                    <p className="text-[11px] text-base-content/45 font-mono">{app.media_id}</p>
-                    {!app.enabled ? (
-                      <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span>
-                    ) : null}
+                    <div className="space-y-2 p-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold" title={app.media_title}>{app.media_title}</h3>
+                        <p className="truncate font-mono text-xs text-base-content/60" title={app.exe}>{app.exe}</p>
+                        {!app.enabled ? <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span> : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(() => undefined)}>{t('launch.hooker')}</Button> : null}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center">
+                    <div className={`h-full w-1 self-stretch ${type.accentColor}`} />
+                    <div className="flex min-w-0 flex-1 items-start gap-3 p-3">
+                      {app.image ? (
+                        <img src={app.image} alt="" className="h-16 w-12 rounded-field object-cover" />
+                      ) : (
+                        <div className="flex h-16 w-12 items-center justify-center rounded-field bg-base-200">
+                          <BookOpenText className="h-4 w-4 text-base-content/40" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-semibold">{app.media_title}</h3>
+                        <p className="truncate font-mono text-xs text-base-content/60">{app.exe}</p>
+                        <p className="font-mono text-[11px] text-base-content/45">{app.media_id}</p>
+                        {!app.enabled ? <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span> : null}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {app.launch_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.launch_path!).catch(() => undefined)}>{t('launch.game')}</Button> : null}
+                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(() => undefined)}>{t('launch.hooker')}</Button> : null}
+                        <Button size="xs" appearance="outline" onClick={() => setEditing(app)}>{t('common:edit')}</Button>
+                        <Button size="xs" appearance="ghost" onClick={() => setDeleting(app)} aria-label={t('actions.remove', { title: app.media_title })}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Button size="xs" appearance="outline" onClick={() => setEditing(app)}>
-                      {t('common:edit')}
-                    </Button>
-                    <Button
-                      size="xs"
-                      appearance="ghost"
-                      onClick={() => remove.mutate(app.exe)}
-                      aria-label={t('common:delete')}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </div>
+                )}
               </li>
             );
           })}
@@ -148,6 +217,30 @@ export default function LibraryScreen() {
         onSave={(entry) => save.mutate(entry)}
         saving={save.isPending}
       />
+      <Modal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        title={t('actions.confirmTitle')}
+        actions={
+          <>
+            <Button appearance="ghost" disabled={remove.isPending} onClick={() => setDeleting(null)}>
+              {t('common:cancel')}
+            </Button>
+            <Button
+              variant="error"
+              loading={remove.isPending}
+              onClick={() => {
+                if (deleting) remove.mutate(deleting.exe);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('common:delete')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('actions.confirmBody', { title: deleting?.media_title ?? '' })}</p>
+      </Modal>
     </Page>
   );
 }
@@ -158,9 +251,14 @@ const EMPTY: VnApp = {
   media_type: 'vn',
   media_title: '',
   image: null,
-  texthooker_url: null,
+  launch_path: null,
+  hooker_path: null,
+  native_hook_enabled: false,
+  native_hook_code: null,
+  reader_mode: 'integrated',
   enabled: true,
   is_adult: false,
+  is_adult_image: null,
 };
 
 function VnAppModal({
@@ -177,6 +275,10 @@ function VnAppModal({
   saving: boolean;
 }) {
   const { t } = useTranslation(['library', 'common']);
+  // Windows programs are .exe files; elsewhere any file (or a macOS .app) runs.
+  const os = useAppStore((s) => s.tracker?.capabilities.os);
+  const nativeHookAvailable = useAppStore((s) => s.tracker?.capabilities.native_hook ?? false);
+  const programFilters = os === 'windows' ? [{ name: 'Programs', extensions: ['exe'] }] : undefined;
   const [draft, setDraft] = useState<VnApp>(EMPTY);
   const [picking, setPicking] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -194,11 +296,13 @@ function VnAppModal({
       image: hit.contentImage ?? hit.coverImage,
       // Carried along so Discord Rich Presence can strip the title later.
       is_adult: hit.isAdult,
+      is_adult_image: hit.isAdultImage ?? null,
     }));
     setSearching(false);
   }
 
-  const valid = draft.exe.trim() && draft.media_id.trim() && draft.media_title.trim();
+  const executableName = draft.exe.trim() || getExecutableName(draft.launch_path);
+  const valid = executableName && draft.media_id.trim() && draft.media_title.trim();
 
   return (
     <>
@@ -216,7 +320,7 @@ function VnAppModal({
               variant="primary"
               loading={saving}
               disabled={!valid}
-              onClick={() => onSave({ ...draft, exe: draft.exe.trim().toLowerCase() })}
+              onClick={() => onSave({ ...draft, exe: executableName.toLowerCase() })}
             >
               {t('common:save')}
             </Button>
@@ -224,6 +328,19 @@ function VnAppModal({
         }
       >
         <div className="space-y-3">
+          <Field label={t('modal.kind')}>
+            {(id) => (
+              <select
+                id={id}
+                className="select w-full"
+                value={draft.media_type === 'game' ? 'game' : 'vn'}
+                onChange={(e) => setDraft({ ...draft, media_type: e.target.value, media_id: '', media_title: '', image: null })}
+              >
+                <option value="vn">{t('common:logType.vn')}</option>
+                <option value="game">{t('common:logType.game')}</option>
+              </select>
+            )}
+          </Field>
           <Field label={t('modal.executable')} hint={t('modal.executableHint')}>
             {(id) => (
               <div className="flex gap-2">
@@ -232,7 +349,7 @@ function VnAppModal({
                   className="input flex-1 font-mono text-sm"
                   value={draft.exe}
                   onChange={(e) => setDraft({ ...draft, exe: e.target.value })}
-                  placeholder="mi-novela.exe"
+                  placeholder={draft.launch_path ? getExecutableName(draft.launch_path) || t('modal.executablePlaceholder') : t('modal.executablePlaceholder')}
                 />
                 <Button appearance="outline" onClick={() => setPicking(true)}>
                   <Search className="w-4 h-4" />
@@ -241,6 +358,23 @@ function VnAppModal({
               </div>
             )}
           </Field>
+
+          <Field label={t('modal.launchPath')} hint={t('modal.launchPathHint')}>
+            {(id) => <div className="flex gap-2"><input id={id} className="input min-w-0 flex-1 font-mono text-sm" value={draft.launch_path ?? ''} onChange={(e) => setDraft({ ...draft, launch_path: e.target.value || null })} placeholder="C:\\Games\\game.exe" /><Button type="button" appearance="outline" aria-label={t('modal.choose')} onClick={async () => { const path = await openFile({ multiple: false, directory: false, filters: programFilters }); if (typeof path === 'string') setDraft({ ...draft, launch_path: path }); }}><FolderOpen className="h-4 w-4" /></Button></div>}
+          </Field>
+          <Field label={t('modal.hookerPath')} hint={t('modal.hookerPathHint')}>
+            {(id) => <div className="flex gap-2"><input id={id} className="input min-w-0 flex-1 font-mono text-sm" value={draft.hooker_path ?? ''} onChange={(e) => setDraft({ ...draft, hooker_path: e.target.value || null })} placeholder="C:\\Tools\\Textractor.exe" /><Button type="button" appearance="outline" aria-label={t('modal.choose')} onClick={async () => { const path = await openFile({ multiple: false, directory: false, filters: [{ name: 'Hooker programs and scripts', extensions: ['exe', 'bat', 'cmd'] }] }); if (typeof path === 'string') setDraft({ ...draft, hooker_path: path }); }}><FolderOpen className="h-4 w-4" /></Button></div>}
+          </Field>
+
+          {nativeHookAvailable && (draft.media_type === 'game' || draft.media_type === 'vn') ? (
+            <Toggle
+              label={t('modal.nativeHook')}
+              description={t('modal.nativeHookHint')}
+              checked={draft.native_hook_enabled}
+              disabled={draft.reader_mode === 'overlay'}
+              onChange={(native_hook_enabled) => setDraft({ ...draft, native_hook_enabled })}
+            />
+          ) : null}
 
           <Field label={t('modal.work')}>
             {() => (
@@ -265,18 +399,16 @@ function VnAppModal({
             )}
           </Field>
 
-          <Field label={t('modal.extraUrl')} hint={t('modal.extraUrlHint')}>
-            {(id) => (
-              <input
-                id={id}
-                className="input w-full"
-                value={draft.texthooker_url ?? ''}
-                onChange={(e) =>
-                  setDraft({ ...draft, texthooker_url: e.target.value || null })
-                }
-                placeholder="https://…"
-              />
-            )}
+          <Field label={t('modal.readerMode')} hint={draft.reader_mode === 'overlay' ? t('modal.overlayHint') : undefined}>
+            <div className="join flex flex-wrap" role="group" aria-label={t('modal.readerMode')}>
+              {(['integrated', 'browser', 'overlay'] as const).filter((mode) => mode !== 'overlay' || draft.media_type === 'vn').map((mode) => (
+                <button key={mode} type="button" aria-pressed={draft.reader_mode === mode}
+                  className={draft.reader_mode === mode ? 'join-item btn btn-primary btn-sm' : 'join-item btn btn-outline btn-sm'}
+                  onClick={() => setDraft({ ...draft, reader_mode: mode, native_hook_enabled: mode === 'overlay' || draft.native_hook_enabled })}>
+                  {t(`modal.readerModes.${mode}`)}
+                </button>
+              ))}
+            </div>
           </Field>
 
           <Toggle
@@ -301,11 +433,18 @@ function VnAppModal({
         open={searching}
         onClose={() => setSearching(false)}
         mediaType={draft.media_type || 'vn'}
+        allowTypeChange={false}
         initialQuery={draft.media_title}
         onPick={applyMedia}
       />
     </>
   );
+}
+
+function getExecutableName(path: string | null) {
+  const parts = path?.trim().split(/[\\/]/).filter(Boolean) ?? [];
+  // A macOS bundle `Novel.app` runs as the process `Novel`.
+  return (parts[parts.length - 1] ?? '').replace(/\.app$/i, '');
 }
 
 function ProcessPickerModal({

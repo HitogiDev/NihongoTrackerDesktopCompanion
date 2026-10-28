@@ -2,6 +2,7 @@
   "title": "Discord Rich Presence",
   "enable": "Mostrar mi inmersión en Discord",
   "enableHint": "Apagado hasta que tú lo enciendas. Mientras esté apagado no se publica nada ni se abre ninguna conexión.",
+  "configured": "Usa la aplicación de Discord de NihongoTracker Companion y su imagen incluida.",
   "appId": "Application ID",
   "appIdHint": "Crea una aplicación en el Discord Developer Portal, sube tus iconos en Rich Presence → Art Assets y pega aquí su ID.",
   "largeImage": "Imagen de reserva",
@@ -10,6 +11,8 @@
   "disconnected": "Sin conexión. Puede que Discord esté cerrado; se reintenta solo.",
   "genericMode": "Solo actividad, nunca el título",
   "genericModeHint": "Publica siempre \"Inmersión en japonés\", sin título ni portada, sea lo que sea.",
+  "idlePresence": "Mantener la presencia con la VN en segundo plano",
+  "idlePresenceHint": "Cuando una novela visual detectada no está en foco (o estás AFK), muestra \"Inactivo en <título>\" en vez de vaciarse. Desactívalo para limpiarla como antes.",
   "profileButton": "Añadir el botón \"Ver perfil\"",
   "profileButtonHint": "Enlaza a tu perfil público de NihongoTracker.",
   "preview": {
@@ -20,9 +23,10 @@
     "blocked": "\"{{label}}\" está en tu lista negra: no se publica absolutamente nada.",
     "elapsed": "{{time}} transcurridos",
     "reason": {
-      "adult": "Marcado como +18 en NihongoTracker, así que se ocultan el título y la portada.",
+      "adult": "Esta obra está clasificada como adulta. En las VN se aplica el criterio anterior hasta obtener la clasificación de la portada.",
       "unresolved": "No se pudo identificar la obra, y el nombre del archivo no se publica nunca.",
-      "generic": "Está activo el modo de solo actividad."
+      "generic": "Está activo el modo de solo actividad.",
+      "adultimage": "La portada de esta VN está clasificada como adulta en NihongoTracker, así que se ocultan el título y la portada."
     }
   },
   "blacklist": {

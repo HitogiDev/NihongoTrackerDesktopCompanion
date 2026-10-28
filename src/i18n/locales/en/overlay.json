@@ -1,0 +1,17 @@
+{
+  "title": "Current session",
+  "idle": "No work detected",
+  "characters": "{{count}} characters",
+  "counting": "Tracking",
+  "paused": "Paused",
+  "noLine": "No texthooker line yet",
+  "saved": "Sentence saved",
+  "hide": "Hide overlay",
+  "compact": "Compact panel",
+  "expand": "Expand panel",
+  "pause": "Pause session",
+  "resume": "Resume session",
+  "mine": "Save latest sentence",
+  "reader": "Open texthooker",
+  "log": "Quick log"
+}

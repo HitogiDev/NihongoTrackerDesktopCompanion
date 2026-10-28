@@ -27,7 +27,8 @@ src-tauri/src/
   config.rs      Settings serializables, con defaults
   db.rs          SQLite (rusqlite bundled): kv, vn_apps, outbox, pending_logs,
                  text_lines, text_state, watch_history
-  platform/      Ventanas/procesos por SO. windows_impl.rs real, stub.rs el resto
+  platform/      Ventanas, foco, inactividad y reproductores por SO: windows_impl,
+                 linux_impl (X11) + dbus (MPRIS, inactividad en Wayland), macos_impl
   players.rs     Reproductores conocidos + limpieza del título de ventana
   parser.rs      Parser de nombres de release (tests dentro)
   playback.rs    Posición real: IPC de mpv y interfaz web de MPC
@@ -57,7 +58,12 @@ src/
    por el evento `tracker://state`.
 2. El frontend nunca hace polling: escucha eventos y llama comandos.
 3. Los logs terminados van al **outbox** de SQLite, nunca directos a la red.
-   `sync.rs` los drena cada 30 s y al confirmar desde la UI.
+   `sync.rs` los drena cada 30 s y al confirmar desde la UI. Cada drenaje va
+   bajo `AppState::outbox_flush`: sin él, dos drenajes simultáneos leen las
+   mismas filas y el log sale dos veces (el backend no deduplica).
+4. El cronómetro de una sesión suma el tiempo real entre ticks (`Instant`), no
+   el intervalo configurado: el resto por debajo del segundo se arrastra en
+   `elapsed_carry_ms`.
 
 ### Quién manda en cada cosa
 
@@ -67,6 +73,49 @@ src/
   de la pantalla del texthooker solo se usa cuando no hay sesión automática.
 - El XP nunca se calcula en el cliente: se pide a `POST /api/logs/preview-xp`.
 - El día del usuario lo decide `streak.rs`, no el frontend ni el reloj del SO.
+
+### Ventanas
+
+Cada webview es un proceso de renderizado, así que solo existen cuando hacen falta:
+
+- `main` se construye oculta (`build_main_window`) y **se muestra desde el
+  frontend** tras el primer render, para que no haya fogonazo en blanco. Rust
+  la muestra igualmente a los 4 s si la página no carga. Con `start_minimized`
+  no se construye hasta que la bandeja o otra instancia la piden
+  (`show_main_window`).
+- Por eso un evento dirigido a `main` puede no tener a nadie escuchando. Lo que
+  la abre con un encargo (log de racha, navegación desde el overlay) pasa por
+  `open_main_with`: evento si ya existe, `main_intent` si hubo que crearla, y la
+  página lo recoge con `take_main_intent`. Lo que deba pasar aunque `main` no
+  exista (abrir el texthooker al detectar una VN) lo hace Rust.
+- El overlay de sesión existe solo mientras `overlay_enabled`; apagarlo lo
+  destruye. El overlay de lectura y su popup se crean la primera vez que se
+  quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
+  hijas del popup y morirían con él.
+- `window_chrome.rs`: barra de título con el tema de daisyUI y Mica tras la
+  sidebar en Windows 11 (`data-vibrancy` en `<html>`; sin él no cambia nada).
+- Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas
+  cargan el mismo bundle.
+- En producción `src/lib/desktop.ts` anula los atajos y el menú contextual del
+  navegador. Los atajos de la app (Ctrl/⌘+1…6, `,`, `L`, `T`) viven en `Sidebar`.
+
+### Actualizaciones
+
+`updater.rs` sobre `tauri-plugin-updater`, contra
+`releases/latest/download/latest.json` del repo de GitHub. Lo publica
+`.github/workflows/release.yml` al empujar un tag `v*` (la versión sale de
+`tauri.conf.json`).
+
+- Busca a los 30 s del arranque y cada 6 h si `auto_update_check`; avisa una vez
+  por versión (`kv:updater:notified_version`). **Instalar siempre lo decide el
+  usuario**, desde Ajustes → App o el aviso de la sidebar.
+- La clave pública está en `plugins.updater.pubkey`; la privada no está en el
+  repo: va en el secreto `TAURI_SIGNING_PRIVATE_KEY`. Si se pierde, las copias
+  instaladas no aceptarán ninguna release nueva.
+- Solo la AppImage se reemplaza sola en Linux; con .deb/.rpm la UI enlaza a la
+  release (`UpdateInfo::can_install`).
+- `tauri-plugin-updater` está fijado a `~2.12`: desde 2.13 exige Tauri 2.12.
+- El repo tiene que ser público: la app descarga las releases sin autenticarse.
 
 ### Recordatorio de racha
 
@@ -90,11 +139,12 @@ day-key `YYYY-MM-DD` tiene que salir idéntica a la del backend
   incluida la UI, así que abrir el dashboard no gasta peticiones extra.
 - Un 401 apaga el bucle (`streak_auth_failed`) y emite `streak://auth-required`;
   sólo `save_settings` lo rearma. Nada de reintentar una clave revocada.
-- La notificación es accionable sólo en Windows: el plugin de Tauri no expone el
-  clic en escritorio, así que ahí el toast se construye con
+- La notificación es accionable en Windows y Linux: el plugin de Tauri no expone
+  el clic en escritorio. En Windows el toast se construye con
   `tauri-winrt-notification` (botón + `on_activated`), con el AppUserModelID de
-  la app y `POWERSHELL_APP_ID` de reserva. En el resto de sistemas cae al plugin,
-  sin botón. El clic (y la entrada de la bandeja) emiten `streak://open-log`.
+  la app y `POWERSHELL_APP_ID` de reserva; en Linux con `notify-rust` y
+  `wait_for_action` en un hilo. En macOS cae al plugin, sin botón. El clic (y la
+  entrada de la bandeja) emiten `streak://open-log`.
 
 ### Extensiones del webview
 
@@ -140,8 +190,11 @@ Orden de la política, y no se puede reordenar:
   y la columna `vn_apps.is_adult` (migración en `db::MIGRATIONS`, porque SQLite
   no tiene `ADD COLUMN IF NOT EXISTS`). Si añades otra ruta que cree un
   `MediaMatch` o un `VnApp`, arrastra el flag o el título acabará en Discord.
-- Una sesión en pausa (`counting == false`, o el reproductor en pausa) limpia la
-  presencia. También al cerrar la app (`RunEvent::Exit`) y al apagar el toggle.
+- Una VN en pausa (`counting == false`) limpia la presencia **salvo** que
+  `discord_show_idle` esté activo (por defecto sí): entonces la mantiene con el
+  texto "idling" ("Inactivo en <título>") y la portada, pero la lista negra le
+  sigue aplicando igual. El reproductor de vídeo en pausa siempre limpia.
+  También se limpia al cerrar la app (`RunEvent::Exit`) y al apagar el toggle.
 - El IPC del crate es **bloqueante**, así que vive en su propio hilo de SO con un
   `std::sync::mpsc`. Nunca en un worker de tokio, y un fallo de IPC no puede
   llegar al watcher.
@@ -187,7 +240,7 @@ Lo que hay que saber antes de tocarlo:
 `texthooker://status`, `texthooker://timer`, `outbox://changed`,
 `pending://changed`, `settings://changed`, `log://celebration`,
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
-`discord://status`. Están
+`discord://status`, `updater://available`, `updater://progress`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve
@@ -207,9 +260,20 @@ se encoló sin conexión celebra igual cuando por fin sale.
   antes de devolver valores derivados.
 - Todo lo que salga a la red pasa por `sync.rs`; los comandos no llaman a
   `ApiClient::create_log` directamente.
-- El código específico de Windows va detrás de `#[cfg(windows)]` en
-  `platform/`, con su equivalente en `stub.rs`. El resto del código no puede
-  asumir Windows.
+- El código específico de un SO va en `platform/`: una función nueva se
+  implementa en `windows_impl`, `linux_impl`, `macos_impl` **y** `stub`. El resto
+  del código no puede asumir Windows.
+- Lo que cada SO puede observar lo dice `platform::capabilities()`, y la UI lo
+  enseña en Ajustes → Seguimiento. Si algo no se puede saber (el foco en
+  Wayland), se asume el caso favorable: un juego que exige foco no contaría nunca.
+- Los nombres de proceso salen de `platform::process_key`, no de
+  `Process::name()`: en Linux `name()` es el `comm` truncado a 15 caracteres y un
+  juego de Wine se llama `wine64-preloader`. La biblioteca, el watcher y el
+  minado tienen que usar la misma clave.
+- Desde Windows no se puede compilar la app para Linux o macOS (GTK y los SDK),
+  pero `platform/` sólo depende de crates en Rust puro: se comprueba con un crate
+  que lo incluya por `#[path]` y `cargo check --target x86_64-unknown-linux-gnu`
+  / `aarch64-apple-darwin`. La app entera la compila el CI en los tres sistemas.
 
 ### Frontend
 
@@ -280,6 +344,14 @@ equivocarse:
   `texthooker::ingest`. Cualquier filtro nuevo va ahí, no duplicado en cada
   camino. El del portapapeles además exige que la copia lleve japonés, o cada
   Ctrl+C acabaría siendo una línea.
+- El filtro de chino (`texthooker_filter_chinese`, `text_filters::drop_chinese`)
+  juzga línea a línea: con kana nunca es chino; sin kana, solo si tiene 4+ kanji
+  y una marca china (`CHINESE_MARKERS`) o 12+ kanji. Las marcas excluyen a
+  propósito kanji de cabeceras japonesas (都, 過, 着…): añade casos al test
+  antes de tocar la lista. Una línea con kana puede traer la traducción pegada
+  (「え…」“啊……”): `drop_glued_chinese` se queda desde la frase del primer kana
+  hasta el cierre de la del último, y quita lo de los lados si es chino. Un
+  “…” pegado a un 「…」 basta; si no, hace falta una marca o 10+ kanji.
 - `src/screens/Texthooker.tsx` es un port de `HookerScreen.tsx` de la web: mismo
   layout, mismas clases (`th-root`, `th-topbar`, `th-line-item`…), mismas
   opciones de fuente y tema, mismo cronómetro anclado a reloj de pared. Si

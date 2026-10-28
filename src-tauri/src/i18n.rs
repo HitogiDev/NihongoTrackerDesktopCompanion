@@ -4,6 +4,30 @@
 //! Deliberately a plain lookup table rather than a full i18n crate — there is a
 //! handful of strings, and they must stay in sync with the JSON bundles by hand.
 
+pub fn saved_hook_error(lang: &str, code: &str) -> Option<&'static str> {
+    match (lang, code) {
+        ("es", "saved-hook-invalid") => Some("El código del hook guardado no es válido."),
+        (_, "saved-hook-invalid") => Some("The saved hook code is invalid."),
+        ("es", "saved-hook-restore-failed") => Some("LunaHook no pudo restaurar el hook guardado. Selecciona de nuevo un hook de diálogo."),
+        (_, "saved-hook-restore-failed") => Some("LunaHook could not restore the saved hook. Choose a dialogue hook again."),
+        _ => None,
+    }
+}
+
+pub fn update_title(lang: &str) -> &'static str {
+    match lang {
+        "es" => "Actualización disponible",
+        _ => "Update available",
+    }
+}
+
+pub fn update_body(lang: &str, version: &str) -> String {
+    match lang {
+        "es" => format!("NihongoTracker Companion {version} está listo. Instálalo desde Ajustes → App."),
+        _ => format!("NihongoTracker Companion {version} is ready. Install it from Settings → App."),
+    }
+}
+
 pub fn tray_open(lang: &str) -> &'static str {
     match lang {
         "es" => "Abrir NihongoTracker Companion",
@@ -18,10 +42,28 @@ pub fn tray_sync(lang: &str) -> &'static str {
     }
 }
 
+pub fn tray_overlay_interaction(lang: &str) -> &'static str {
+    match lang {
+        "es" => "Activar interacción del overlay de lectura",
+        _ => "Enable reading overlay interaction",
+    }
+}
+
 pub fn tray_quit(lang: &str) -> &'static str {
     match lang {
         "es" => "Salir",
         _ => "Quit",
+    }
+}
+
+pub fn aux_window_title(lang: &str, kind: &str) -> &'static str {
+    match (lang, kind) {
+        ("es", "settings") => "Ajustes · NihongoTracker Companion",
+        ("es", "reading-overlay-settings") => "Ajustes del overlay · NihongoTracker Companion",
+        ("es", "texthooker") => "Texthooker · NihongoTracker Companion",
+        (_, "settings") => "Settings · NihongoTracker Companion",
+        (_, "reading-overlay-settings") => "Overlay settings · NihongoTracker Companion",
+        _ => "Texthooker · NihongoTracker Companion",
     }
 }
 
@@ -135,6 +177,15 @@ pub fn discord_reading(lang: &str, title: &str) -> String {
     }
 }
 
+/// Shown when a VN is detected but out of focus (or AFK): the session is still
+/// there, so the presence stays, but nobody is reading right now.
+pub fn discord_idling(lang: &str, title: &str) -> String {
+    match lang {
+        "es" => format!("Inactivo en {title}"),
+        _ => format!("Idling in {title}"),
+    }
+}
+
 pub fn discord_watching(lang: &str, title: &str) -> String {
     match lang {
         "es" => format!("Viendo {title}"),
@@ -178,3 +229,10 @@ pub fn session_summary(lang: &str, minutes: u64, chars: i64) -> String {
         _ => format!("{minutes} min, {chars} chars"),
     }
 }
+pub fn native_filter_error(lang: &str, line: usize, message: &str) -> String {
+    match lang {
+        "es" => format!("Regex inválida en la línea {line}: {message}"),
+        _ => format!("Invalid regex on line {line}: {message}"),
+    }
+}
+

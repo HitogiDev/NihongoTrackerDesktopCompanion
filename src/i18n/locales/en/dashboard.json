@@ -22,20 +22,28 @@
     "progressPlayer": "Real position · {{percent}}% to log",
     "progressElapsed": "Time with the player open",
     "logNow": "Log now",
+    "comment": "Comment (optional)",
+    "commentPlaceholder": "Add a note about this episode",
     "paused": "Paused"
   },
   "vn": {
-    "empty": "No visual novel running",
-    "emptyBody": "Register your visual novels' executables in the library so they are detected when you open them.",
-    "add": "Add a novel",
+    "empty": "No novel or game running",
+    "emptyBody": "Register an executable in the library to track a visual novel or game when you open it.",
+    "add": "Add a work",
     "counting": "Counting time",
     "autoPaused": "Auto-paused",
+    "manuallyPaused": "Paused from the floating panel.",
     "time": "Time",
     "characters": "Characters",
     "speed": "Chars/hour",
     "idleFor": "No activity for {{duration}}.",
     "notFocused": "The window is not in the foreground.",
-    "openTexthooker": "Open texthooker"
+    "openTexthooker": "Open texthooker",
+    "nativeHookStarting": "Attaching native text hook…",
+    "nativeHookAttached": "Hook attached, waiting for dialogue.",
+    "nativeHookReceiving": "Capturing game text",
+    "nativeHookError": "Native text hook failed",
+    "nativeHookUnavailable": "Native game hooking is available on Windows only."
   },
   "progress": {
     "title": "Your progress",
@@ -44,9 +52,8 @@
     "streak": "Streak",
     "streakDays": "{{count}} d",
     "longestStreak": "best {{count}} d",
-    "reading": "Reading",
-    "listening": "Listening",
-    "levelUnit": "level"
+    "reading": "Reading Level",
+    "listening": "Listening Level"
   },
   "summary": {
     "title": "Summary",
@@ -63,5 +70,6 @@
     "openWeb": "Open on the web"
   },
   "reviewPending": "Review {{count}} pending log",
-  "reviewPending_other": "Review {{count}} pending logs"
+  "reviewPending_other": "Review {{count}} pending logs",
+  "subtitlePartial": "Detection is limited on this system. Settings → Tracking lists what works."
 }

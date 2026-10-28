@@ -1,14 +1,54 @@
 {
   "title": "Settings",
   "subtitle": "How things are detected, when they are logged, and where they are sent.",
+  "tabs": {
+    "label": "Settings sections",
+    "account": "Account",
+    "tracking": "Tracking",
+    "anki": "Anki",
+    "app": "App"
+  },
+  "anki": {
+    "title": "Anki sentence mining",
+    "deck": "Anki deck",
+    "noteType": "Note type",
+    "noteTypeHint": "Note types and fields are read from AnkiConnect. Choose a source for each note field.",
+    "field": "{{field}}",
+    "unavailable": "Open Anki Desktop with AnkiConnect enabled to load note types.",
+    "sources": {
+      "word": "Word",
+      "reading": "Reading",
+      "meaning": "Meaning",
+      "sentence": "Sentence",
+      "media": "Media title",
+      "empty": "Leave empty"
+    }
+  },
+  "social": {
+    "title": "Friends",
+    "share": "Share what I am immersing in",
+    "shareHint": "Mutual followers can see your current tracked work while this is enabled. Updates stop when tracking pauses or the companion closes."
+  },
   "account": {
     "title": "Account",
     "noUser": "No user",
+    "checking": "Checking connection…",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
     "web": "Web",
     "server": "Server",
+    "currentKey": "Current API key",
     "newKey": "New API key",
     "replace": "Replace",
+    "reconnect": "Reconnect now",
+    "autoReconnect": "Reconnect automatically",
     "signOut": "Disconnect account"
+  },
+  "game": {
+    "title": "Games",
+    "detect": "Track registered games",
+    "detectHint": "Count active time for games linked in the library.",
+    "rules": "Game sessions pause when the game is out of focus or you are AFK. Completed sessions go to Pending for confirmation."
   },
   "anime": {
     "title": "Anime",
@@ -18,6 +58,7 @@
     "usePositionHint": "mpv over IPC and MPC-HC/BE over its web interface. Without it, time with the window open is counted, and a paused video counts too.",
     "mpvIpc": "mpv IPC socket",
     "mpvIpcHint": "The same path as input-ipc-server in mpv.conf. On Windows it is translated to a named pipe automatically.",
+    "mpvIpcHelp": "Add `input-ipc-server=/tmp/mpv-socket` to mpv.conf (or set a Windows named pipe path). mpv exposes playback position over this socket so the companion can count only watched video time.",
     "mpcPort": "MPC web port",
     "mpcPortHint": "Options → Player → Web Interface → Listen on port.",
     "autoLog": "Log without confirming",
@@ -35,20 +76,12 @@
     "openTexthooker": "Open the texthooker automatically",
     "confirm": "Confirm before logging the session",
     "confirmHint": "Closing the novel sends the log to Pending.",
-    "afk": "Idle pause: {{seconds}}s",
+    "afk": "Idle pause (seconds)",
     "afkHint": "0 disables the automatic pause."
   },
-  "extensions": {
-    "title": "Popup dictionaries",
-    "enabled": "Load browser extensions",
-    "enabledHint": "Windows only: the webview can run unpacked Chrome extensions, so Yomitan or JitenReader work over the reader itself.",
-    "body": "Download the extension's Chrome build, unzip it into the folder below — one folder per extension — and restart the app.",
-    "openFolder": "Open folder",
-    "none": "No extensions installed yet.",
-    "settings": "Settings",
-    "restart": "Changes apply after restarting the app."
-  },
   "app": {
+    "overlay": "Floating session panel",
+    "overlayHint": "Show an always-on-top window with session controls and the latest line.",
     "title": "Application",
     "language": "Language",
     "autostart": "Start with the system",
@@ -65,5 +98,74 @@
     "theme": "Theme",
     "poll": "Polling interval: {{ms}} ms",
     "pollHint": "Higher means less CPU."
+  },
+  "dictionary": {
+    "title": "Offline dictionaries",
+    "hint": "Import a Yomitan dictionary zip. It stays on this computer and lookups work without an internet connection.",
+    "import": "Import dictionary",
+    "entries": "entries",
+    "none": "No dictionaries imported yet.",
+    "remove": "Remove dictionary"
+  },
+  "filters": {
+    "title": "Text filters",
+    "duplicates": "Remove duplicate sentences",
+    "duplicatesHint": "Removes adjacent duplicate phrases within each line, such as こんにちはこんにちは → こんにちは. Keeps repeated single characters and punctuation, such as ああ……. Applies to every input source.",
+    "chinese": "Filter out Chinese lines",
+    "chineseHint": "For releases that hook a Chinese translation together with the Japanese, such as AIR. Drops lines with no kana that read as Chinese; names, places and other short kanji-only lines are kept. Applies to every input source, including the reading overlay.",
+    "scope": "These removal rules apply to LunaHook for all works. Removed text is not sent to the reader and does not count toward characters in logs. Existing lines stay unchanged.",
+    "words": "Excluded words or names",
+    "wordsHint": "One entry per line. Removes every exact match, including inside dialogue. Case sensitive.",
+    "wordsPlaceholder": "太郎\n花子",
+    "regex": "Regex removal rules",
+    "regexHint": "One regex per line, without / delimiters. Rules run from top to bottom before excluded words. Rust regex syntax, without lookaround or backreferences.",
+    "regexPlaceholder": "^.*?：\n\\[[^\\]]*\\]",
+    "regexError": "Invalid regex on line {{line}}: {{message}}",
+    "test": "Try the filters",
+    "input": "Sample text",
+    "sample": "太郎「今日は雨だ。」",
+    "preview": "Preview",
+    "empty": "This line will be skipped.",
+    "characters": "Japanese characters remaining: {{count}}",
+    "save": "Save filters",
+    "saved": "Filters saved",
+    "failed": "Could not apply filters: {{message}}"
+  },
+  "platform": {
+    "title": "Platform support",
+    "available": "available",
+    "unavailable": "not available",
+    "os": {
+      "windows": "Windows",
+      "linux": "Linux",
+      "macos": "macOS"
+    },
+    "features": {
+      "window_titles": "Players detected by their window title",
+      "media_sessions": "Players detected through the system media controls (MPRIS)",
+      "foreground": "Focused window (focus-only time, game time, reading overlay)",
+      "idle": "Inactivity detection (AFK timeout)",
+      "screenshots": "Game screenshot on mined sentences",
+      "actionable_notifications": "“Log now” button on the streak reminder",
+      "native_hook": "Native game hook (LunaHook)"
+    },
+    "missing": {
+      "window_titles": "Window titles cannot be read here.",
+      "window_titles_linux": "Wayland does not let apps read other windows. Players are followed through MPRIS instead.",
+      "window_titles_macos": "Allow Screen Recording so the companion can read window titles.",
+      "media_sessions": "Players are detected by their window title instead.",
+      "media_sessions_linux": "No D-Bus session bus was found.",
+      "foreground": "The focused window cannot be known here.",
+      "foreground_linux": "Wayland hides which window has focus, so sessions count as focused.",
+      "idle": "Inactivity cannot be measured, so the AFK timeout is off.",
+      "idle_linux": "Your compositor does not report idle time (GNOME and KDE do), so the AFK timeout is off.",
+      "screenshots": "Screenshots are not available here.",
+      "screenshots_linux": "Window capture needs an X11 session.",
+      "screenshots_macos": "Needs the Screen Recording permission.",
+      "actionable_notifications": "The reminder appears without a button; open the log form from the tray.",
+      "native_hook": "LunaHook injects into Windows processes. With Wine or Proton, run Textractor inside the game’s prefix and connect it over WebSocket."
+    },
+    "screenRecordingHint": "macOS hides other apps’ window titles until you allow Screen Recording in System Settings → Privacy & Security. Restart the companion after granting it.",
+    "screenRecordingAction": "Request access"
   }
 }

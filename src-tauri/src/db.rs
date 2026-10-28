@@ -16,6 +16,25 @@ pub struct Db {
     conn: Mutex<Connection>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReaderMode {
+    #[default]
+    Integrated,
+    Browser,
+    Overlay,
+}
+
+impl ReaderMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Integrated => "integrated",
+            Self::Browser => "browser",
+            Self::Overlay => "overlay",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VnApp {
     /// Executable file name, lowercased. Primary key.
@@ -24,13 +43,25 @@ pub struct VnApp {
     pub media_type: String,
     pub media_title: String,
     pub image: Option<String>,
-    /// Optional extra URL to open alongside the built-in texthooker.
-    pub texthooker_url: Option<String>,
+    #[serde(default)]
+    pub launch_path: Option<String>,
+    #[serde(default)]
+    pub hooker_path: Option<String>,
+    /// Attach LunaHook directly to this registered game when it starts.
+    #[serde(default)]
+    pub native_hook_enabled: bool,
+    /// Hook code selected for this executable, if the user chose one.
+    #[serde(default)]
+    pub native_hook_code: Option<String>,
+    #[serde(default)]
+    pub reader_mode: ReaderMode,
     pub enabled: bool,
-    /// `isAdult` as NihongoTracker reports it. Kept here so Discord Rich
-    /// Presence can strip the title without a round trip.
+    /// Use the work rating for games and VNs with no cached cover rating.
     #[serde(default)]
     pub is_adult: bool,
+    /// Use the VN cover rating for Discord, including while offline.
+    #[serde(default)]
+    pub is_adult_image: Option<bool>,
 }
 
 /// One entry of the Discord presence blacklist: a media contentId or an
@@ -76,6 +107,18 @@ pub struct TextLine {
     pub synced: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinedSentence {
+    pub id: String,
+    pub line_id: String,
+    pub content_id: String,
+    pub text: String,
+    pub media_title: Option<String>,
+    pub created_at: String,
+    pub anki_note_id: Option<i64>,
+    pub screenshot_path: Option<String>,
+}
+
 /// One "log session" event, kept locally so the reader can show its history
 /// with no network — the server has the same rows under `sessionHistory`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +136,8 @@ pub struct TextHistoryEntry {
     pub seconds: i64,
     #[serde(rename = "readingSpeed")]
     pub speed: i64,
+    #[serde(default)]
+    pub intelligence: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -144,6 +189,17 @@ CREATE TABLE IF NOT EXISTS text_lines (
     synced INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS text_lines_content ON text_lines(content_id, created_at);
+CREATE TABLE IF NOT EXISTS mined_sentences (
+    id TEXT PRIMARY KEY,
+    line_id TEXT NOT NULL UNIQUE,
+    content_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    media_title TEXT,
+    created_at TEXT NOT NULL,
+    anki_note_id INTEGER,
+    screenshot_path TEXT
+);
+CREATE INDEX IF NOT EXISTS mined_sentences_created ON mined_sentences(created_at DESC);
 CREATE TABLE IF NOT EXISTS text_state (
     content_id TEXT PRIMARY KEY,
     timer_seconds INTEGER NOT NULL DEFAULT 0,
@@ -159,7 +215,8 @@ CREATE TABLE IF NOT EXISTS text_history (
     chars INTEGER NOT NULL,
     lines INTEGER NOT NULL,
     seconds INTEGER NOT NULL,
-    speed INTEGER NOT NULL
+    speed INTEGER NOT NULL,
+    intelligence TEXT
 );
 CREATE INDEX IF NOT EXISTS text_history_content ON text_history(content_id, logged_at);
 CREATE TABLE IF NOT EXISTS watch_history (
@@ -176,7 +233,16 @@ CREATE TABLE IF NOT EXISTS discord_blacklist (
 /// Columns added after the first release. SQLite has no `ADD COLUMN IF NOT
 /// EXISTS`, so a duplicate-column error simply means the database is already
 /// up to date.
-const MIGRATIONS: &[&str] = &["ALTER TABLE vn_apps ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0"];
+const MIGRATIONS: &[&str] = &[
+    "ALTER TABLE vn_apps ADD COLUMN is_adult_image INTEGER",
+    "ALTER TABLE vn_apps ADD COLUMN is_adult INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE vn_apps ADD COLUMN launch_path TEXT",
+    "ALTER TABLE vn_apps ADD COLUMN hooker_path TEXT",
+    "ALTER TABLE vn_apps ADD COLUMN native_hook_enabled INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE vn_apps ADD COLUMN native_hook_code TEXT",
+    "ALTER TABLE text_history ADD COLUMN intelligence TEXT",
+    "ALTER TABLE mined_sentences ADD COLUMN screenshot_path TEXT",
+];
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
@@ -189,6 +255,12 @@ impl Db {
         conn.execute_batch(SCHEMA)?;
         for statement in MIGRATIONS {
             let _ = conn.execute(statement, []);
+        }
+        if conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).is_ok() {
+            conn.execute("UPDATE vn_apps SET browser_texthooker = 1 WHERE texthooker_url IS NOT NULL AND TRIM(texthooker_url) != ''", [])?;
+        }
+        if conn.execute("ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'", []).is_ok() {
+            conn.execute("UPDATE vn_apps SET reader_mode = CASE WHEN browser_texthooker = 1 THEN 'browser' ELSE 'integrated' END", [])?;
         }
         Ok(Self {
             conn: Mutex::new(conn),
@@ -209,8 +281,10 @@ impl Db {
                     .optional()
             })
             .unwrap_or(None);
-        raw.and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        let mut settings: Settings = raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        settings.discord_app_id = "1378024719672016977".into();
+        settings.discord_large_image = "nihongotracker".into();
+        settings
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {
@@ -275,7 +349,7 @@ impl Db {
     pub fn list_vn_apps(&self) -> Result<Vec<VnApp>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT exe, media_id, media_type, media_title, image, texthooker_url, enabled, is_adult
+                "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image
                  FROM vn_apps ORDER BY media_title COLLATE NOCASE",
             )?;
             let rows = stmt.query_map([], |r| {
@@ -285,9 +359,18 @@ impl Db {
                     media_type: r.get(2)?,
                     media_title: r.get(3)?,
                     image: r.get(4)?,
-                    texthooker_url: r.get(5)?,
+                    reader_mode: match r.get::<_, String>(5)?.as_str() {
+                        "browser" => ReaderMode::Browser,
+                        "overlay" => ReaderMode::Overlay,
+                        _ => ReaderMode::Integrated,
+                    },
                     enabled: r.get::<_, i64>(6)? != 0,
                     is_adult: r.get::<_, i64>(7)? != 0,
+                    is_adult_image: r.get::<_, Option<i64>>(12)?.map(|value| value != 0),
+                    launch_path: r.get(8)?,
+                    hooker_path: r.get(9)?,
+                    native_hook_enabled: r.get::<_, i64>(10)? != 0,
+                    native_hook_code: r.get(11)?,
                 })
             })?;
             rows.collect()
@@ -297,29 +380,56 @@ impl Db {
     pub fn upsert_vn_app(&self, app: &VnApp) -> Result<()> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, texthooker_url, enabled, is_adult)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(exe) DO UPDATE SET
                     media_id = excluded.media_id,
                     media_type = excluded.media_type,
                     media_title = excluded.media_title,
                     image = excluded.image,
-                    texthooker_url = excluded.texthooker_url,
+                    reader_mode = excluded.reader_mode,
                     enabled = excluded.enabled,
-                    is_adult = excluded.is_adult",
+                    is_adult = excluded.is_adult,
+                    is_adult_image = CASE WHEN vn_apps.media_id = excluded.media_id THEN COALESCE(excluded.is_adult_image, vn_apps.is_adult_image) ELSE excluded.is_adult_image END,
+                    launch_path = excluded.launch_path,
+                    hooker_path = excluded.hooker_path,
+                    native_hook_enabled = excluded.native_hook_enabled,
+                    native_hook_code = COALESCE(excluded.native_hook_code, vn_apps.native_hook_code)",
                 params![
                     app.exe.to_lowercase(),
                     app.media_id,
                     app.media_type,
                     app.media_title,
                     app.image,
-                    app.texthooker_url,
+                    app.reader_mode.as_str(),
                     app.enabled as i64,
-                    app.is_adult as i64
+                    app.is_adult as i64,
+                    app.launch_path,
+                    app.hooker_path,
+                    app.native_hook_enabled as i64,
+                    app.native_hook_code,
+                    app.is_adult_image.map(i64::from)
                 ],
             )
             .map(|_| ())
         })
+    }
+
+    pub fn set_native_hook_code(&self, exe: &str, hook_code: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "UPDATE vn_apps SET native_hook_code = ?2 WHERE exe = ?1",
+                params![exe.to_lowercase(), hook_code],
+            )
+            .map(|_| ())
+        })
+    }
+
+    pub fn set_vn_image_rating(&self, content_id: &str, is_adult_image: bool) -> Result<()> {
+        self.with(|connection| connection.execute(
+            "UPDATE vn_apps SET is_adult_image = ?2 WHERE media_id = ?1 AND media_type = 'vn'",
+            params![content_id, i64::from(is_adult_image)],
+        ).map(|_| ()))
     }
 
     // ── Discord blacklist ──────────────────────────────────────────────
@@ -563,20 +673,6 @@ impl Db {
         })
     }
 
-    pub fn line_text_exists(&self, content_id: &str, text: &str) -> bool {
-        self.with(|c| {
-            c.query_row(
-                "SELECT 1 FROM text_lines WHERE content_id = ?1 AND text = ?2 LIMIT 1",
-                params![content_id, text],
-                |r| r.get::<_, i64>(0),
-            )
-            .optional()
-        })
-        .ok()
-        .flatten()
-        .is_some()
-    }
-
     pub fn lines_for(&self, content_id: &str, limit: i64) -> Result<Vec<TextLine>> {
         self.with(|c| {
             let mut stmt = c.prepare(
@@ -586,6 +682,62 @@ impl Db {
             let rows = stmt.query_map(params![content_id, limit], map_line)?;
             rows.collect()
         })
+    }
+
+    pub fn line_by_id(&self, id: &str) -> Result<Option<TextLine>> {
+        self.with(|c| c.query_row(
+            "SELECT id, content_id, text, chars, created_at, synced FROM text_lines WHERE id = ?1",
+            params![id], map_line,
+        ).optional())
+    }
+
+    pub fn latest_line(&self, content_id: &str) -> Result<Option<TextLine>> {
+        self.with(|c| c.query_row(
+            "SELECT id, content_id, text, chars, created_at, synced FROM text_lines WHERE content_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            params![content_id], map_line,
+        ).optional())
+    }
+
+    pub fn mine_line(&self, line: &TextLine, media_title: Option<&str>) -> Result<MinedSentence> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_at = now_iso();
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO mined_sentences (id, line_id, content_id, text, media_title, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![id, line.id, line.content_id, line.text, media_title, created_at],
+            )?;
+            c.query_row(
+                "SELECT id, line_id, content_id, text, media_title, created_at, anki_note_id, screenshot_path FROM mined_sentences WHERE line_id = ?1",
+                params![line.id], map_mined,
+            )
+        })
+    }
+
+    pub fn mined_sentences(&self) -> Result<Vec<MinedSentence>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT id, line_id, content_id, text, media_title, created_at, anki_note_id, screenshot_path FROM mined_sentences ORDER BY created_at DESC LIMIT 500")?;
+            let rows = stmt.query_map([], map_mined)?;
+            rows.collect()
+        })
+    }
+
+    pub fn mined_by_id(&self, id: &str) -> Result<Option<MinedSentence>> {
+        self.with(|c| c.query_row(
+            "SELECT id, line_id, content_id, text, media_title, created_at, anki_note_id, screenshot_path FROM mined_sentences WHERE id = ?1",
+            params![id], map_mined,
+        ).optional())
+    }
+
+    pub fn mark_mined_exported(&self, id: &str, note_id: i64) -> Result<()> {
+        self.with(|c| c.execute("UPDATE mined_sentences SET anki_note_id = ?2 WHERE id = ?1", params![id, note_id]).map(|_| ()))
+    }
+
+    pub fn set_mined_screenshot(&self, id: &str, path: &str) -> Result<()> {
+        self.with(|c| c.execute("UPDATE mined_sentences SET screenshot_path = ?2 WHERE id = ?1", params![id, path]).map(|_| ()))
+    }
+
+    pub fn delete_mined(&self, id: &str) -> Result<()> {
+        self.with(|c| c.execute("DELETE FROM mined_sentences WHERE id = ?1", params![id]).map(|_| ()))
     }
 
     pub fn unsynced_lines(&self, limit: i64) -> Result<Vec<TextLine>> {
@@ -611,17 +763,6 @@ impl Db {
             let params: Vec<&dyn rusqlite::ToSql> =
                 ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
             c.execute(&tx_sql, params.as_slice()).map(|_| ())
-        })
-    }
-
-    /// Move a local/blank session's lines under a real media id once the user
-    /// picks the work they were reading.
-    pub fn reassign_lines(&self, from: &str, to: &str) -> Result<usize> {
-        self.with(|c| {
-            c.execute(
-                "UPDATE text_lines SET content_id = ?2, synced = 0 WHERE content_id = ?1",
-                params![from, to],
-            )
         })
     }
 
@@ -708,8 +849,8 @@ impl Db {
     pub fn add_text_history(&self, entry: &TextHistoryEntry) -> Result<()> {
         self.with(|c| {
             c.execute(
-                "INSERT OR REPLACE INTO text_history (id, content_id, logged_at, chars, lines, seconds, speed)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT OR REPLACE INTO text_history (id, content_id, logged_at, chars, lines, seconds, speed, intelligence)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     entry.id,
                     entry.content_id,
@@ -717,7 +858,8 @@ impl Db {
                     entry.chars,
                     entry.lines,
                     entry.seconds,
-                    entry.speed
+                    entry.speed,
+                    entry.intelligence.as_ref().and_then(|value| serde_json::to_string(value).ok())
                 ],
             )
             .map(|_| ())
@@ -727,7 +869,7 @@ impl Db {
     pub fn text_history(&self, content_id: &str) -> Result<Vec<TextHistoryEntry>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT id, content_id, logged_at, chars, lines, seconds, speed
+                "SELECT id, content_id, logged_at, chars, lines, seconds, speed, intelligence
                  FROM text_history WHERE content_id = ?1 ORDER BY logged_at DESC LIMIT 100",
             )?;
             let rows = stmt.query_map(params![content_id], |r| {
@@ -739,10 +881,30 @@ impl Db {
                     lines: r.get(4)?,
                     seconds: r.get(5)?,
                     speed: r.get(6)?,
+                    intelligence: r.get::<_, Option<String>>(7)?
+                        .and_then(|raw| serde_json::from_str(&raw).ok()),
                 })
             })?;
             rows.collect()
         })
+    }
+
+    pub fn text_line_counts(&self, content_id: &str) -> Result<Vec<(String, i64)>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT id, chars FROM text_lines WHERE content_id = ?1")?;
+            let rows = stmt.query_map(params![content_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            rows.collect()
+        })
+    }
+
+    pub fn queued_log_chars(&self, content_id: &str) -> i64 {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT payload FROM outbox WHERE kind = 'log' AND status = 'queued'")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            Ok(rows.filter_map(|row| row.ok()).filter_map(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                .filter(|payload| payload.get("mediaId").and_then(|id| id.as_str()) == Some(content_id))
+                .filter_map(|payload| payload.get("chars").and_then(|chars| chars.as_i64())).sum())
+        }).unwrap_or(0)
     }
 
     pub fn list_text_states(&self) -> Result<Vec<TextState>> {
@@ -789,6 +951,137 @@ fn map_line(r: &rusqlite::Row<'_>) -> Result<TextLine> {
     })
 }
 
+fn map_mined(r: &rusqlite::Row<'_>) -> Result<MinedSentence> {
+    Ok(MinedSentence {
+        id: r.get(0)?,
+        line_id: r.get(1)?,
+        content_id: r.get(2)?,
+        text: r.get(3)?,
+        media_title: r.get(4)?,
+        created_at: r.get(5)?,
+        anki_note_id: r.get(6)?,
+        screenshot_path: r.get(7)?,
+    })
+}
+
 pub fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+#[cfg(test)]
+mod mining_tests {
+    use std::path::Path;
+    use super::{Db, ReaderMode, TextLine, VnApp};
+
+    #[test]
+    fn browser_texthooker_migrates_existing_url_once_and_preserves_disabled_choice() {
+        let path = std::env::temp_dir().join(format!("ntdc-browser-{}.sqlite3", uuid::Uuid::new_v4()));
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            connection.execute_batch(super::SCHEMA).unwrap();
+            connection.execute("INSERT INTO vn_apps (exe, media_id, media_type, media_title, texthooker_url) VALUES ('game.exe','v17','vn','VN','https://nihongotracker.app/texthooker/v17')", []).unwrap();
+        }
+        {
+            let db = Db::open(&path).unwrap();
+            let mut entry = db.list_vn_apps().unwrap().remove(0);
+            assert_eq!(entry.reader_mode, ReaderMode::Browser);
+            entry.reader_mode = ReaderMode::Integrated;
+            db.upsert_vn_app(&entry).unwrap();
+        }
+        {
+            let db = Db::open(&path).unwrap();
+            assert_eq!(db.list_vn_apps().unwrap()[0].reader_mode, ReaderMode::Integrated);
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reader_mode_migrates_browser_choice_and_preserves_overlay_after_reopen() {
+        let path = std::env::temp_dir().join(format!("ntdc-reader-{}.sqlite3", uuid::Uuid::new_v4()));
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(super::SCHEMA).unwrap();
+            conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).unwrap();
+            conn.execute("INSERT INTO vn_apps (exe, media_id, media_title, browser_texthooker) VALUES ('browser.exe','v1','Browser VN',1), ('desktop.exe','v2','Desktop VN',0)", []).unwrap();
+        }
+        {
+            let db = Db::open(&path).unwrap();
+            let mut entries = db.list_vn_apps().unwrap();
+            assert_eq!(entries[0].reader_mode, ReaderMode::Browser);
+            assert_eq!(entries[1].reader_mode, ReaderMode::Integrated);
+            entries[0].reader_mode = ReaderMode::Overlay;
+            db.upsert_vn_app(&entries[0]).unwrap();
+        }
+        assert_eq!(Db::open(&path).unwrap().list_vn_apps().unwrap()[0].reader_mode, ReaderMode::Overlay);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn selected_native_hook_is_saved_per_executable() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let app = VnApp {
+            exe: "game.exe".into(),
+            media_id: "v1".into(),
+            media_type: "vn".into(),
+            media_title: "Test VN".into(),
+            image: None,
+            launch_path: None,
+            hooker_path: None,
+            native_hook_enabled: true,
+            native_hook_code: None,
+            reader_mode: ReaderMode::Integrated,
+            enabled: true,
+            is_adult: false,
+            is_adult_image: None,
+        };
+
+        db.upsert_vn_app(&app).unwrap();
+        db.set_native_hook_code("GAME.EXE", "/HSN-4@1234").unwrap();
+        db.upsert_vn_app(&app).unwrap();
+
+        let saved = db.list_vn_apps().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].native_hook_code.as_deref(), Some("/HSN-4@1234"));
+    }
+
+    #[test]
+    fn vn_cover_rating_is_cached_without_changing_other_library_fields() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let mut entry: VnApp = serde_json::from_value(serde_json::json!({
+            "exe": "game.exe", "media_id": "v1143", "media_type": "vn",
+            "media_title": "Majikoi", "enabled": true, "is_adult": true
+        })).unwrap();
+        assert!(entry.is_adult_image.is_none());
+        db.upsert_vn_app(&entry).unwrap();
+        db.set_vn_image_rating("v1143", false).unwrap();
+        db.upsert_vn_app(&entry).unwrap();
+        let cached = db.list_vn_apps().unwrap().remove(0);
+        assert_eq!(cached.is_adult_image, Some(false));
+        assert!(cached.is_adult);
+        assert_eq!(cached.media_title, "Majikoi");
+        entry.media_id = "v2".into();
+        db.upsert_vn_app(&entry).unwrap();
+        assert!(db.list_vn_apps().unwrap()[0].is_adult_image.is_none());
+    }
+
+    #[test]
+    fn mined_sentence_survives_source_deletion_and_repeated_save() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let line = TextLine {
+            id: "line-1".into(),
+            content_id: "v1".into(),
+            text: "今日は楽しい。".into(),
+            chars: 7,
+            created_at: super::now_iso(),
+            synced: false,
+        };
+        db.insert_line(&line).unwrap();
+        let first = db.mine_line(&line, Some("Game title")).unwrap();
+        let second = db.mine_line(&line, Some("Game title")).unwrap();
+        assert_eq!(first.id, second.id);
+        db.delete_line(&line.id).unwrap();
+        assert_eq!(db.mined_sentences().unwrap()[0].text, line.text);
+        db.mark_mined_exported(&first.id, 42).unwrap();
+        assert_eq!(db.mined_by_id(&first.id).unwrap().unwrap().anki_note_id, Some(42));
+    }
 }

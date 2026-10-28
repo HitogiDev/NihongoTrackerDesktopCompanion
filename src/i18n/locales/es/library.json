@@ -1,24 +1,56 @@
 {
   "title": "Biblioteca",
-  "subtitle": "Ejecutables vinculados a una obra: al abrirlos se inicia la sesión y el texthooker.",
+  "subtitle": "Los ejecutables vinculados inician una sesión al abrirlos. Los juegos pueden enviar texto directamente al texthooker.",
   "works": "Novelas y juegos",
+  "filter": {
+    "search": "Buscar en biblioteca",
+    "all": "Todas las obras"
+  },
+  "view": {
+    "grid": "Vista en cuadrícula",
+    "list": "Vista de lista"
+  },
+  "launch": {
+    "game": "Abrir obra",
+    "hooker": "Abrir hooker",
+    "clickToRun": "Haz clic para iniciar"
+  },
+  "actions": {
+    "remove": "Eliminar {{title}} de la biblioteca",
+    "edit": "Editar {{title}}",
+    "confirmTitle": "¿Eliminar esta obra?",
+    "confirmBody": "¿Seguro que quieres eliminar {{title}} de la biblioteca?"
+  },
   "empty": "Sin obras registradas",
-  "emptyBody": "Vincula el .exe de una novela visual con su entrada en NihongoTracker para trackearla automáticamente.",
+  "emptyBody": "Vincula el ejecutable de una novela visual o juego a NihongoTracker para seguirlo automáticamente.",
   "addFirst": "Añadir la primera",
   "disabled": "Desactivada",
   "manualMappings": "Títulos vinculados a mano",
   "modal": {
     "addTitle": "Añadir obra",
     "editTitle": "Editar obra",
-    "executable": "Ejecutable",
-    "executableHint": "El nombre del proceso, por ejemplo siglusengine.exe",
+    "kind": "Tipo de obra",
+    "executable": "Nombre del proceso",
+    "executablePlaceholder": "juego.exe",
+    "executableHint": "Es opcional si indicas la ruta del ejecutable de la obra. Si no, escribe el nombre del proceso para detectarla.",
+    "launchPath": "Ruta del ejecutable de la obra",
+    "launchPathHint": "Ruta completa opcional para abrir la obra desde la biblioteca.",
+    "hookerPath": "Ruta de Textractor o Agent",
+    "hookerPathHint": "Ejecutable o script .bat/.cmd opcional para iniciar el hooker externo.",
+    "nativeHook": "Capturar texto del juego con LunaHook",
+    "nativeHookHint": "Captura el texto japonés del juego con LunaHook mientras está abierto. Solo Windows.",
     "choose": "Elegir",
     "work": "Obra en NihongoTracker",
     "notSelected": "Sin seleccionar",
-    "extraUrl": "URL extra del texthooker",
-    "extraUrlHint": "Opcional: se abrirá en el navegador junto al texthooker integrado.",
     "enabled": "Detección activa",
-    "enabledHint": "Desactívala para dejar de trackear esta obra sin borrarla."
+    "enabledHint": "Desactívala para dejar de trackear esta obra sin borrarla.",
+    "readerMode": "Lector",
+    "readerModes": {
+      "integrated": "Integrado",
+      "browser": "Navegador",
+      "overlay": "Overlay"
+    },
+    "overlayHint": "Abre solo el overlay de lectura y activa LunaHook para esta VN."
   },
   "processes": {
     "title": "Elegir proceso",

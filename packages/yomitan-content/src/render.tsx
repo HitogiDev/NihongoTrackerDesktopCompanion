@@ -1,205 +1,67 @@
 import { createElement, Fragment, type ReactNode } from 'react';
+import type { LookupRequest, StructuredContentElement } from './types';
 
-import { classifyHref } from './href';
-import { NULL_DIAGNOSTICS, type DiagnosticsCollector } from './diagnostics';
-import type { LookupRequest, StructuredContentElement, StructuredContentNode } from './types';
-import {
-  CLASS_CLASSES,
-  HOOK_CLASSES,
-  isSafeLanguage,
-  isSafeToken,
-  isSupportedTag,
-  safeListStyleType,
-  safeTitle,
-} from './whitelist';
+const TAGS = new Set(['div', 'span', 'li', 'ul', 'ol', 'ruby', 'rt', 'br']);
+const CLASS_STYLES: Record<string, string> = {
+  tag: 'badge badge-xs badge-ghost align-middle mr-1',
+  'extra-box': 'surface-muted rounded-box px-2 py-1 mt-1',
+};
+const CONTENT_STYLES: Record<string, string> = {
+  'part-of-speech-info': 'text-info',
+  'misc-info': 'text-warning',
+  'field-info': 'text-accent',
+  'example-sentence': 'text-sm',
+  'example-keyword': 'font-bold text-primary',
+  xref: 'text-sm',
+};
+const TOKEN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
-export interface RenderOptions {
-  /** Fired when an internal dictionary cross-reference is activated. */
-  onLookup?: (request: LookupRequest) => void;
-  diagnostics?: DiagnosticsCollector;
-  /** Extra classes for the root node, from the consumer. */
-  className?: string;
+export function renderStructuredContent(node: unknown, onLookup?: (request: LookupRequest) => void): ReactNode {
+  return renderNode(node, onLookup, 'root');
 }
 
-interface Context {
-  onLookup?: (request: LookupRequest) => void;
-  diagnostics: DiagnosticsCollector;
-}
-
-/**
- * Render one structured-content tree to React elements.
- *
- * Every element is built with `createElement` from a whitelisted tag and a
- * whitelisted set of attributes. There is no `innerHTML` and no
- * `dangerouslySetInnerHTML` anywhere in this package, so nothing the dictionary
- * says can become markup — only text, or one of eight elements.
- */
-export function renderStructuredContent(
-  node: StructuredContentNode | undefined,
-  options: RenderOptions = {}
-): ReactNode {
-  const context: Context = {
-    onLookup: options.onLookup,
-    diagnostics: options.diagnostics ?? NULL_DIAGNOSTICS,
-  };
-  return renderNode(node, context, 'root');
-}
-
-function renderNode(node: unknown, context: Context, key: string): ReactNode {
+function renderNode(node: unknown, onLookup: ((request: LookupRequest) => void) | undefined, key: string): ReactNode {
   if (node === null || node === undefined || typeof node === 'boolean') return null;
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number') return String(node);
-
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
   if (Array.isArray(node)) {
-    return node.map((child, index) => (
-      <Fragment key={`${key}.${index}`}>{renderNode(child, context, `${key}.${index}`)}</Fragment>
-    ));
+    return node.map((child, index) => <Fragment key={`${key}.${index}`}>{renderNode(child, onLookup, `${key}.${index}`)}</Fragment>);
   }
+  if (typeof node !== 'object') return null;
 
-  if (typeof node !== 'object') {
-    context.diagnostics.skippedNode();
-    return null;
+  const element = node as StructuredContentElement;
+  const children = renderNode(element.content, onLookup, `${key}.content`);
+  const tag = typeof element.tag === 'string' && TAGS.has(element.tag) ? element.tag : 'span';
+  const data = isRecord(element.data) ? element.data : {};
+  const classes = [
+    typeof data.class === 'string' && TOKEN.test(data.class) ? CLASS_STYLES[data.class] : '',
+    typeof data.content === 'string' && TOKEN.test(data.content) ? CONTENT_STYLES[data.content] : '',
+  ].filter(Boolean).join(' ');
+  const props: Record<string, unknown> = { key };
+  if (classes) props.className = classes;
+  if (typeof element.lang === 'string' && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(element.lang)) props.lang = element.lang;
+  if (typeof element.title === 'string' && element.title.length <= 200) props.title = element.title;
+
+  if (element.tag === 'a') {
+    const request = lookupRequest(element.href);
+    if (request && onLookup) {
+      return createElement('button', {
+        ...props,
+        type: 'button',
+        className: [classes, 'link link-primary cursor-pointer text-start'].filter(Boolean).join(' '),
+        onClick: () => onLookup(request),
+      }, children);
+    }
+    return createElement('span', props, children);
   }
-
-  return renderElement(node as StructuredContentElement, context, key);
+  return createElement(tag, props, children);
 }
 
-function renderElement(element: StructuredContentElement, context: Context, key: string): ReactNode {
-  const children = renderNode(element.content, context, `${key}>`);
-  const tag = element.tag;
-
-  // Unsupported tag — tables and images in this iteration. The element itself
-  // goes, its contents stay, and the fact is counted.
-  if (!isSupportedTag(tag)) {
-    context.diagnostics.unsupportedTag(typeof tag === 'string' ? tag : '(missing)');
-    return children;
-  }
-
-  if (tag === 'a') return renderLink(element, children, context, key);
-
-  const props = baseProps(element, context);
-  return createElement(tag, { ...props, key }, children);
-}
-
-/**
- * An `<a>` becomes one of two things and never a navigable link: a button that
- * asks for another lookup, or the text it was wrapping.
- */
-function renderLink(
-  element: StructuredContentElement,
-  children: ReactNode,
-  context: Context,
-  key: string
-): ReactNode {
-  const policy = classifyHref(element.href);
-
-  if (policy.kind === 'text' || !context.onLookup) {
-    if (policy.kind === 'text') context.diagnostics.blockedLink(policy.reason);
-    else context.diagnostics.blockedLink('no-handler');
-    const props = baseProps(element, context);
-    return createElement('span', { ...props, key }, children);
-  }
-
-  const { request } = policy;
-  const onLookup = context.onLookup;
-  const props = baseProps(element, context);
-  return createElement(
-    'button',
-    {
-      ...props,
-      key,
-      type: 'button',
-      className: [props.className, 'link link-primary cursor-pointer text-start']
-        .filter(Boolean)
-        .join(' '),
-      onClick: () => onLookup(request),
-    },
-    children
-  );
-}
-
-interface BaseProps {
-  className?: string;
-  lang?: string;
-  title?: string;
-  style?: { listStyleType: string };
-  'data-sc-content'?: string;
-  'data-sc-class'?: string;
-  'data-sc-code'?: string;
-}
-
-/**
- * The whitelist, applied. Anything not named here never reaches the DOM, and
- * anything named but malformed is dropped and counted.
- */
-function baseProps(element: StructuredContentElement, context: Context): BaseProps {
-  const props: BaseProps = {};
-  const classes: string[] = [];
-
-  const data = isRecord(element.data) ? element.data : undefined;
-
-  const hook = data?.content;
-  if (hook !== undefined) {
-    if (isSafeToken(hook)) {
-      props['data-sc-content'] = hook;
-      // An empty entry means "known, styled by nothing of ours"; a missing one
-      // is a hook this iteration does not cover, which is worth counting.
-      if (hook in HOOK_CLASSES) {
-        const styling = HOOK_CLASSES[hook];
-        if (styling) classes.push(styling);
-      } else {
-        context.diagnostics.unstyledHook(hook);
-      }
-    } else {
-      context.diagnostics.droppedAttribute('data.content');
-    }
-  }
-
-  const styleClass = data?.class;
-  if (styleClass !== undefined) {
-    if (isSafeToken(styleClass)) {
-      props['data-sc-class'] = styleClass;
-      const styling = CLASS_CLASSES[styleClass];
-      if (styling) classes.push(styling);
-    } else {
-      context.diagnostics.droppedAttribute('data.class');
-    }
-  }
-
-  // Carried through because the dictionary stylesheet colours part-of-speech
-  // badges by code; it is never used to build a class name of ours.
-  const code = data?.code;
-  if (code !== undefined) {
-    if (isSafeToken(code)) props['data-sc-code'] = code;
-    else context.diagnostics.droppedAttribute('data.code');
-  }
-
-  if (element.lang !== undefined) {
-    if (isSafeLanguage(element.lang)) props.lang = element.lang;
-    else context.diagnostics.droppedAttribute('lang');
-  }
-
-  if (element.title !== undefined) {
-    const title = safeTitle(element.title);
-    if (title) props.title = title;
-    else context.diagnostics.droppedAttribute('title');
-  }
-
-  if (isRecord(element.style)) {
-    for (const name of Object.keys(element.style)) {
-      if (name !== 'listStyleType') {
-        context.diagnostics.droppedAttribute(`style.${name}`);
-      }
-    }
-    const listStyleType = safeListStyleType(element.style.listStyleType);
-    if (listStyleType) props.style = { listStyleType };
-    else if (element.style.listStyleType !== undefined) {
-      context.diagnostics.droppedAttribute('style.listStyleType');
-    }
-  }
-
-  if (classes.length > 0) props.className = classes.join(' ');
-  return props;
+function lookupRequest(href: unknown): LookupRequest | undefined {
+  if (typeof href !== 'string' || !href.startsWith('?')) return undefined;
+  const params = new URLSearchParams(href.slice(1));
+  const query = params.get('query');
+  if (!query || query.length > 200) return undefined;
+  return { query, reading: params.get('reading') ?? undefined };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

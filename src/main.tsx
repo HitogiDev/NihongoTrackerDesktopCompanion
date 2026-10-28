@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router-dom';
@@ -10,6 +10,14 @@ import App from './App';
 import { initI18n } from './i18n';
 import { detectLanguage } from './i18n/languages';
 import './index.css';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { installDesktopBehavior } from './lib/desktop';
+
+if (getCurrentWindow().label.startsWith('reading-overlay')) {
+  document.documentElement.setAttribute('data-reading-overlay', '');
+}
+
+installDesktopBehavior();
 
 // Start in the system language; the store switches to the stored one as soon as
 // settings come back from Rust.
@@ -25,7 +33,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <HashRouter>
-        <App />
+        <Suspense fallback={null}>
+          <App />
+        </Suspense>
       </HashRouter>
     </QueryClientProvider>
   </React.StrictMode>

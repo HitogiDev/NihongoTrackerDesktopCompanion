@@ -3,10 +3,11 @@
 //! finished session into a log (queued or parked for confirmation).
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::Settings;
@@ -14,7 +15,7 @@ use crate::db::TextState;
 use crate::parser;
 use crate::platform;
 use crate::players;
-use crate::playback::PlaybackSource;
+use crate::playback::{Playback, PlaybackSource};
 use crate::state::{
     AnimeSession, AppState, MediaMatch, PlaybackSnapshot, TrackerSnapshot, VnSession,
 };
@@ -28,18 +29,31 @@ pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut sys = System::new();
         let mut persist_countdown: u64 = 0;
+        let mut last_tick = Instant::now();
         loop {
             let settings = {
                 let state = app.state::<AppState>();
                 state.settings_snapshot().await
             };
             let interval = settings.poll_interval_ms.clamp(250, 10_000);
-            let tick_secs = (interval as f64 / 1000.0).max(0.25);
 
-            tick(&app, &mut sys, &settings, tick_secs, &mut persist_countdown).await;
+            let now = Instant::now();
+            let elapsed = credited_elapsed(now.duration_since(last_tick), interval);
+            last_tick = now;
+
+            tick(&app, &mut sys, &settings, elapsed, &mut persist_countdown).await;
             tokio::time::sleep(Duration::from_millis(interval)).await;
         }
     });
+}
+
+/// Real time between two ticks, which is what sessions are credited with: the
+/// sleep comes after the tick, so the period is the interval plus however long
+/// the tick took, and an interval like 750 ms is not a whole second. Capped so a
+/// suspended machine or a stalled loop does not turn the gap into reading time.
+fn credited_elapsed(since_last_tick: Duration, interval_ms: u64) -> Duration {
+    let cap = Duration::from_millis(interval_ms.saturating_mul(3)).max(Duration::from_secs(5));
+    since_last_tick.min(cap)
 }
 
 struct Observed {
@@ -47,21 +61,46 @@ struct Observed {
     foreground_process: Option<String>,
     foreground_title: Option<String>,
     idle_seconds: u64,
-    running: HashMap<String, u32>,
+    foreground_pid: Option<u32>,
+    running: HashMap<String, Vec<ObservedProcess>>,
+    /// Players on the desktop's media bus (MPRIS on Linux), for when their
+    /// window titles cannot be read.
+    media: Vec<platform::MediaPlayer>,
+}
+
+struct ObservedProcess {
+    pid: u32,
+    image_path: Option<PathBuf>,
+}
+
+impl Observed {
+    fn active_window_summary(&self) -> (Option<String>, Option<String>) {
+        if self.foreground_pid == Some(std::process::id()) {
+            return (None, None);
+        }
+        (self.foreground_process.clone(), self.foreground_title.clone())
+    }
 }
 
 fn observe(sys: &mut System) -> Observed {
-    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::new());
+    let refresh = ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet);
+    // Outside Windows the command line names Wine / Proton games (see
+    // `platform::process_key`).
+    #[cfg(not(windows))]
+    let refresh = refresh.with_cmd(UpdateKind::OnlyIfNotSet);
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh);
 
-    let mut running: HashMap<String, u32> = HashMap::new();
+    let mut running: HashMap<String, Vec<ObservedProcess>> = HashMap::new();
     for (pid, process) in sys.processes() {
-        let name = process.name().to_string_lossy().to_ascii_lowercase();
-        running.entry(name).or_insert(pid.as_u32());
+        running.entry(platform::process_key(process)).or_default().push(ObservedProcess {
+            pid: pid.as_u32(),
+            image_path: process.exe().map(PathBuf::from),
+        });
     }
 
     let name_of = |pid: u32| -> String {
         sys.process(Pid::from_u32(pid))
-            .map(|p| p.name().to_string_lossy().to_ascii_lowercase())
+            .map(platform::process_key)
             .unwrap_or_default()
     };
 
@@ -77,9 +116,11 @@ fn observe(sys: &mut System) -> Observed {
     Observed {
         windows,
         foreground_process: fg.as_ref().map(|w| name_of(w.pid)),
+        foreground_pid: fg.as_ref().map(|w| w.pid),
         foreground_title: fg.map(|w| w.title),
         idle_seconds: platform::idle_seconds(),
         running,
+        media: platform::media_players(),
     }
 }
 
@@ -87,39 +128,87 @@ async fn tick(
     app: &AppHandle,
     sys: &mut System,
     settings: &Settings,
-    tick_secs: f64,
+    elapsed: Duration,
     persist_countdown: &mut u64,
 ) {
     let observed = observe(sys);
     let state = app.state::<AppState>();
 
     let mut snapshot = state.tracker.read().await.clone();
-    snapshot.platform_supported = platform::supported();
-    snapshot.enabled = settings.detect_players || settings.detect_visual_novels;
-    snapshot.active_process = observed.foreground_process.clone();
-    snapshot.active_window = observed.foreground_title.clone();
+    apply_vn_timer_edit(&state, &mut snapshot);
+    snapshot.capabilities = platform::capabilities();
+    snapshot.platform_supported = snapshot.capabilities.window_titles
+        || snapshot.capabilities.media_sessions
+        || snapshot.capabilities.foreground;
+    snapshot.enabled = settings.detect_players || settings.detect_visual_novels || settings.detect_games;
+    (snapshot.active_process, snapshot.active_window) = observed.active_window_summary();
     snapshot.idle_seconds = observed.idle_seconds;
 
     if settings.detect_players {
-        update_anime(app, &mut snapshot, &observed, settings, tick_secs).await;
+        update_anime(app, &mut snapshot, &observed, settings, elapsed).await;
     } else {
         snapshot.anime = None;
     }
 
-    if settings.detect_visual_novels {
-        update_vn(app, &mut snapshot, &observed, settings, tick_secs, persist_countdown).await;
+    if settings.detect_visual_novels || settings.detect_games {
+        update_vn(app, &mut snapshot, &observed, settings, elapsed, persist_countdown).await;
     } else if snapshot.vn.is_some() {
         finish_vn(app, &mut snapshot, settings).await;
     }
 
+    crate::reading_overlay::sync_session(app, &snapshot, settings);
+    update_native_game_hook(app, &mut snapshot, &observed);
+
     snapshot.queued_count = state.db.queued_count();
     snapshot.pending_count = state.db.list_pending().map(|p| p.len() as i64).unwrap_or(0);
 
-    *state.tracker.write().await = snapshot.clone();
+    let mut current = state.tracker.write().await;
+    apply_vn_timer_edit(&state, &mut snapshot);
+    *current = snapshot.clone();
+    drop(current);
     let _ = app.emit(EVT_TRACKER, &snapshot);
+    crate::native_bridge::publish_status(app, &snapshot.game_hook).await;
     // Hands the presence to its own thread, which owns the rate limit and the
     // socket; nothing here can block on Discord.
     crate::discord::update(app, &snapshot, settings).await;
+}
+
+fn apply_vn_timer_edit(state: &AppState, snapshot: &mut TrackerSnapshot) {
+    let Some(edit) = state.vn_timer_edit.lock().unwrap().take() else { return; };
+    let Some(session) = snapshot.vn.as_mut() else { return; };
+    if !edit.apply(session) { return; }
+    let mut stored = state.db.get_text_state(&session.content_id);
+    stored.timer_seconds = session.elapsed_secs as i64;
+    let _ = state.db.save_text_state(&stored);
+}
+
+fn update_native_game_hook(app: &AppHandle, snapshot: &mut TrackerSnapshot, observed: &Observed) {
+    let state = app.state::<AppState>();
+    let target = snapshot.vn.as_ref().and_then(|session| {
+        if session.media_type != "game" && session.media_type != "vn" {
+            return None;
+        }
+        let entry = state
+            .db
+            .list_vn_apps()
+            .ok()?
+            .into_iter()
+            .find(|entry| entry.enabled && entry.native_hook_enabled && entry.exe == session.exe)?;
+        let processes = observed.running.get(&entry.exe)?;
+        let process = processes
+            .iter()
+            .find(|process| process.pid == session.pid)
+            .or_else(|| processes.first())?;
+        Some(crate::native_hook::GameHookTarget {
+            content_id: session.content_id.clone(),
+            exe: entry.exe,
+            pid: process.pid,
+            image_path: process.image_path.clone(),
+            selected_hook_code: entry.native_hook_code,
+        })
+    });
+    state.game_hook.reconcile(app, target);
+    snapshot.game_hook = state.game_hook.status();
 }
 
 // ── anime ──────────────────────────────────────────────────────────────
@@ -129,15 +218,22 @@ async fn update_anime(
     snapshot: &mut TrackerSnapshot,
     observed: &Observed,
     settings: &Settings,
-    tick_secs: f64,
+    elapsed: Duration,
 ) {
+    // Window titles first, as on Windows; then the media bus, which is all a
+    // Wayland session or a macOS install without Screen Recording offers.
     let detected = observed.windows.iter().find_map(|w| {
         let player = players::lookup(&w.process)?;
         let file = player.extract_file_name(&w.title)?;
-        Some((player.name.to_string(), file))
-    });
+        Some((player.name.to_string(), file, None))
+    }).or_else(|| observed.media.iter().find_map(|media| {
+        let player = players::lookup(&media.name)?;
+        let file = players::media_file_name(media.url.as_deref(), media.title.as_deref())?;
+        let file = player.extract_file_name(&file)?;
+        Some((player.name.to_string(), file, Some(media)))
+    }));
 
-    let Some((player_name, file_name)) = detected else {
+    let Some((player_name, file_name, media)) = detected else {
         // Player closed or went idle: drop the session (an unfinished episode
         // is simply not logged).
         snapshot.anime = None;
@@ -171,6 +267,7 @@ async fn update_anime(
             parsed,
             media: None,
             elapsed_secs: 0,
+            elapsed_carry_ms: 0,
             threshold_secs: threshold_for(settings, None),
             threshold_percent: settings.anime_threshold_percent.clamp(1, 100),
             position_secs: None,
@@ -201,14 +298,21 @@ async fn update_anime(
     // Where the player said it was on the previous tick. Probing runs off the
     // tick (see `request_playback`), so this is at most one second stale — which
     // does not matter over a 24-minute episode.
-    let reported = {
-        let state = app.state::<AppState>();
-        let cell = state.playback.read().await;
-        cell.as_ref()
-            .filter(|snapshot| snapshot.player == player_name)
-            .map(|snapshot| snapshot.playback.clone())
+    let reported = match media {
+        // The media bus already carries the position; no probe needed.
+        Some(media) => media_playback(media).filter(|_| settings.use_player_position),
+        None => {
+            let reported = {
+                let state = app.state::<AppState>();
+                let cell = state.playback.read().await;
+                cell.as_ref()
+                    .filter(|snapshot| snapshot.player == player_name)
+                    .map(|snapshot| snapshot.playback.clone())
+            };
+            request_playback(app, &player_name);
+            reported
+        }
     };
-    request_playback(app, &player_name);
 
     match reported {
         Some(playback) => {
@@ -217,7 +321,7 @@ async fn update_anime(
             session.paused = playback.paused;
             session.source = PlaybackSource::Player;
             if !playback.paused {
-                session.elapsed_secs += tick_secs.round() as u64;
+                session.credit_elapsed(elapsed);
             }
         }
         None => {
@@ -225,7 +329,7 @@ async fn update_anime(
             session.duration_secs = None;
             session.paused = false;
             session.source = PlaybackSource::Elapsed;
-            session.elapsed_secs += tick_secs.round() as u64;
+            session.credit_elapsed(elapsed);
         }
     }
     session.progress = session.compute_progress();
@@ -233,8 +337,18 @@ async fn update_anime(
     if session.ready() && !session.logged {
         session.logged = true;
         let session = session.clone();
-        commit_anime(app, &session, settings, false).await;
+        commit_anime(app, &session, settings, false, "").await;
     }
+}
+
+fn media_playback(media: &platform::MediaPlayer) -> Option<Playback> {
+    let duration = media.duration_secs.filter(|duration| *duration > 0.0)?;
+    Some(Playback {
+        position_secs: media.position_secs.unwrap_or(0.0),
+        duration_secs: duration,
+        paused: media.paused,
+        file: media.url.clone(),
+    })
 }
 
 fn threshold_for(settings: &Settings, media: Option<&MediaMatch>) -> u64 {
@@ -257,6 +371,7 @@ pub async fn commit_anime(
     session: &AnimeSession,
     settings: &Settings,
     forced: bool,
+    comment: &str,
 ) -> bool {
     let state = app.state::<AppState>();
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -277,9 +392,13 @@ pub async fn commit_anime(
     let mut payload = json!({
         "type": "anime",
         "description": title,
+        "mediaTitle": title,
         "episodes": session.parsed.episode_count(),
         "date": chrono::Utc::now().to_rfc3339(),
     });
+    if forced && !comment.trim().is_empty() {
+        payload["description"] = json!(comment.trim());
+    }
     if let Some(media) = &session.media {
         payload["mediaId"] = json!(media.content_id);
     }
@@ -332,16 +451,23 @@ async fn update_vn(
     snapshot: &mut TrackerSnapshot,
     observed: &Observed,
     settings: &Settings,
-    tick_secs: f64,
+    elapsed: Duration,
     persist_countdown: &mut u64,
 ) {
     let state = app.state::<AppState>();
     let apps = state.db.list_vn_apps().unwrap_or_default();
 
-    let running = apps
+    let eligible = apps
         .iter()
-        .filter(|a| a.enabled)
-        .find(|a| observed.running.contains_key(&a.exe.to_ascii_lowercase()));
+        .filter(|a| a.enabled && if a.media_type == "game" { settings.detect_games } else { settings.detect_visual_novels })
+        .filter(|a| observed.running.contains_key(&a.exe.to_ascii_lowercase()))
+        .collect::<Vec<_>>();
+    // Prefer the foreground work. If focus moves elsewhere, retain the current
+    // session rather than switching to another background process each tick.
+    let running = eligible.iter().copied()
+        .find(|a| observed.foreground_process.as_deref() == Some(a.exe.as_str()))
+        .or_else(|| eligible.iter().copied().find(|a| snapshot.vn.as_ref().is_some_and(|s| s.exe == a.exe)))
+        .or_else(|| eligible.first().copied());
 
     match (running, snapshot.vn.is_some()) {
         (None, true) => {
@@ -353,16 +479,34 @@ async fn update_vn(
     }
 
     let vn_app = running.expect("checked above");
+    let processes = observed
+        .running
+        .get(&vn_app.exe.to_ascii_lowercase())
+        .expect("eligible VN app has a running process");
+    let process = processes
+        .iter()
+        .find(|process| Some(process.pid) == observed.foreground_pid)
+        .or_else(|| {
+            snapshot
+                .vn
+                .as_ref()
+                .filter(|session| session.exe == vn_app.exe)
+                .and_then(|session| processes.iter().find(|process| process.pid == session.pid))
+        })
+        .or_else(|| processes.first())
+        .expect("eligible VN app has a running process");
+    let pid = process.pid;
     let restart = snapshot
         .vn
         .as_ref()
-        .map(|s| s.exe != vn_app.exe)
+        .map(|s| s.exe != vn_app.exe || s.pid != pid)
         .unwrap_or(true);
 
     if restart {
         if snapshot.vn.is_some() {
             finish_vn(app, snapshot, settings).await;
         }
+        state.session_paused.store(false, std::sync::atomic::Ordering::Release);
         let stored = state.db.get_text_state(&vn_app.media_id);
         let (lines, chars) = state.db.text_totals(&vn_app.media_id);
         let _ = state.db.save_text_state(&TextState {
@@ -376,35 +520,34 @@ async fn update_vn(
 
         snapshot.vn = Some(VnSession {
             exe: vn_app.exe.clone(),
+            pid,
             content_id: vn_app.media_id.clone(),
             media_title: vn_app.media_title.clone(),
             media_type: vn_app.media_type.clone(),
             image: vn_app.image.clone(),
             is_adult: vn_app.is_adult,
+            is_adult_image: vn_app.is_adult_image,
             elapsed_secs: 0,
+            elapsed_carry_ms: 0,
             counting: false,
+            paused_by_user: false,
             started_at: crate::db::now_iso(),
             session_chars: 0,
             session_lines: 0,
         });
 
-        // Point the hooker at this work from here, not from the frontend: the
-        // window may be hidden in the tray and its listener never fire.
+        // Keep the reader and mining context on the detected work, even if a
+        // game does not open or connect the reader automatically.
+        if vn_app.media_type == "vn" {
+            crate::discord::request_vn_image_rating(app, vn_app.media_id.clone(), true);
+        }
         {
             let mut hooker = state.hooker.write().await;
             hooker.content_id = Some(vn_app.media_id.clone());
             hooker.content_title = Some(vn_app.media_title.clone());
         }
-        let hooker_idle = {
-            let hooker = state.hooker.read().await;
-            hooker.status != crate::state::HookerStatus::Connected
-        };
-        if settings.texthooker_autoconnect && hooker_idle {
-            let _ = state
-                .hooker_tx
-                .send(crate::state::HookerCommand::Connect(
-                    settings.texthooker_ws_url.clone(),
-                ));
+        if settings.texthooker_autoconnect && !vn_app.native_hook_enabled {
+            let _ = state.hooker_tx.send(crate::state::HookerCommand::Connect(settings.texthooker_ws_url.clone()));
         }
         let hooker_snapshot = state.hooker.read().await.clone();
         let _ = app.emit(crate::texthooker::EVT_STATUS, &hooker_snapshot);
@@ -416,10 +559,17 @@ async fn update_vn(
                 "title": vn_app.media_title,
                 "type": vn_app.media_type,
                 "image": vn_app.image,
-                "openTexthooker": settings.vn_open_texthooker,
-                "externalUrl": vn_app.texthooker_url,
             }),
         );
+        // Opened from here, not from the main window's listener: that window
+        // may not exist at all while the app lives in the tray.
+        if settings.vn_open_texthooker {
+            let app = app.clone();
+            let content_id = vn_app.media_id.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = crate::commands::open_work_texthooker(app, Some(content_id), true).await;
+            });
+        }
         notify(
             app,
             settings,
@@ -428,22 +578,23 @@ async fn update_vn(
         );
     }
 
-    let focused = observed
-        .foreground_process
-        .as_deref()
-        .map(|p| p == vn_app.exe.to_ascii_lowercase())
-        .unwrap_or(false);
+    // Where the focused window cannot be known (Wayland), focus is assumed:
+    // otherwise a game, which only counts while focused, would never count.
+    let focused = !snapshot.capabilities.foreground || observed.foreground_pid == Some(pid);
     let afk = settings.afk_timeout_secs > 0 && observed.idle_seconds >= settings.afk_timeout_secs;
-    let counting = (!settings.vn_require_focus || focused) && !afk;
+    let paused_by_user = state.session_paused.load(std::sync::atomic::Ordering::Acquire);
+    let counting = (if vn_app.media_type == "game" { focused } else { !settings.vn_require_focus || focused }) && !afk && !paused_by_user;
 
     let content_id = vn_app.media_id.clone();
     let (lines, chars) = state.db.text_totals(&content_id);
     let baseline = state.db.get_text_state(&content_id);
 
     if let Some(session) = snapshot.vn.as_mut() {
+        session.is_adult_image = vn_app.is_adult_image;
         session.counting = counting;
+        session.paused_by_user = paused_by_user;
         if counting {
-            session.elapsed_secs += tick_secs.round() as u64;
+            session.credit_elapsed(elapsed);
         }
         session.session_chars = (chars - baseline.baseline_chars).max(0);
         session.session_lines = (lines - baseline.baseline_lines).max(0);
@@ -468,11 +619,15 @@ async fn update_vn(
 
 /// Close the current VN session and turn it into a log.
 async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &Settings) {
+    apply_vn_timer_edit(&app.state::<AppState>(), snapshot);
     let Some(session) = snapshot.vn.take() else {
         return;
     };
     let state = app.state::<AppState>();
     let minutes = session.elapsed_secs / 60;
+    if state.hooker.read().await.content_id.as_deref() == Some(session.content_id.as_str()) {
+        let _ = state.hooker_tx.send(crate::state::HookerCommand::Disconnect);
+    }
 
     let _ = app.emit(
         EVT_VN_ENDED,
@@ -484,7 +639,7 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
         }),
     );
 
-    if minutes == 0 && session.session_chars == 0 {
+    if minutes == 0 && (session.media_type == "game" || session.session_chars == 0) {
         return;
     }
 
@@ -497,11 +652,11 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
     if minutes > 0 {
         payload["time"] = json!(minutes);
     }
-    if session.session_chars > 0 {
+    if session.media_type != "game" && session.session_chars > 0 {
         payload["chars"] = json!(session.session_chars);
     }
     payload["_detected"] = json!({
-        "source": "vn",
+        "source": if session.media_type == "game" { "game" } else { "vn" },
         "exe": session.exe,
         "lines": session.session_lines,
         "seconds": session.elapsed_secs,
@@ -515,12 +670,14 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
         crate::i18n::session_summary(lang, minutes, session.session_chars)
     );
 
-    if settings.vn_confirm_before_log {
-        sync::add_pending(app, &payload, "vn");
+    if settings.vn_confirm_before_log || session.media_type == "game" {
+        sync::add_pending(app, &payload, if session.media_type == "game" { "game" } else { "vn" });
         notify(app, settings, crate::i18n::session_ended(lang), &summary);
     } else {
         sync::enqueue_log(app, &payload);
-        queue_history(app, &session.content_id, &session, minutes);
+        if session.media_type != "game" {
+            queue_history(app, &session.content_id, &session, minutes);
+        }
         notify(app, settings, crate::i18n::session_logged(lang), &summary);
         flush_later(app);
     }
@@ -544,6 +701,7 @@ pub fn queue_history(app: &AppHandle, content_id: &str, session: &VnSession, min
     } else {
         0
     };
+    let logged_at = crate::db::now_iso();
     let payload = json!({
         "contentId": content_id,
         "entry": {
@@ -553,13 +711,18 @@ pub fn queue_history(app: &AppHandle, content_id: &str, session: &VnSession, min
             "charactersLogged": session.session_chars,
             "readingSpeed": speed,
             "sessionSeconds": session.elapsed_secs,
-            "loggedAt": chrono::Utc::now().to_rfc3339(),
+            "loggedAt": logged_at,
         },
         "minutes": minutes,
     });
     let _ = state
         .db
         .enqueue(&sync::new_id(), "texthooker_history", &payload.to_string());
+    let _ = state.db.add_text_history(&crate::db::TextHistoryEntry {
+        id: sync::new_id(), content_id: content_id.to_string(), logged_at,
+        chars: session.session_chars, lines: session.session_lines,
+        seconds: session.elapsed_secs as i64, speed, intelligence: None,
+    });
 }
 
 // ── helpers ────────────────────────────────────────────────────────────
@@ -663,6 +826,75 @@ fn notify(app: &AppHandle, settings: &Settings, title: &str, body: &str) {
     if !settings.notifications {
         return;
     }
-    use tauri_plugin_notification::NotificationExt;
-    let _ = app.notification().builder().title(title).body(body).show();
+    crate::notifications::show(app, title, body);
+}
+
+#[cfg(test)]
+mod observation_tests {
+    use super::*;
+
+    #[test]
+    fn active_window_summary_excludes_companion_windows_and_preserves_focus() {
+        let own_pid = std::process::id();
+        let mut observed = Observed {
+            windows: Vec::new(),
+            foreground_process: Some("renamed-companion.exe".into()),
+            foreground_title: Some("Settings".into()),
+            idle_seconds: 0,
+            foreground_pid: Some(own_pid),
+            running: HashMap::new(),
+            media: Vec::new(),
+        };
+        assert_eq!(observed.active_window_summary(), (None, None));
+        assert_eq!(observed.foreground_pid, Some(own_pid));
+
+        observed.foreground_pid = Some(own_pid + 1);
+        observed.foreground_process = Some("game.exe".into());
+        observed.foreground_title = Some("Game".into());
+        assert_eq!(observed.active_window_summary(), (Some("game.exe".into()), Some("Game".into())));
+
+        observed.foreground_pid = None;
+        observed.foreground_process = None;
+        observed.foreground_title = None;
+        assert_eq!(observed.active_window_summary(), (None, None));
+    }
+
+    #[test]
+    fn credited_time_is_the_real_gap_between_ticks_up_to_a_cap() {
+        assert_eq!(credited_elapsed(Duration::from_millis(1030), 1000), Duration::from_millis(1030));
+        assert_eq!(credited_elapsed(Duration::from_millis(760), 750), Duration::from_millis(760));
+        // Suspend, or a tick stuck behind something slow.
+        assert_eq!(credited_elapsed(Duration::from_secs(3600), 1000), Duration::from_secs(5));
+        assert_eq!(credited_elapsed(Duration::from_secs(3600), 5000), Duration::from_secs(15));
+    }
+
+    #[test]
+    fn sub_second_ticks_add_up_to_wall_clock_time() {
+        let mut session: VnSession = serde_json::from_value(json!({
+            "exe": "game.exe", "content_id": "v1", "media_title": "VN", "media_type": "vn",
+            "elapsed_secs": 0, "counting": true, "started_at": "launch",
+            "session_chars": 0, "session_lines": 0
+        })).unwrap();
+        // One minute at the slider's 500 ms and 750 ms steps, which the old
+        // per-tick rounding credited as two minutes and 80 seconds.
+        for _ in 0..120 { session.credit_elapsed(Duration::from_millis(500)); }
+        assert_eq!(session.elapsed_secs, 60);
+        for _ in 0..80 { session.credit_elapsed(Duration::from_millis(750)); }
+        assert_eq!(session.elapsed_secs, 120);
+        // 1250 ms used to round down to a single second.
+        for _ in 0..48 { session.credit_elapsed(Duration::from_millis(1250)); }
+        assert_eq!(session.elapsed_secs, 180);
+        assert_eq!(session.elapsed_carry_ms, 0);
+    }
+
+    #[test]
+    fn observation_includes_the_running_executable_path() {
+        let expected = std::env::current_exe().unwrap();
+        let mut system = System::new();
+        let observed = observe(&mut system);
+        let process = observed.running.values().flatten()
+            .find(|process| process.pid == std::process::id())
+            .expect("The current process must be observed");
+        assert_eq!(process.image_path.as_ref(), Some(&expected));
+    }
 }

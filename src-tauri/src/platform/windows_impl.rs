@@ -7,7 +7,32 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowThreadProcessId, IsWindowVisible,
 };
 
-use super::WindowInfo;
+use super::{Capabilities, WindowInfo};
+
+pub fn capabilities() -> Capabilities {
+    Capabilities {
+        os: "windows".into(),
+        session: None,
+        window_titles: true,
+        foreground: true,
+        idle: true,
+        media_sessions: false,
+        native_hook: true,
+        screenshots: true,
+        actionable_notifications: true,
+        needs_screen_recording: false,
+    }
+}
+
+pub fn game_window_center(pid: u32) -> Option<(f64, f64)> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic};
+    let hwnd = unsafe { GetForegroundWindow() };
+    if window_pid(hwnd) != pid || unsafe { IsIconic(hwnd).as_bool() || !IsWindowVisible(hwnd).as_bool() } { return None; }
+    let mut rect = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut rect).ok()?; }
+    Some(((rect.left as f64 + rect.right as f64) / 2.0, (rect.top as f64 + rect.bottom as f64) / 2.0))
+}
 
 thread_local! {
     static COLLECTED: RefCell<Vec<WindowInfo>> = const { RefCell::new(Vec::new()) };

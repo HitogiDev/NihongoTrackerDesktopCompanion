@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["nihongo-dict", "dictionary-service"]
-
-# `src-tauri` is deliberately outside this workspace: it has its own lock file
-# and its own release cadence, and pulling it in would put the C++ build in
-# front of every desktop build again.

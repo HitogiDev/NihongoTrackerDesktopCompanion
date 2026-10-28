@@ -1,9 +1,18 @@
 {
   "activity": "Actividad",
+  "desktop": "Companion de escritorio",
+  "trackerGroup": "Seguimiento",
+  "communityGroup": "Comunidad",
+  "social": "Actividad de amigos",
+  "account": "Cuenta",
+  "pendingCount": "{{count}} elementos pendientes",
   "pending": "Pendientes",
   "library": "Biblioteca",
   "ranking": "Ranking",
   "texthooker": "Texthooker",
+  "openTexthooker": "Abrir texthooker",
+  "mining": "Frases",
+  "shortcutHint": "{{label}} ({{keys}})",
   "settings": "Ajustes",
   "status": {
     "checking": "Comprobando…",
@@ -11,6 +20,9 @@
     "offline": "Sin conexión",
     "hookerConnected": "Texthooker activo",
     "hookerConnecting": "Conectando hook…",
-    "hookerOffline": "Hook desconectado"
+    "hookerOffline": "Hook desconectado",
+    "hookerIdle": "Hook inactivo",
+    "nativeConnected": "LunaHook conectado",
+    "nativeConnecting": "Conectando LunaHook…"
   }
 }

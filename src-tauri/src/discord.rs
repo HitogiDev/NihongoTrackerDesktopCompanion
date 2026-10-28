@@ -7,7 +7,7 @@
 //!
 //! Privacy rules, in the order they apply:
 //! 1. Blacklisted media or process → nothing at all.
-//! 2. `isAdult`, an unresolved media, or the global generic switch → generic
+//! 2. Adult VN covers, adult non-VN media, unresolved media, or generic mode use generic
 //!    presence: no title, no cover.
 //! 3. Otherwise the full thing.
 //!
@@ -29,6 +29,44 @@ use crate::db::BlacklistEntry;
 use crate::state::{AppState, TrackerSnapshot};
 
 pub const EVT_STATUS: &str = "discord://status";
+
+pub fn request_vn_image_rating(app: &AppHandle, content_id: String, force: bool) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let settings = state.settings_snapshot().await;
+        if !settings.discord_rpc {
+            return;
+        }
+        if !force && state.db.list_vn_apps().unwrap_or_default().iter()
+            .any(|entry| entry.media_id == content_id && entry.is_adult_image.is_some()) {
+            return;
+        }
+        let key = format!("discord-image:{}:{content_id}", settings.api_root());
+        if !state.text_cache_tasks.write().await.insert(key.clone()) {
+            return;
+        }
+        let client = crate::api::ApiClient::new(settings.api_root(), settings.api_key.clone());
+        if let Ok(media) = client.media_detail("vn", &content_id).await {
+            let current = state.settings_snapshot().await;
+            if current.api_root() == settings.api_root() {
+                if let Some(rating) = media.get("isAdultImage").and_then(serde_json::Value::as_bool) {
+                    let _ = state.db.set_vn_image_rating(&content_id, rating);
+                    let snapshot = {
+                        let mut tracker = state.tracker.write().await;
+                        if let Some(session) = tracker.vn.as_mut().filter(|session| session.content_id == content_id) {
+                            session.is_adult_image = Some(rating);
+                        }
+                        tracker.clone()
+                    };
+                    let _ = app.emit(crate::watcher::EVT_TRACKER, &snapshot);
+                    update(&app, &snapshot, &current).await;
+                }
+            }
+        }
+        state.text_cache_tasks.write().await.remove(&key);
+    });
+}
 
 /// Discord rate-limits presence updates to roughly one per 15 s. Updates that
 /// arrive inside the window replace the pending one instead of queueing, so
@@ -85,6 +123,7 @@ pub enum Reason {
     Full,
     /// The work is flagged `isAdult` on NihongoTracker.
     Adult,
+    AdultImage,
     /// The media could not be resolved, so the title is just a file name.
     Unresolved,
     /// The user asked for activity only, with no titles anywhere.
@@ -133,43 +172,55 @@ pub fn decide(
 
     // A reading session wins over a video: if both are somehow live, the one
     // the user is actually interacting with is the novel in the foreground.
-    if let Some(vn) = snapshot.vn.as_ref().filter(|vn| vn.counting) {
-        if let Some(entry) = blacklisted(blacklist, &vn.content_id).or_else(|| blacklisted(blacklist, &vn.exe)) {
-            return Decision::Blocked {
-                label: entry.label.clone(),
+    if let Some(vn) = snapshot.vn.as_ref() {
+        let counting = vn.counting;
+        let show_session = counting || settings.discord_show_idle;
+        if show_session {
+            if let Some(entry) =
+                blacklisted(blacklist, &vn.content_id).or_else(|| blacklisted(blacklist, &vn.exe))
+            {
+                return Decision::Blocked {
+                    label: entry.label.clone(),
+                };
+            }
+            let reason = if vn.media_type == "vn" && vn.is_adult_image == Some(true) {
+                Reason::AdultImage
+            } else if (vn.media_type != "vn" || vn.is_adult_image.is_none()) && vn.is_adult {
+                Reason::Adult
+            } else if settings.discord_generic_mode {
+                Reason::Generic
+            } else {
+                Reason::Full
+            };
+            let hide = reason != Reason::Full;
+            return Decision::Show {
+                presence: Presence {
+                    details: if hide {
+                        crate::i18n::discord_generic(lang).to_string()
+                    } else if counting {
+                        crate::i18n::discord_reading(lang, &vn.media_title)
+                    } else {
+                        crate::i18n::discord_idling(lang, &vn.media_title)
+                    },
+                    state: crate::i18n::discord_chars(lang, vn.session_chars),
+                    large_image: match (hide, vn.image.as_deref()) {
+                        (false, Some(image)) if !image.is_empty() => image.to_string(),
+                        _ => settings.discord_large_image.clone(),
+                    },
+                    large_text: if hide {
+                        crate::i18n::discord_generic(lang).to_string()
+                    } else {
+                        vn.media_title.clone()
+                    },
+                    start_epoch: epoch_of(&vn.started_at),
+                    button,
+                    generic: hide,
+                },
+                reason,
             };
         }
-        let reason = if vn.is_adult {
-            Reason::Adult
-        } else if settings.discord_generic_mode {
-            Reason::Generic
-        } else {
-            Reason::Full
-        };
-        let hide = reason != Reason::Full;
-        return Decision::Show {
-            presence: Presence {
-                details: if hide {
-                    crate::i18n::discord_generic(lang).to_string()
-                } else {
-                    crate::i18n::discord_reading(lang, &vn.media_title)
-                },
-                state: crate::i18n::discord_chars(lang, vn.session_chars),
-                large_image: match (hide, vn.image.as_deref()) {
-                    (false, Some(image)) if !image.is_empty() => image.to_string(),
-                    _ => settings.discord_large_image.clone(),
-                },
-                large_text: if hide {
-                    crate::i18n::discord_generic(lang).to_string()
-                } else {
-                    vn.media_title.clone()
-                },
-                start_epoch: epoch_of(&vn.started_at),
-                button,
-                generic: hide,
-            },
-            reason,
-        };
+        // Out of focus and "idling" turned off: fall through. The presence
+        // goes empty, exactly as if nothing was being read.
     }
 
     if let Some(anime) = snapshot.anime.as_ref().filter(|anime| !anime.paused) {
@@ -486,6 +537,11 @@ pub async fn apply_settings(app: &AppHandle, settings: &Settings) {
         Some(discord) => discord.send(Command::Reconnect(settings.discord_app_id.clone())),
         None => *slot = Some(spawn(app.clone(), settings.discord_app_id.clone())),
     }
+    drop(slot);
+    let session = state.tracker.read().await.vn.clone();
+    if let Some(session) = session.filter(|session| session.media_type == "vn") {
+        request_vn_image_rating(app, session.content_id, false);
+    }
 }
 
 /// Wipe the presence on the way out. Called from the exit handler, where there
@@ -524,13 +580,17 @@ mod tests {
     fn vn(is_adult: bool) -> VnSession {
         VnSession {
             exe: "aokana.exe".into(),
+            pid: 1,
             content_id: "v18".into(),
             media_title: "蒼の彼方のフォーリズム".into(),
             media_type: "vn".into(),
             image: Some("https://img/cover.jpg".into()),
             is_adult,
+            is_adult_image: None,
             elapsed_secs: 600,
+            elapsed_carry_ms: 0,
             counting: true,
+            paused_by_user: false,
             started_at: "2026-08-12T20:00:00Z".into(),
             session_chars: 12_400,
             session_lines: 300,
@@ -554,6 +614,7 @@ mod tests {
             resolved: true,
             unmatched: false,
             elapsed_secs: 300,
+            elapsed_carry_ms: 0,
             threshold_secs: 900,
             threshold_percent: 70,
             position_secs: None,
@@ -583,6 +644,32 @@ mod tests {
             vn: Some(session),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn adult_vn_with_non_adult_cover_shows_title_and_image() {
+        let mut session = vn(true);
+        session.is_adult_image = Some(false);
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[]) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Full);
+        assert!(!presence.generic);
+        assert!(presence.details.contains("蒼"));
+        assert_eq!(presence.large_image, "https://img/cover.jpg");
+    }
+
+    #[test]
+    fn adult_vn_cover_hides_title_and_image() {
+        let mut session = vn(false);
+        session.is_adult_image = Some(true);
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[]) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::AdultImage);
+        assert!(presence.generic);
+        assert!(!presence.details.contains("蒼"));
+        assert_ne!(presence.large_image, "https://img/cover.jpg");
     }
 
     fn snapshot_anime(session: AnimeSession) -> TrackerSnapshot {
@@ -617,6 +704,7 @@ mod tests {
         };
         assert_eq!(reason, Reason::Full);
         assert!(presence.details.contains("蒼の彼方のフォーリズム"));
+        assert!(presence.details.starts_with("Reading"));
         assert_eq!(presence.state, "12.4k characters");
         assert_eq!(presence.large_image, "https://img/cover.jpg");
         // The session start, so Discord runs the clock itself.
@@ -626,6 +714,39 @@ mod tests {
             "https://nihongotracker.app/user/hitogi"
         );
         assert!(!presence.generic);
+    }
+
+    #[test]
+    fn an_unfocused_vn_stays_as_idling_when_enabled() {
+        // On by default: losing focus swaps "reading" for "idling" instead of
+        // wiping the presence, and the cover and blacklist still apply.
+        let mut idle = vn(false);
+        idle.counting = false;
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(idle.clone()), &settings(), &[])
+        else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Full);
+        assert!(presence.details.contains("Idling"));
+        assert!(presence.details.contains("蒼の彼方のフォーリズム"));
+        assert_eq!(presence.state, "12.4k characters");
+        assert_eq!(presence.large_image, "https://img/cover.jpg");
+        assert!(!presence.generic);
+
+        let blocked = decide(&snapshot_vn(idle), &settings(), &[entry("v18", "media")]);
+        assert!(matches!(blocked, Decision::Blocked { .. }));
+    }
+
+    #[test]
+    fn idling_never_leaks_an_adult_title() {
+        let mut idle = vn(true);
+        idle.counting = false;
+        let Decision::Show { presence, .. } = decide(&snapshot_vn(idle), &settings(), &[]) else {
+            panic!("expected a presence");
+        };
+        assert!(presence.generic);
+        assert!(!presence.details.contains("蒼"));
+        assert_eq!(presence.details, "Japanese immersion");
     }
 
     #[test]
@@ -700,10 +821,15 @@ mod tests {
 
     #[test]
     fn a_paused_session_shows_nothing() {
+        // The "idling" presence is a setting: with it off, an unfocused VN
+        // clears the presence exactly like before.
+        let mut s = settings();
+        s.discord_show_idle = false;
         let mut paused = vn(false);
         paused.counting = false;
-        assert_eq!(decide(&snapshot_vn(paused), &settings(), &[]), Decision::Idle);
+        assert_eq!(decide(&snapshot_vn(paused), &s, &[]), Decision::Idle);
 
+        // A paused video always clears, whatever the setting.
         let mut stopped = anime(Some(media(false)));
         stopped.paused = true;
         assert_eq!(

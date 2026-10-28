@@ -1,17 +1,23 @@
+import { NativeHookTextFilters } from '../components/NativeHookTextFilters';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
+  BookOpen,
   CheckCircle2,
   ExternalLink,
-  FolderOpen,
   LogOut,
-  Puzzle,
+  Trash2,
   XCircle,
+  HelpCircle,
+  RefreshCw,
 } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '../components/ui/Button';
 import { DiscordSettings } from '../components/DiscordSettings';
+import { PlatformSupport } from '../components/PlatformSupport';
+import { UpdateSettings } from '../components/UpdateSettings';
 import { Field, Toggle } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { ipc } from '../lib/ipc';
@@ -50,14 +56,21 @@ export default function SettingsScreen() {
   const { t, i18n } = useTranslation(['settings', 'common']);
   const settings = useAppStore((s) => s.settings);
   const online = useAppStore((s) => s.online);
+  const user = useAppStore((s) => s.user);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const refreshConnection = useAppStore((s) => s.refreshConnection);
-
-  const extensions = useQuery({ queryKey: ['extensions'], queryFn: ipc.listExtensions });
+  const queryClient = useQueryClient();
+  const dictionaries = useQuery({ queryKey: ['dictionaries'], queryFn: ipc.dictionaryList });
+  const ankiModels = useQuery({ queryKey: ['anki-models'], queryFn: ipc.ankiModels, retry: false });
+  const ankiFields = useQuery({ queryKey: ['anki-model-fields', settings?.anki_model], queryFn: () => ipc.ankiModelFields(settings?.anki_model ?? 'Basic'), retry: false });
 
   const [newKey, setNewKey] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
+  const [reconnectBusy, setReconnectBusy] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [dictionaryBusy, setDictionaryBusy] = useState(false);
+  const [dictionaryError, setDictionaryError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'account' | 'tracking' | 'anki' | 'app'>('account');
 
   if (!settings) return null;
 
@@ -67,8 +80,7 @@ export default function SettingsScreen() {
     setKeyError(null);
     try {
       const result = await ipc.verifyApiKey(settings.api_base_url, newKey.trim());
-      const user = result.user as { username?: string } | undefined;
-      await updateSettings({ api_key: newKey.trim(), username: user?.username ?? null });
+      await updateSettings({ api_key: newKey.trim(), username: result.username ?? null });
       setNewKey('');
       await refreshConnection();
     } catch (e) {
@@ -78,10 +90,42 @@ export default function SettingsScreen() {
     }
   }
 
+  async function reconnect() {
+    setReconnectBusy(true);
+    try {
+      await refreshConnection();
+    } finally {
+      setReconnectBusy(false);
+    }
+  }
+
+  async function importDictionary() {
+    setDictionaryError(null);
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'Yomitan dictionary', extensions: ['zip'] }],
+    });
+    if (typeof selected !== 'string') return;
+    setDictionaryBusy(true);
+    try {
+      await ipc.dictionaryImport(selected);
+      await queryClient.invalidateQueries({ queryKey: ['dictionaries'] });
+    } catch (error) {
+      setDictionaryError(String(error));
+    } finally {
+      setDictionaryBusy(false);
+    }
+  }
+
   const currentLanguage = settings.language || i18n.language;
 
   return (
     <Page title={t('title')} description={t('subtitle')}>
+      <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm grid grid-cols-4">
+        {(['account', 'tracking', 'anki', 'app'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={`tab ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>{t(`tabs.${tab}`)}</button>)}
+      </div>
+      {activeTab === 'account' ? <>
       <SectionTitle>{t('account.title')}</SectionTitle>
       <div className="surface p-4 space-y-3">
         <div className="flex items-center gap-3">
@@ -91,7 +135,10 @@ export default function SettingsScreen() {
             <XCircle className="w-5 h-5 text-error" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="font-medium">{settings.username ?? t('account.noUser')}</p>
+            <p className="font-medium">{user?.username ?? settings.username ?? t('account.noUser')}</p>
+            <p className="text-xs text-base-content/60">
+              {online === null ? t('account.checking') : online ? t('account.connected') : t('account.disconnected')}
+            </p>
             <p className="text-xs text-base-content/60 truncate">{settings.api_base_url}</p>
           </div>
           <Button
@@ -114,6 +161,21 @@ export default function SettingsScreen() {
             />
           )}
         </Field>
+
+        {settings.api_key ? (
+          <Field label={t('account.currentKey')}>
+            {(id) => (
+              <input
+                id={id}
+                type="password"
+                className="input w-full"
+                value={'x'.repeat(24)}
+                readOnly
+                autoComplete="off"
+              />
+            )}
+          </Field>
+        ) : null}
 
         <Field label={t('account.newKey')} error={keyError}>
           {(id) => (
@@ -138,6 +200,18 @@ export default function SettingsScreen() {
           )}
         </Field>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <Button appearance="outline" size="sm" loading={reconnectBusy} disabled={!settings.api_key} onClick={() => void reconnect()}>
+            <RefreshCw className="h-4 w-4" />
+            {t('account.reconnect')}
+          </Button>
+        </div>
+        <Toggle
+          label={t('account.autoReconnect')}
+          checked={settings.auto_reconnect}
+          onChange={(value) => void updateSettings({ auto_reconnect: value })}
+        />
+
         <Button
           appearance="ghost"
           size="sm"
@@ -147,7 +221,11 @@ export default function SettingsScreen() {
           {t('account.signOut')}
         </Button>
       </div>
+      </> : null}
 
+      {activeTab === 'tracking' ? <>
+      <SectionTitle>{t('platform.title')}</SectionTitle>
+      <PlatformSupport />
       <SectionTitle>{t('anime.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
@@ -163,8 +241,8 @@ export default function SettingsScreen() {
           onChange={(v) => void updateSettings({ use_player_position: v })}
         />
         {settings.use_player_position ? (
-          <div className="p-3 grid gap-3 sm:grid-cols-2">
-            <Field label={t('anime.mpvIpc')} hint={t('anime.mpvIpcHint')}>
+          <div className="grid gap-3 p-3 lg:grid-cols-2">
+            <Field label={<span className="inline-flex items-center gap-1">{t('anime.mpvIpc')}<span className="tooltip tooltip-right" data-tip={t('anime.mpvIpcHelp')}><HelpCircle className="h-3.5 w-3.5 text-base-content/55" /></span></span>} hint={t('anime.mpvIpcHint')}>
               {(id) => (
                 <input
                   id={id}
@@ -201,7 +279,7 @@ export default function SettingsScreen() {
           checked={settings.anime_log_time}
           onChange={(v) => void updateSettings({ anime_log_time: v })}
         />
-        <div className="p-3 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 p-3 lg:grid-cols-2">
           <Field label={t('anime.threshold', { percent: settings.anime_threshold_percent })}>
             {(id) => (
               <input
@@ -262,17 +340,17 @@ export default function SettingsScreen() {
         />
         <div className="p-3">
           <Field
-            label={t('vn.afk', { seconds: settings.afk_timeout_secs })}
+            label={t('vn.afk')}
             hint={t('vn.afkHint')}
           >
             {(id) => (
               <input
                 id={id}
-                type="range"
+                type="number"
                 min={0}
                 max={600}
-                step={10}
-                className="range range-primary"
+                step={1}
+                className="input w-full"
                 value={settings.afk_timeout_secs}
                 onChange={(e) => void updateSettings({ afk_timeout_secs: Number(e.target.value) })}
               />
@@ -281,76 +359,98 @@ export default function SettingsScreen() {
         </div>
       </div>
 
-      <DiscordSettings settings={settings} onChange={(patch) => void updateSettings(patch)} />
-
-      <SectionTitle>{t('extensions.title')}</SectionTitle>
+      <SectionTitle>{t('game.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
-          label={t('extensions.enabled')}
-          description={t('extensions.enabledHint')}
-          checked={settings.extensions_enabled}
-          onChange={(v) => void updateSettings({ extensions_enabled: v })}
+          label={t('game.detect')}
+          description={t('game.detectHint')}
+          checked={settings.detect_games}
+          onChange={(v) => void updateSettings({ detect_games: v })}
         />
-        <div className="p-3 space-y-3">
-          <p className="text-sm text-base-content/70">{t('extensions.body')}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" appearance="outline" onClick={() => void ipc.openExtensionsFolder()}>
-              <FolderOpen className="w-4 h-4" />
-              {t('extensions.openFolder')}
-            </Button>
-            <Button
-              size="sm"
-              appearance="ghost"
-              onClick={() => void openUrl('https://yomitan.wiki/')}
-            >
-              <ExternalLink className="w-4 h-4" />
-              Yomitan
-            </Button>
-            <Button
-              size="sm"
-              appearance="ghost"
-              onClick={() => void openUrl('https://github.com/Sirush/JitenReader')}
-            >
-              <ExternalLink className="w-4 h-4" />
-              JitenReader
-            </Button>
-          </div>
+        <p className="p-3 text-sm text-base-content/60">{t('game.rules')}</p>
+      </div>
 
-          {(extensions.data ?? []).length === 0 ? (
-            <p className="text-xs text-base-content/50">{t('extensions.none')}</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {(extensions.data ?? []).map((ext) => (
-                <li
-                  key={ext.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-field bg-base-200/60"
-                >
-                  <Puzzle className="w-4 h-4 text-base-content/50 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium truncate">{ext.name}</span>
-                    <span className="block text-xs text-base-content/50 font-mono truncate">
-                      v{ext.version} · MV{ext.manifest_version} · {ext.id}
-                    </span>
-                  </span>
-                  {ext.options_url ? (
-                    <Button
-                      size="xs"
-                      appearance="outline"
-                      onClick={() => void ipc.openExtensionOptions(ext.options_url!)}
-                    >
-                      {t('extensions.settings')}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="text-xs text-base-content/50">{t('extensions.restart')}</p>
+      <DiscordSettings settings={settings} onChange={(patch) => void updateSettings(patch)} />
+      <NativeHookTextFilters />
+      <SectionTitle>{t('readingOverlay:title')}</SectionTitle>
+      <div className="surface p-4">
+        <Button appearance="outline" onClick={() => void ipc.openAuxWindow('reading-overlay-settings')}>{t('readingOverlay:openSettings')}</Button>
+      </div>
+      </> : null}
+
+      {activeTab === 'anki' ? <>
+      <SectionTitle>{t('anki.title')}</SectionTitle>
+      <div className="surface p-4 space-y-3">
+        <Field label={t('anki.deck')}>
+          {(id) => <input id={id} className="input w-full" value={settings.anki_deck} onChange={(e) => void updateSettings({ anki_deck: e.target.value })} />}
+        </Field>
+        <Field label={t('anki.noteType')} hint={t('anki.noteTypeHint')}>
+          {(id) => <select id={id} className="select w-full" value={settings.anki_model} onChange={(e) => void updateSettings({ anki_model: e.target.value, anki_field_sources: {} })}>
+            {(ankiModels.data ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
+            {!(ankiModels.data ?? []).includes(settings.anki_model) ? <option value={settings.anki_model}>{settings.anki_model}</option> : null}
+          </select>}
+        </Field>
+        {ankiModels.isError ? <p className="text-xs text-base-content/60">{t('anki.unavailable')}</p> : null}
+        <div className="grid gap-2 lg:grid-cols-2">
+          {(ankiFields.data ?? []).map((field) => <Field key={field} label={t('anki.field', { field })}>
+            {(id) => <select id={id} className="select w-full" value={settings.anki_field_sources[field] ?? ''} onChange={(e) => void updateSettings({ anki_field_sources: { ...settings.anki_field_sources, [field]: e.target.value } })}>
+              {['word', 'reading', 'meaning', 'sentence', 'media', ''].map((source) => <option key={source || 'empty'} value={source}>{t(`anki.sources.${source || 'empty'}`)}</option>)}
+            </select>}
+          </Field>)}
         </div>
       </div>
 
+      <SectionTitle>{t('dictionary.title')}</SectionTitle>
+      <div className="surface p-4 space-y-3">
+        <p className="text-sm text-base-content/70">{t('dictionary.hint')}</p>
+        <Button size="sm" variant="primary" loading={dictionaryBusy} onClick={() => void importDictionary()}>
+          <BookOpen className="w-4 h-4" />
+          {t('dictionary.import')}
+        </Button>
+        {dictionaryError ? <p className="text-sm text-error selectable">{dictionaryError}</p> : null}
+        {(dictionaries.data ?? []).length > 0 ? (
+          <ul className="space-y-1.5">
+            {(dictionaries.data ?? []).map((dictionary) => (
+              <li key={dictionary.id} className="flex items-center gap-3 rounded-field bg-base-200/60 px-3 py-2">
+                <BookOpen className="w-4 h-4 text-base-content/50 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{dictionary.title}</span>
+                  <span className="block text-xs text-base-content/50">{dictionary.termCount.toLocaleString()} {t('dictionary.entries')}</span>
+                </span>
+                <Button
+                  size="xs"
+                  appearance="ghost"
+                  aria-label={t('dictionary.remove')}
+                  onClick={() =>
+                    void ipc.dictionaryRemove(dictionary.id).then(() =>
+                      queryClient.invalidateQueries({ queryKey: ['dictionaries'] })
+                    )
+                  }
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-base-content/50">{t('dictionary.none')}</p>
+        )}
+      </div>
+      </> : null}
+
+      {activeTab === 'app' ? <>
+      <SectionTitle>{t('social.title')}</SectionTitle>
+      <div className="surface p-2"><Toggle label={t('social.share')} description={t('social.shareHint')} checked={settings.share_activity} onChange={(v) => void updateSettings({ share_activity: v })} /></div>
+      <SectionTitle>{t('common:update.title')}</SectionTitle>
+      <UpdateSettings />
       <SectionTitle>{t('app.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">
+        <Toggle
+          label={t('app.overlay')}
+          description={t('app.overlayHint')}
+          checked={settings.overlay_enabled}
+          onChange={(v) => void updateSettings({ overlay_enabled: v })}
+        />
         <div className="p-3">
           <Field label={t('app.language')}>
             {(id) => (
@@ -402,7 +502,7 @@ export default function SettingsScreen() {
           onChange={(v) => void updateSettings({ streak_reminder: v })}
         />
         {settings.notifications && settings.streak_reminder ? (
-          <div className="p-3 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 p-3 lg:grid-cols-2">
             <Field
               label={t('app.streakHours', { count: settings.streak_reminder_hours })}
               hint={t('app.streakHoursHint')}
@@ -435,7 +535,7 @@ export default function SettingsScreen() {
             </Field>
           </div>
         ) : null}
-        <div className="p-3 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 p-3 lg:grid-cols-2">
           <Field label={t('app.theme')}>
             {(id) => (
               <select
@@ -471,6 +571,7 @@ export default function SettingsScreen() {
           </Field>
         </div>
       </div>
+      </> : null}
     </Page>
   );
 }

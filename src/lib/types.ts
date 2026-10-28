@@ -12,10 +12,46 @@ export type LogType =
   | 'game'
   | 'book';
 
+export interface ReadingOverlaySettings {
+  font_size: number;
+  font_family: string;
+  font_weight: 400 | 500 | 600 | 700;
+  text_outline_width: number;
+  text_outline_color: string;
+  text_shadow_color: string;
+  text_shadow_opacity: number;
+  text_shadow_blur: number;
+  center_text: boolean;
+  opacity: number;
+  idle_opacity: number;
+  text_visibility: 'always' | 'hover_only' | 'dim_when_idle';
+  always_on_top: boolean;
+  hide_when_unfocused: boolean;
+  toolbar_title_hover_only: boolean;
+  lookup_delay_ms: number;
+  popup_enabled: boolean;
+  popup_background_opacity: number;
+  popup_close_delay_ms: number;
+  toggle_shortcut: string;
+  interaction_shortcut: string;
+}
+
+export interface ReadingOverlayState {
+  target: { pid: number; exe: string; content_id: string; title: string; started_at: string } | null;
+  line: TextLine | null;
+  visible: boolean;
+  click_through: boolean;
+  toolbar_hovered: boolean;
+  reveal_controls: boolean;
+  popup: { mode: 'dictionary' | 'hooks'; line: TextLine | null; offset: number } | null;
+  shortcut_errors: string[];
+}
+
 export interface Settings {
   api_base_url: string;
   api_key: string | null;
   username: string | null;
+  auto_reconnect: boolean;
 
   detect_players: boolean;
   anime_auto_log: boolean;
@@ -27,15 +63,22 @@ export interface Settings {
   mpc_web_port: number;
 
   detect_visual_novels: boolean;
+  detect_games: boolean;
   afk_timeout_secs: number;
   vn_require_focus: boolean;
   vn_open_texthooker: boolean;
   vn_confirm_before_log: boolean;
+  overlay_enabled: boolean;
+  anki_deck: string;
+  anki_model: string;
+  anki_field_sources: Record<string, string>;
 
   texthooker_ws_url: string;
   texthooker_autoconnect: boolean;
   texthooker_clipboard: boolean;
   texthooker_prevent_duplicates: boolean;
+  texthooker_filter_chinese: boolean;
+  native_hook_text_filters: NativeHookTextFilters;
   texthooker_font_size: number;
   texthooker_font_family: string;
   texthooker_line_spacing: number;
@@ -55,6 +98,11 @@ export interface Settings {
   texthooker_allow_line_during_pause: boolean;
   texthooker_allow_clipboard_during_pause: boolean;
   texthooker_pause_on_disconnect: boolean;
+  dictionary_popup_delay_ms: number;
+  reading_overlay: ReadingOverlaySettings;
+  texthooker_intelligence_mode: 'automatic' | 'manual' | 'off';
+  texthooker_intelligence_manual_threshold_seconds: number;
+  texthooker_intelligence_afk_threshold_seconds: number;
   texthooker_room_mode: string;
   texthooker_room_id: string;
 
@@ -63,6 +111,7 @@ export interface Settings {
   start_minimized: boolean;
   minimize_to_tray: boolean;
   notifications: boolean;
+  auto_update_check: boolean;
   streak_reminder: boolean;
   streak_reminder_hours: number;
   /** `HH:MM` in the user's timezone, empty to disable the fixed reminder. */
@@ -73,10 +122,22 @@ export interface Settings {
   discord_generic_mode: boolean;
   discord_profile_button: boolean;
   discord_large_image: string;
-  extensions_enabled: boolean;
+  discord_show_idle: boolean;
+  share_activity: boolean;
   theme: string;
   /** `en` | `es`, or empty to follow the system on first run. */
   language: string;
+}
+
+export interface NativeHookTextFilters {
+  excluded_words: string;
+  regex_patterns: string;
+}
+
+export interface FilterPreview {
+  text: string;
+  chars: number;
+  regex_error: { line: number; message: string } | null;
 }
 
 export interface ParsedAnime {
@@ -124,20 +185,54 @@ export interface AnimeSession {
 
 export interface VnSession {
   exe: string;
+  pid: number;
   content_id: string;
   media_title: string;
   media_type: string;
   image: string | null;
   is_adult: boolean;
+  is_adult_image: boolean | null;
   elapsed_secs: number;
   counting: boolean;
+  paused_by_user: boolean;
   started_at: string;
   session_chars: number;
   session_lines: number;
 }
 
+/** Mirror of `updater::UpdateInfo`. */
+export interface UpdateInfo {
+  version: string;
+  current_version: string;
+  notes: string | null;
+  date: string | null;
+  /** False for .deb/.rpm installs, which only the package manager can replace. */
+  can_install: boolean;
+}
+
+export interface UpdateProgress {
+  downloaded?: number;
+  total?: number | null;
+  done?: boolean;
+}
+
+/** Mirror of `platform::Capabilities`: what detection can see on this OS. */
+export interface Capabilities {
+  os: 'windows' | 'linux' | 'macos' | string;
+  session: 'x11' | 'wayland' | null;
+  window_titles: boolean;
+  foreground: boolean;
+  idle: boolean;
+  media_sessions: boolean;
+  native_hook: boolean;
+  screenshots: boolean;
+  actionable_notifications: boolean;
+  needs_screen_recording: boolean;
+}
+
 export interface TrackerSnapshot {
   platform_supported: boolean;
+  capabilities: Capabilities;
   enabled: boolean;
   active_window: string | null;
   active_process: string | null;
@@ -146,6 +241,27 @@ export interface TrackerSnapshot {
   vn: VnSession | null;
   queued_count: number;
   pending_count: number;
+  game_hook: NativeGameHookStatus;
+}
+
+export type NativeGameHookPhase = 'inactive' | 'starting' | 'attached' | 'receiving' | 'error' | 'unavailable';
+
+export interface NativeGameHookStatus {
+  phase: NativeGameHookPhase;
+  content_id: string | null;
+  exe: string | null;
+  pid: number | null;
+  message: string | null;
+  hooks: NativeHookCandidate[];
+  selected_hook_code: string | null;
+  websocket_selected: boolean;
+}
+
+export interface NativeHookCandidate {
+  selection_key: string;
+  hook_code: string;
+  name: string;
+  sample: string | null;
 }
 
 export type HookerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -156,16 +272,6 @@ export interface HookerState {
   content_id: string | null;
   content_title: string | null;
   last_error: string | null;
-}
-
-/** An unpacked browser extension found in the extensions folder. */
-export interface InstalledExtension {
-  folder: string;
-  name: string;
-  version: string;
-  manifest_version: number;
-  id: string;
-  options_url: string | null;
 }
 
 /** `celebration` from the `POST /api/logs` response (`ILogCelebration`). */
@@ -205,6 +311,40 @@ export interface RankingRow {
   username: string;
   avatar?: string;
   stats: Record<string, number>;
+  xp?: number;
+  hours?: number;
+  episodes?: number;
+  chars?: number;
+  pages?: number;
+  patreon?: { isActive?: boolean; tier?: string | null; customBadgeText?: string; badgeColor?: string; badgeTextColor?: string; hideBadge?: boolean };
+  customization?: { nameEffect?: 'none' | 'gradient' | 'glow' | 'shimmer'; nameColor1?: string; nameColor2?: string; avatarFrame?: 'none' | 'bronze' | 'silver' | 'gold' | 'sakura' | 'neon' | 'rainbow' | 'aura' };
+}
+
+export interface SocialActivity {
+  _id: string;
+  actor: { _id?: string; username: string; avatar?: string };
+  type: string;
+  targetType: string;
+  targetId: string;
+  metadata?: Record<string, unknown>;
+  occurredAt: string;
+  importance?: 'normal' | 'important';
+}
+
+export interface ActivityFeedPage {
+  activities: SocialActivity[];
+  nextCursor: string | null;
+}
+
+export interface FriendImmersionPresence {
+  username: string;
+  avatar?: string;
+  mediaTitle: string;
+  mediaType: string;
+  startedAt: string;
+  elapsedSeconds: number;
+  customization?: RankingRow['customization'];
+  patreon?: RankingRow['patreon'];
 }
 
 /** One row of `GET /api/users/:username/logs`, which answers a bare array. */
@@ -212,6 +352,7 @@ export interface RecentLog {
   _id: string;
   type: LogType | string;
   description: string;
+  mediaTitle?: string;
   episodes?: number;
   time?: number;
   chars?: number;
@@ -221,6 +362,11 @@ export interface RecentLog {
   media?: {
     contentImage?: string | null;
     coverImage?: string | null;
+    title?: {
+      contentTitleNative?: string;
+      contentTitleEnglish?: string;
+      contentTitleRomaji?: string;
+    };
   } | null;
 }
 
@@ -235,10 +381,22 @@ export interface UserSummary {
     userXpToNextLevel?: number;
     userXpToCurrentLevel?: number;
     readingLevel?: number;
+    readingXp?: number;
+    readingXpToCurrentLevel?: number;
+    readingXpToNextLevel?: number;
     listeningLevel?: number;
+    listeningXp?: number;
+    listeningXpToCurrentLevel?: number;
+    listeningXpToNextLevel?: number;
     currentStreak?: number;
     longestStreak?: number;
   };
+}
+
+export interface ConnectionStatus {
+  ok: boolean;
+  reason?: string;
+  user?: UserSummary;
 }
 
 export interface MediaHit {
@@ -251,6 +409,7 @@ export interface MediaHit {
   contentImage: string | null;
   coverImage: string | null;
   isAdult: boolean;
+  isAdultImage?: boolean | null;
   synonyms?: string[] | null;
   type?: string;
   episodes?: number | null;
@@ -263,10 +422,26 @@ export interface VnApp {
   media_type: string;
   media_title: string;
   image: string | null;
-  texthooker_url: string | null;
+  launch_path: string | null;
+  hooker_path: string | null;
+  native_hook_enabled: boolean;
+  native_hook_code: string | null;
+  reader_mode: 'integrated' | 'browser' | 'overlay';
   enabled: boolean;
-  /** `isAdult` from the media entry, kept so the presence can strip the title. */
+  /** Work rating for games and VNs with no cached cover rating. */
   is_adult: boolean;
+  is_adult_image: boolean | null;
+}
+
+export interface MinedSentence {
+  id: string;
+  line_id: string;
+  content_id: string;
+  text: string;
+  media_title: string | null;
+  created_at: string;
+  anki_note_id: number | null;
+  screenshot_path: string | null;
 }
 
 /** One entry of the Discord presence blacklist. */
@@ -288,7 +463,7 @@ export interface DiscordPresence {
 }
 
 /** Why the presence looks the way it does. */
-export type DiscordReason = 'full' | 'adult' | 'unresolved' | 'generic';
+export type DiscordReason = 'full' | 'adult' | 'adultimage' | 'unresolved' | 'generic';
 
 export type DiscordDecision =
   | { status: 'off' }
@@ -311,6 +486,7 @@ export interface ProcessEntry {
 export interface LogPayload {
   type: LogType | string;
   description: string;
+  mediaTitle?: string;
   mediaId?: string;
   episodes?: number;
   time?: number;
@@ -365,6 +541,21 @@ export interface TextHistoryEntry {
   linesLogged: number;
   sessionSeconds: number;
   readingSpeed: number;
+  intelligence?: SessionIntelligence;
+}
+
+export interface SessionIntelligence {
+  detectionMode: 'automatic' | 'manual' | 'off';
+  baselineIntervalSeconds: number | null;
+  distractionThresholdSeconds: number | null;
+  afkThresholdSeconds: number;
+  focusedSeconds: number;
+  distractedSeconds: number;
+  afkSeconds: number;
+  distractionCount: number;
+  longestDistractionSeconds: number;
+  focusPercentage: number;
+  charactersPerMinute: number[];
 }
 
 export interface HookerTotals {
@@ -377,6 +568,47 @@ export interface HookerTotals {
   sessionLines: number;
   mediaTitle: string | null;
   mediaType: string | null;
+}
+
+export interface HookerContext {
+  cover: string | null;
+  totalCharacters: number | null;
+  loggedCharacters: number;
+  lines: number;
+  characters: number;
+  history: TextHistoryEntry[];
+  updatedAt: string | null;
+}
+
+export interface DictionarySummary {
+  id: string;
+  title: string;
+  revision: string;
+  language: string;
+  termCount: number;
+}
+
+export interface DictionaryEntry {
+  dictionary: string;
+  expression: string;
+  reading: string;
+  tags: string;
+  score: number;
+  matched: string;
+  deinflected: string;
+  process: string[];
+  glossaries: unknown[];
+  frequencies: {
+    dictionary: string;
+    display: string;
+    value: number;
+  }[];
+}
+
+export interface DictionaryLookupResponse {
+  query: string;
+  matched: string;
+  entries: DictionaryEntry[];
 }
 
 export interface TextSessionSummary {

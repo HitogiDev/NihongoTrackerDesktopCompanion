@@ -311,9 +311,37 @@ fn show(app: &AppHandle, lang: &str, status: &StreakStatus) {
     if show_windows(app, lang, title, &body) {
         return;
     }
+    // Linux notification servers take actions over D-Bus; notify-rust is the
+    // same library the plugin uses underneath, here with a button.
+    #[cfg(target_os = "linux")]
+    if show_linux(app, lang, title, &body) {
+        return;
+    }
 
-    use tauri_plugin_notification::NotificationExt;
-    let _ = app.notification().builder().title(title).body(body).show();
+    crate::notifications::show(app, title, &body);
+}
+
+#[cfg(target_os = "linux")]
+fn show_linux(app: &AppHandle, lang: &str, title: &str, body: &str) -> bool {
+    let shown = notify_rust::Notification::new()
+        .appname("NihongoTracker Companion")
+        .summary(title)
+        .body(body)
+        // "default" is a click on the notification itself.
+        .action("default", crate::i18n::streak_action(lang))
+        .action("log", crate::i18n::streak_action(lang))
+        .show();
+    let Ok(handle) = shown else { return false };
+    let app = app.clone();
+    // Blocks until the notification is clicked or dismissed.
+    std::thread::spawn(move || {
+        handle.wait_for_action(|action| {
+            if matches!(action, "default" | "log") {
+                open_log_form(&app);
+            }
+        });
+    });
+    true
 }
 
 #[cfg(windows)]
@@ -334,23 +362,12 @@ fn show_windows(app: &AppHandle, lang: &str, title: &str, body: &str) -> bool {
     };
 
     let identifier = app.config().identifier.clone();
-    // An unregistered AppUserModelID makes WinRT refuse the toast (typical in
-    // `tauri dev`, where no shortcut was installed); PowerShell's own id always
-    // exists, and it is what notify-rust falls back to as well.
-    build(&identifier)
-        .show()
-        .or_else(|_| build(Toast::POWERSHELL_APP_ID).show())
-        .is_ok()
+    build(&identifier).show().is_ok()
 }
 
 /// Bring the window up and ask the UI for its log form.
 pub fn open_log_form(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-    let _ = app.emit(EVT_OPEN_LOG, json!({ "source": "streak" }));
+    crate::open_main_with(app, EVT_OPEN_LOG, "/log:streak");
 }
 
 #[cfg(test)]

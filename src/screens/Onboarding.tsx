@@ -30,11 +30,10 @@ export default function Onboarding() {
     setError(null);
     try {
       const result = await ipc.verifyApiKey(baseUrl.trim(), apiKey.trim());
-      const user = result.user as { username?: string } | undefined;
       await updateSettings({
         api_base_url: baseUrl.trim().replace(/\/+$/, ''),
         api_key: apiKey.trim(),
-        username: user?.username ?? null,
+        username: result.username ?? null,
       });
       await refreshConnection();
       navigate('/', { replace: true });

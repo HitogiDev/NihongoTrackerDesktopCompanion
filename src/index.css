@@ -68,6 +68,22 @@
 }
 @plugin "@tailwindcss/typography";
 
+@keyframes rainbow-fade {
+  0%, 100% { background-color: #be2323; }
+  14% { background-color: #cd7b2a; }
+  28% { background-color: #9f9f2c; }
+  42% { background-color: #2c942c; }
+  57% { background-color: #2a2aa3; }
+  71% { background-color: #40135f; }
+  85% { background-color: #7d19a8; }
+}
+
+.badge-rainbow { animation: rainbow-fade 8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-rainbow { animation: none; background-color: #be2323; }
+}
+
 @plugin "daisyui/theme" {
   name: 'light';
   default: false;
@@ -185,12 +201,55 @@ body {
   min-height: 100%;
 }
 
+html[data-reading-overlay],
+html[data-reading-overlay] body,
+html[data-reading-overlay] #root {
+  background: transparent !important;
+  overflow: hidden;
+}
+
 /* ── Desktop chrome ─────────────────────────────────────────────────────────
    Not in the web app: a native window should not select text on stray drags
    nor rubber-band, and its scrollbars should be thin. */
 body {
   user-select: none;
   overscroll-behavior: none;
+}
+
+/* Desktop controls use the arrow; the hand is for links. daisyUI sets
+   `cursor: pointer` on its components inside @layer, so this unlayered rule
+   wins without !important. */
+.btn,
+.menu li > *,
+.tab,
+.toggle,
+.checkbox,
+.radio,
+.range,
+.select,
+select,
+summary,
+[role='button'],
+button {
+  cursor: default;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+/* Windows 11: the main window has Mica behind it (see window_chrome.rs, which
+   sets data-vibrancy before the page loads). The page goes transparent and only
+   the sidebar lets the material through, the way native apps do; the content
+   area keeps its opaque surface. Without the attribute nothing changes. */
+html[data-vibrancy] {
+  --root-bg: transparent;
+}
+html[data-vibrancy] .app-shell {
+  background-color: transparent;
+}
+html[data-vibrancy] .app-sidebar {
+  background-color: color-mix(in oklch, var(--color-base-100) 45%, transparent);
 }
 
 input,

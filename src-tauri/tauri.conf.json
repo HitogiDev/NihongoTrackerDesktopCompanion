@@ -4,19 +4,21 @@
   "version": "0.1.0",
   "identifier": "app.nihongotracker.companion",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run build:native-game-hook && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:native-game-hook -- --require-all && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis", "deb", "appimage", "dmg"],
     "shortDescription": "Automatic immersion tracking for NihongoTracker",
     "longDescription": "Detects video players and visual novels, logs episodes and reading sessions automatically, and includes an offline texthooker that syncs with NihongoTracker.",
@@ -27,5 +29,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ3OUVCOTg3M0Y3NUNBMDMKUldRRHluVS9oN21lUjlFOVV2SmpBSzZKK3REZEdqY3ZZaXJRMk9xbnBPWEFnd0RyOVpWRFFOOGMK",
+      "endpoints": [
+        "https://github.com/HitogiDev/NihongoTrackerDesktopCompanion/releases/latest/download/latest.json"
+      ],
+      "windows": { "installMode": "passive" }
+    }
   }
 }

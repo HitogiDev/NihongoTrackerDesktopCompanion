@@ -1,0 +1,90 @@
+# Builds signed installers for every system and publishes them as a GitHub
+# release, together with the `latest.json` manifest the in-app updater reads
+# (`plugins.updater.endpoints` in tauri.conf.json).
+#
+# To release: bump `version` in src-tauri/tauri.conf.json (and Cargo.toml /
+# package.json to match), commit, then push a tag with the same number:
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Needs the repository secret TAURI_SIGNING_PRIVATE_KEY: the contents of the
+# private key whose public half is `plugins.updater.pubkey`. Without it the
+# bundles are not signed and no installed copy will accept them.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            args: ''
+          - name: Linux
+            # hoshidicts needs GCC 14 (<format>, std::ranges::to), which
+            # sets the bundles' glibc floor at 2.39.
+            os: ubuntu-24.04
+            args: ''
+          - name: macOS
+            os: macos-latest
+            args: '--target universal-apple-darwin'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev g++-14
+          # hoshidicts uses std::ranges::to, first shipped in GCC 14; 24.04
+          # defaults to 13, but its libstdc++ runtime is already 14's.
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=gcc-14" >> "$GITHUB_ENV"
+
+      - name: Ninja (native game hook)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: NihongoTracker Companion v__VERSION__
+          releaseBody: See the commits since the previous release.
+          # Published, not a draft: the updater follows `releases/latest`,
+          # which skips drafts and pre-releases.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

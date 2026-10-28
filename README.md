@@ -1,214 +1,396 @@
 # NihongoTracker Desktop Companion
 
-Compañero de escritorio para [NihongoTracker](https://github.com/HitogiDev/NihongoTracker).
-Detecta lo que estás viendo o leyendo y lo registra solo — al estilo de
-[Taiga](https://github.com/erengy/taiga), pero para inmersión en japonés.
+Desktop companion for [NihongoTracker](https://github.com/HitogiDev/NihongoTracker).
+It detects what you are watching, reading, or playing and logs it for you, like
+[Taiga](https://github.com/erengy/taiga) but for Japanese immersion. It runs on
+Windows, Linux, and macOS (see [Platform status](#platform-status)).
 
-- **Anime automático.** Reconoce mpv, mpv.net, MPC-HC/BE, VLC, PotPlayer, GOM,
-  KMPlayer y SMPlayer, extrae título y episodio del nombre del archivo, lo busca
-  en NihongoTracker y registra el episodio al pasar el umbral de visionado. Con
-  mpv y MPC usa la **posición real** del vídeo, no el tiempo con la ventana
-  abierta, así que una pausa no cuenta.
-- **Novelas visuales.** Vincula un `.exe` con una obra: al abrirla arranca la
-  sesión, se abre el texthooker y el tiempo se cuenta solo mientras la ventana
-  está activa. Sin pausar ni reanudar nada a mano.
-- **El texthooker de NihongoTracker, dentro.** Port fiel de `HookerScreen`: la
-  misma barra flotante con sus métricas, el mismo cronómetro anclado a reloj de
-  pared con pausa por inactividad, las mismas fuentes y temas, CSS personalizado
-  con las mismas clases (`.th-root`, `.th-topbar`, `.th-line-text`…), texto
-  vertical, borrar línea y deshacer. Cliente WebSocket para Textractor / Agent
-  con idéntico conteo de caracteres (solo kana y kanji), más un lector del
-  portapapeles que sustituye a la extensión de navegador. Funciona sin conexión:
-  todo va a SQLite y se sincroniza al volver la red.
-- **Todo offline-first.** Cada log pasa por una cola (`outbox`) con reintentos,
-  así que cerrar sesión, perder la red o apagar el router no pierde nada.
-- **Aviso antes de perder la racha.** Si queda poco para que acabe tu día y
-  todavía no has registrado nada, salta una notificación —una al día, y sólo
-  después de volver a preguntarle al servidor— con un botón que abre el
-  formulario de registro. Ver abajo.
-- **Diccionarios emergentes dentro de la app.** Yomitan y JitenReader son
-  extensiones de Chrome, y el webview de Windows puede cargarlas, así que
-  funcionan sobre el propio lector. Ver abajo.
-- **Discord Rich Presence, si quieres.** Apagado por defecto. Enseña qué estás
-  leyendo o viendo, con portada y tiempo, y nunca el título de una obra +18.
-  Ver abajo.
-- **En inglés y español**, con selector en Ajustes y en la primera pantalla; el
-  idioma por defecto es el del sistema.
-- **Confirmar o no, tú eliges.** Por defecto cada detección espera tu visto bueno
-  en *Pendientes*, con el XP estimado por el propio servidor; también puedes
-  registrar el episodio en curso a mano sin esperar al umbral.
+## Features
+
+- **Automatic anime tracking.** Recognizes mpv, mpv.net, MPC-HC/BE, VLC,
+  PotPlayer, GOM, KMPlayer, and SMPlayer (and, on Linux, any player that exposes
+  MPRIS). It extracts the title and episode from the filename, searches
+  NihongoTracker, and logs the episode once the viewing threshold is reached.
+  With mpv and MPC it uses the video's real position instead of the time the
+  window has been open, so a paused video does not count. You can also log the
+  current episode right away without waiting for the threshold.
+- **Visual novels.** Link an `.exe` to a title. Opening it starts a session,
+  opens the texthooker, and counts time only while the window is focused and you
+  are not AFK. Nothing to pause or resume by hand.
+- **Games.** Link a game's executable in the Library. Time counts only while the
+  game is focused and you are not AFK, and the session goes to *Pending* for
+  review when the game closes.
+- **NihongoTracker's texthooker, built in.** A close port of the web
+  `HookerScreen`: same floating bar and metrics, same wall-clock timer with an
+  inactivity pause, same fonts and themes, custom CSS with the same classes
+  (`.th-root`, `.th-topbar`, `.th-line-text`, …), vertical text, line deletion,
+  and undo. Text comes from Textractor / Agent over WebSocket, the clipboard, or
+  the built-in LunaHook integration on Windows. Characters are counted exactly
+  like the website (kana and kanji only).
+- **Shared rooms.** Host or join a texthooker room. Rooms use the same protocol
+  as the website, so desktop and browser readers can share one.
+- **Text filters.** Remove duplicated phrases, excluded words, regex matches, and
+  Chinese translations that some releases hook together with the Japanese text.
+- **Offline dictionary.** Import Yomitan dictionary zips and look up words from
+  the texthooker or the reading overlay with no browser or network connection.
+- **Sentence mining.** Save any line, or press Ctrl+Shift+M (⌘⇧M on macOS) from
+  any window, with an optional screenshot of the game. Send sentences and words
+  to Anki through AnkiConnect.
+- **Reading overlay.** A transparent dialogue overlay on top of the VN, with
+  hover lookups and one-click Anki cards.
+- **Floating session panel.** An optional always-on-top window with the active
+  work, timer, latest line, and quick actions.
+- **Community.** Friend activity, friends immersing right now, and the
+  leaderboard, without opening the website. Optionally share what you are
+  immersing in with mutual followers.
+- **Offline first.** Every log goes through a local outbox with retries, so
+  closing the app or losing the network never loses data.
+- **Streak reminder.** One notification per day when your streak is at risk,
+  re-checked against the server before it fires.
+- **Optional Discord Rich Presence.** Off by default, and it never shows the
+  title of adult media.
+- **Self-update** from GitHub Releases. Nothing installs until you confirm it.
+- **English and Spanish.** The default follows the operating system.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| Ctrl/⌘ + 1…6 | Activity, Pending, Library, Sentences, Friend activity, Ranking |
+| Ctrl/⌘ + , | Settings |
+| Ctrl/⌘ + L | Manual log form |
+| Ctrl/⌘ + T | Texthooker |
+| Ctrl+Shift+M (⌘⇧M) | Mine the latest line from any window |
+| Ctrl+Shift+O / Ctrl+Shift+I | Show or hide the reading overlay / toggle click-through (configurable) |
 
 ## Stack
 
-| Capa | Elección | Por qué |
+| Layer | Choice | Reason |
 |---|---|---|
-| Runtime | Tauri v2 (Rust + WebView del sistema) | ~15 MB de instalador y decenas de MB de RAM, no cientos como Electron |
-| UI | React 19 + Vite 7 + Tailwind v4 + daisyUI 5 | Mismo design system y los mismos 19 temas que el frontend de NihongoTracker |
-| Datos locales | SQLite (`rusqlite`, bundled) | Cola offline, líneas del texthooker, registro de obras |
-| Red | `reqwest` desde Rust | Evita el CORS del backend (su allowlist solo tiene el dominio web) |
+| Runtime | Tauri v2 (Rust + system WebView) | A ~15 MB installer and tens of MB of RAM instead of hundreds like Electron |
+| UI | React 19 + Vite 7 + Tailwind v4 + daisyUI 5 | Shares the design system and themes of the NihongoTracker frontend |
+| Local data | SQLite (`rusqlite`, bundled) | Offline queue, texthooker lines, library, and mined sentences |
+| Network | `reqwest` from Rust | Avoids the backend CORS allowlist, which only includes the web domain |
+| Dictionary | [Hoshidicts](https://github.com/Manhhao/hoshidicts) (C++, git submodule) | Yomitan-compatible import, lookup, and deinflection |
 
-## Cómo funciona por dentro
+## How it works
+
+All detection, networking, and persistence live in Rust. The frontend is a view:
+it listens to events and calls commands, and never talks to the NihongoTracker
+API directly.
 
 ```
 src-tauri/src/
-  platform/      Ventanas y procesos por SO (Windows implementado; stub en el resto)
-  players.rs     Reproductores conocidos y limpieza del título de ventana
-  parser.rs      Parser de nombres de release estilo Anitomy (con tests)
-  watcher.rs     Bucle de 1 s: sesiones de anime y de VN, y su cierre en log
-  texthooker.rs  Cliente WebSocket (ws://localhost:6677) + lector de portapapeles
-  api.rs         Cliente REST con cabecera x-api-key
-  sync.rs        Outbox con reintentos y sincronización de líneas
-  db.rs          Esquema SQLite y consultas
-  commands.rs    Superficie IPC que consume el frontend
+  platform/        Windows, focus, idle time and players per OS (Win32, X11, D-Bus/MPRIS, CoreGraphics)
+  players.rs       Known players and window-title cleanup
+  parser.rs        Anitomy-style release-name parser (with tests)
+  playback.rs      Real position from mpv IPC and the MPC web interface
+  watcher.rs       Detection loop for anime, VN and game sessions; turns them into logs
+  texthooker.rs    WebSocket client (ws://localhost:6677) and clipboard reader
+  native_hook.rs   LunaHook integration (Windows)
+  text_filters.rs  Duplicate, word, regex and Chinese filters
+  dictionary.rs    Offline dictionary import and lookup
+  mining.rs        Sentence mining, screenshots and Anki export
+  reading_overlay.rs  Transparent VN overlay window
+  streak.rs        Streak reminder
+  discord.rs       Optional Rich Presence
+  updater.rs       Self-update from GitHub Releases
+  api.rs           REST client (x-api-key)
+  sync.rs          Outbox with retries and line sync
+  db.rs            SQLite schema and queries
+  commands.rs      IPC surface used by the frontend
+crates/nihongo-dict/       Rust FFI over the Hoshidicts engine
+packages/yomitan-content/  Structured-content renderer shared with the web frontend
 src/
-  screens/       Actividad, Pendientes, Biblioteca, Texthooker, Ajustes
-  components/ui/ Button, Modal, Field, Page… copiados del design system web
+  screens/         Activity, Pending, Library, Sentences, Friends, Ranking, Texthooker, Settings, Onboarding
+  components/ui/   Design system copied from the web frontend
+  i18n/            English and Spanish translations
 ```
 
-### Autenticación
+### Authentication
 
-El backend acepta `x-api-key` **antes** que la cookie JWT
-(`Backend/src/middlewares/authMiddleware.ts`), y esa cookie es `httpOnly` +
-`sameSite: strict`, así que es inusable desde una app nativa. El companion pide
-una API key (Ajustes → API keys en la web, formato `ntk_…`) y la guarda en el
-SQLite local.
+The backend checks the `x-api-key` header before the JWT cookie
+(`Backend/src/middlewares/authMiddleware.ts`). The cookie is `httpOnly` and
+`sameSite: strict`, so a native app cannot use it. The companion asks for an API
+key (`ntk_...`, created on the website under Settings → API keys) and stores it
+in the local SQLite database.
 
-### Detección de anime
+### Anime detection
 
-1. Se listan las ventanas visibles y se busca un proceso de reproductor conocido.
-2. Se limpia la marca del reproductor del título (`… - mpv`) para quedarse con el
-   nombre del archivo.
-3. `parser.rs` saca título, episodio, temporada y grupo.
-4. El título se resuelve contra `GET /api/media/search?type=anime`, con caché en
-   memoria y una tabla de vinculaciones manuales que tiene prioridad.
-5. Al superar el umbral (70 % del episodio por defecto) el log se envía o se
-   aparca en **Pendientes**, según los ajustes.
+1. The app lists visible windows (or MPRIS players) and looks for a known media
+   player.
+2. It strips the player's marker from the title, such as `... - mpv`, to get the
+   filename.
+3. `parser.rs` extracts the title, episode, season, and release group.
+4. The title is resolved with `GET /api/media/search?type=anime`, using an
+   in-memory cache and a manual-link table that takes priority.
+5. When the threshold is reached, the log is sent or placed in **Pending**,
+   depending on your settings. XP is always estimated by the server.
 
-#### Saber por dónde va el capítulo
+#### Episode progress
 
-El tiempo con la ventana abierta es el plan B: un vídeo en pausa también suma.
-Cuando el reproductor puede decir su posición, se le pregunta:
+Time with the window open is only the fallback. When the player exposes its
+position, the companion uses it:
 
-| Reproductor | Cómo | Qué hay que activar |
+| Player | Method | Required setting |
 |---|---|---|
-| mpv, mpv.net | IPC JSON por named pipe / socket | `input-ipc-server=/tmp/mpv-socket` en `mpv.conf`; en Windows mpv lo convierte en `\\.\pipe\tmp\mpv-socket` y el companion hace la misma traducción |
-| MPC-HC, MPC-BE | `variables.html` de su interfaz web | Opciones → Reproductor → Interfaz web → *Escuchar en el puerto* 13579 |
-| Los demás | tiempo transcurrido | — |
+| mpv, mpv.net | JSON IPC over a named pipe or socket | `input-ipc-server=/tmp/mpv-socket` in `mpv.conf`. On Windows mpv turns this into `\\.\pipe\tmp\mpv-socket`, and the companion does the same |
+| MPC-HC, MPC-BE | `variables.html` from the web interface | Options → Player → Web interface → *Listen on port* 13579 |
+| MPRIS players (Linux) | D-Bus | For mpv, the [mpv-mpris](https://github.com/hoyon/mpv-mpris) plugin |
+| Other players | Elapsed time | None |
 
-Con posición real el progreso es `posición / duración`, y una pausa deja de
-contar. Las rutas y el puerto se cambian en Ajustes → Anime.
+With real position data, progress is `position / duration` and pausing adds no
+time. Change the socket path and port under Settings → Tracking → Anime.
 
-### Detección de novelas visuales
+### Visual novels
 
-El proceso registrado aparece → arranca la sesión, se apunta el texthooker a esa
-obra y se abre la pantalla. El tiempo solo corre si la ventana está en primer
-plano (configurable) y no hay inactividad más allá del AFK. Al cerrar el proceso
-se compone el log con minutos y caracteres del texthooker.
+When a registered process appears, the companion starts the session, assigns the
+texthooker to that title, and opens it. The timer runs only while the window is
+in the foreground (if configured) and while you are not idle past the AFK limit.
+When the process closes, it creates a log with the session minutes and the
+texthooker character count.
 
-### Racha en riesgo
+### Games
 
-El aviso mide el día **en la zona horaria de tu cuenta de NihongoTracker**, no en
-la de este ordenador: si viajas o tienes mal la zona del sistema, el recordatorio
-sigue cayendo el día correcto. Salta cuando faltan menos de X horas para tu
-medianoche (3 por defecto, configurable) y, si quieres, también a una hora fija.
+Choose *Game* when adding an executable in the Library and link it to a game on
+NihongoTracker. Games use the same process watcher as visual novels, but always
+require focus and never open the texthooker on their own; open it from the
+active session or the sidebar when you want it. On exit the session goes to
+*Pending*, where you can review the minutes before sending it.
 
-Para no molestar:
+### LunaHook (Windows)
 
-- Una notificación por día como mucho, aunque cierres y abras la app.
-- Justo antes de avisar se vuelve a preguntar al servidor, así que un log hecho
-  desde la web o el móvil hace un minuto cancela el aviso sin que te enteres.
-- Si la app estaba cerrada y la abres pasada la hora, no te grita avisos
-  atrasados.
-- El clic abre el formulario de registro (en Windows; en macOS y Linux el
-  webview no puede recibir el clic del sistema, así que ahí la notificación
-  sólo informa y el formulario se abre desde la bandeja o desde *Actividad*).
+Enable **Capture game text with LunaHook** on a game or VN in the Library. The
+companion picks the x86 or x64 helper to match the game and sends the captured
+Japanese text to its texthooker, with no Textractor needed.
 
-Se apaga en Ajustes → Aplicación, junto con la hora fija y las horas de aviso.
-Ojo: un log con fecha desconocida no cuenta para la racha en el servidor, así
-que el aviso hace caso a `lastStreakDate`, no a lo que hayas enviado tú.
+In the texthooker, click **LunaHook** to open the hook selector (it also opens
+on its own the first time a game has no saved choice). Advance the dialogue to
+see live samples, pick the source, and click **Save hook**. The choice is saved
+per executable and reused on the next launch. Building a release with both
+helpers requires the C++ build tools for x86 and x64
+(`npm run build:native-game-hook`).
+
+### Text filters
+
+Under Settings → Tracking → Text filters (also reachable from the texthooker and
+the overlay settings):
+
+- **Remove duplicate sentences**: `こんにちはこんにちは` → `こんにちは`, while
+  keeping repeated characters such as `ああ……`.
+- **Filter out Chinese lines**: for releases that hook a Chinese translation next
+  to the Japanese. Lines with kana are never treated as Chinese; names and other
+  short kanji-only lines are kept. A translation glued to a Japanese line
+  (`「え…」“啊……”`) is cut off.
+- **Excluded words** and **regex rules**, with a live tester.
+
+Filtered text is not shown and does not count toward the characters in your
+logs. Existing lines stay as they are.
+
+### Offline dictionaries
+
+Go to **Settings → Anki → Offline dictionaries → Import dictionary** and pick a
+dictionary `.zip` exported for Yomitan. It is indexed and stored in the app's
+local data, so lookups need no connection or account.
+
+In the texthooker, hover over a word while holding **Shift** or **Alt**. The
+popup shows entries from every imported dictionary and lets you follow internal
+references. Structured Yomitan content is rendered safely: imported dictionaries
+cannot inject HTML, global styles, or external links.
+
+The engine is [Hoshidicts](https://github.com/Manhhao/hoshidicts) `main`,
+which provides the Yomitan-compatible importer, lookup strategy, frequency and
+pitch metadata, and Yomitan's Japanese deinflection rules.
+
+### Sentence mining and Anki
+
+Save a sentence with the bookmark beside a texthooker line, the reader toolbar,
+the floating panel, or Ctrl+Shift+M. A line is saved only once, so repeating the
+shortcut does not create duplicates. The shortcut also captures the focused game
+window when the system allows it (Windows, Linux on X11, macOS with Screen
+Recording). Everything stays local and works without an account.
+
+From the *Sentences* screen, or the **+** button in the dictionary popup, cards
+go to Anki Desktop through AnkiConnect (`127.0.0.1:8765`). Choose the deck, note
+type, and what goes into each field (word, reading, meaning, sentence, media
+title) under Settings → Anki. Anki and the add-on must be running. Audio clips
+are not supported.
+
+### Reading overlay
+
+Edit a VN in the Library and choose **Reader → Overlay**. This enables LunaHook
+and replaces the automatic reader window with a transparent dialogue overlay on
+top of the game.
+
+- Hover over a word to open the dictionary. The popup lives in its own window and
+  keeps the sentence you looked up while new dialogue arrives.
+- The toolbar appears on hover: pick a LunaHook source, move the overlay, open
+  its settings, let clicks pass through, or hide it. Drag the bottom-right grip
+  to resize it. Position and size survive restarts.
+- **Overlay settings** (from the toolbar or Settings → Tracking) control font
+  weight, alignment, background opacity, hover and idle visibility, lookup delay,
+  window priority, and global shortcuts, and show shortcut conflicts.
+- The overlay follows the VN process and hides when another app is in front. It
+  does not change the timer, capture source, or sync.
+
+The overlay uses captured text, not OCR, and targets windowed or borderless
+games. Exclusive fullscreen is not supported.
+
+### Community
+
+The *Friend activity* screen shows what people you follow, your clubs, or the
+whole community have been doing, plus friends who are immersing right now. The
+*Ranking* screen is the NihongoTracker leaderboard, filterable by medium,
+period, and audience (everyone, following, mutuals). Both need a connection.
+
+Turn on **Share what I am immersing in** under Settings → App to let mutual
+followers see your current tracked work. Sharing stops when tracking pauses or
+the app closes.
+
+### Streak reminder
+
+The reminder uses the time zone of your NihongoTracker account, not your
+computer's, so it follows the right day even if you travel or the system clock
+is wrong. It fires when fewer than N hours remain before midnight (three by
+default) or at a fixed time.
+
+- At most one notification per day, even if you restart the app.
+- It re-checks the server right before notifying: a log from the web or the
+  phone a minute earlier cancels it.
+- After a restart past the reminder time, old reminders are not shown.
+- On Windows and Linux the notification has a **Log now** button. On macOS it is
+  informational; open the form from the tray or *Activity*.
+
+Logs with an unknown date do not count toward the streak on the server, so the
+reminder checks `lastStreakDate`, not the logs you sent. Configure it under
+Settings → App.
 
 ### Discord Rich Presence
 
-Opcional y **apagado por defecto**: mientras no lo enciendas no se publica nada
-ni se abre ninguna conexión con Discord.
+Optional and **off by default**: until you enable it, nothing is published and no
+Discord connection is opened.
 
-Para encenderlo hace falta una aplicación propia en el
-[Discord Developer Portal](https://discord.com/developers/applications): copia su
-*Application ID* en Ajustes → Discord Rich Presence y sube tus iconos en
-*Rich Presence → Art Assets* (el nombre del asset de reserva se configura ahí
-mismo). Discord no tiene que estar abierto para arrancar la app: si no lo está,
-se reintenta solo.
-
-Lo que se publica:
+Create an application in the
+[Discord Developer Portal](https://discord.com/developers/applications), copy its
+*Application ID* into Settings → Tracking → Discord Rich Presence, and upload
+your icons under *Rich Presence → Art Assets* (set the fallback asset name there
+too). Discord does not need to be running when the app starts; the companion
+reconnects on its own.
 
 | | |
 |---|---|
-| Línea 1 | "Leyendo 蒼の彼方のフォーリズム" / "Viendo Frieren" |
-| Línea 2 | "12,4k caracteres" / "Episodio 3" |
-| Tiempo | Desde que empezó la sesión, contado por Discord |
-| Imagen | La portada de la obra, o tu icono de reserva |
-| Botón | "Ver perfil", a tu perfil público (se puede quitar) |
+| Line 1 | `Reading 蒼の彼方のフォーリズム` or `Watching Frieren` |
+| Line 2 | `12.4k characters` or `Episode 3` |
+| Time | From the start of the session |
+| Image | The title's cover or your fallback icon |
+| Button | `View profile`, linking to your public profile (optional) |
 
-Y lo que **no** se publica nunca:
+Never published:
 
-- El título ni la portada de una obra marcada +18 en NihongoTracker. Cae al modo
-  genérico: "Inmersión en japonés".
-- El nombre del archivo cuando no se pudo identificar la obra.
-- Nada en absoluto de lo que hayas metido en la lista negra, por obra o por
-  ejecutable — ni siquiera una actividad genérica.
-- Nada mientras la sesión esté en pausa, ni después de cerrar la app o de apagar
-  el toggle: la presencia se borra, no se queda colgada con lo de anoche.
+- The title or cover of media marked as adult on NihongoTracker. It falls back
+  to a generic `Japanese immersion` status.
+- The filename when the title could not be identified.
+- Anything on your blacklist, by title or by executable. Not even a generic
+  status is shown.
+- Anything after the app closes or you turn the toggle off. A paused video
+  clears the presence; a paused VN shows an "idling" status unless you disable
+  it.
 
-También hay un modo de **solo actividad** que oculta cualquier título, sea de lo
-que sea. En Ajustes tienes un preview en vivo de la presencia exacta que se
-publicaría en este momento —lo dibuja la misma función que decide lo que se
-manda—, así que puedes comprobarlo antes de encender nada.
+An **activity-only** mode hides every title. Settings shows a live preview built
+by the same function that publishes, so what you see there is exactly what
+others will see.
 
-### Yomitan y JitenReader
+## Development
 
-Los dos son extensiones de navegador, no aplicaciones. WebView2 sabe cargar
-extensiones de Chrome sin empaquetar, y Tauri lo expone, así que la ventana
-principal se construye en Rust (`build_main_window`) con
-`browser_extensions_enabled` y una carpeta de extensiones propia.
+Requirements: Node 20+, stable Rust, CMake, and Ninja. On Windows, the WebView2
+Runtime and the MSVC Build Tools. On Linux, the usual Tauri libraries
+(`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
+`libxdo-dev`).
 
-1. Ajustes → Diccionarios emergentes → **Abrir carpeta**.
-2. Descomprime ahí la build de Chrome de la extensión, una carpeta por
-   extensión (para Yomitan sirve `yomitan-chrome.zip` o `yomitan-edge.zip` de
-   sus releases; JitenReader se puede cargar igual desde su repo).
-3. Reinicia la app. La extensión aparece listada con su id y su versión.
-4. El botón **Ajustes** de cada extensión abre su propia página de
-   configuración en una ventana aparte — es lo que necesitas para importar
-   diccionarios en Yomitan o meter la API key de Jiten.
+Hoshidicts is a git submodule, so initialize it after cloning:
 
-Como el webview no tiene barra de herramientas, la app calcula el id que
-Chromium le daría a la extensión (SHA-256 de su ruta) para poder enlazar a sus
-páginas internas. Verificado contra un perfil real de WebView2.
-
-**Limitación:** esto es solo Windows. WebView2 admite extensiones; WKWebView
-(macOS) y WebKitGTK (Linux) no admiten extensiones de Chrome, así que ahí el
-ajuste no hace nada. La alternativa en esas plataformas es leer con el
-texthooker de la web en tu navegador, con la extensión instalada allí.
-
-## Desarrollo
-
-Requisitos: Node 20+, Rust estable, y en Windows el WebView2 Runtime y las
-Build Tools de MSVC.
+```bash
+git submodule update --init --recursive
+```
 
 ```bash
 npm install
-npm run tauri dev      # app en modo desarrollo
-npm run build          # solo el bundle del frontend
-npm run tauri build    # instalador (NSIS en Windows)
-cd src-tauri && cargo test   # tests del parser y de los reproductores
+npm run tauri dev      # full app in development (Vite on :1420 + Rust binary)
+npm run dev            # frontend only, without Tauri commands
+npm run typecheck      # tsc --noEmit
+npm run build          # tsc + vite build
+npm run test:rust      # cargo test (release parser, players, filters, streaks)
+npm run tauri build    # installer (NSIS on Windows)
 ```
 
-## Estado por plataforma
+`.github/workflows/ci.yml` builds and tests the app on Windows, Linux, and macOS.
+[CLAUDE.md](CLAUDE.md) documents the architecture and project rules in more
+detail (in Spanish).
 
-| | Detección | Texthooker | Notas |
-|---|---|---|---|
-| Windows | ✅ | ✅ | `EnumWindows` + `GetLastInputInfo` |
-| Linux | ⏳ | ✅ | Falta la capa X11/Wayland en `platform/` |
-| macOS | ⏳ | ✅ | Falta la capa de Accessibility en `platform/` |
+### Releases and updates
 
-La interfaz y toda la lógica ya son multiplataforma: solo `platform/` necesita
-una implementación nativa por sistema.
+Installed copies check GitHub for a new release 30 seconds after start and every
+six hours, notify once per version, and install only when you confirm it
+(Settings → App, or the notice in the sidebar). On Linux only the AppImage
+replaces itself; `.deb` and `.rpm` installs link to the release instead.
+
+To publish a release, bump `version` in `src-tauri/tauri.conf.json`,
+`src-tauri/Cargo.toml`, and `package.json`, commit, and push a matching tag:
+
+```bash
+git tag v0.2.0
+```
+
+```bash
+git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` builds and signs the installers for the three
+systems and publishes them with the `latest.json` manifest the app reads. It
+needs the repository secret `TAURI_SIGNING_PRIVATE_KEY`, matching
+`plugins.updater.pubkey`. The repository must be public, since the app downloads
+releases without authenticating.
+
+The Hoshidicts submodule tracks its upstream `main` branch. Updating it is a
+deliberate dependency update and requires rebuilding the native crate.
+
+## Platform status
+
+| | Windows | Linux (X11) | Linux (Wayland) | macOS |
+|---|---|---|---|---|
+| Players by window title | ✅ | ✅ | XWayland only | With Screen Recording |
+| Players by media controls (MPRIS) | — | ✅ | ✅ | — |
+| Real playback position | mpv, MPC | mpv, MPRIS | MPRIS | mpv |
+| Novels and games | ✅ | ✅ (incl. Wine/Proton) | ✅ | ✅ |
+| Focus-only counting | ✅ | ✅ | Assumed focused | ✅ |
+| AFK timeout | ✅ | ✅ | GNOME / KDE | ✅ |
+| Game screenshot when mining | ✅ | ✅ | — | With Screen Recording |
+| "Log now" on the streak reminder | ✅ | ✅ | ✅ | — |
+| Native game hook (LunaHook) | ✅ | — | — | — |
+| Reading overlay | ✅ | — | — | — |
+| Texthooker (WebSocket, clipboard) | ✅ | ✅ | ✅ | ✅ |
+
+*Settings → Tracking* shows the same list for the running system.
+
+- **Linux**: Wayland does not let apps see other windows, so players are followed
+  through MPRIS. Wine and Proton games are matched by the `.exe` in their command
+  line. For text, run Textractor inside the game's prefix and connect it over
+  WebSocket.
+- **macOS**: window titles need System Settings → Privacy & Security → Screen
+  Recording. Without it, novels, games, and focus still work; players are only
+  detected through mpv's IPC.
+
+## License
+
+The dictionary engine, Hoshidicts `main`, is licensed under GPL-3.0-only. The
+companion links it directly, so releases that include it must use GPL-compatible
+terms and provide the corresponding source. Upstream source and license are in
+`crates/nihongo-dict/vendor/`; other third-party notices are in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+## LLM-assisted development
+
+This application was developed with the help of large language models, and much
+of the code has not been manually reviewed. The project aims for high quality
+through development guard rails, automated checks, and the Rust test suite, but
+use it at your own discretion and review the code before relying on it.

@@ -1,0 +1,27 @@
+{
+  "title": "Minería de frases",
+  "subtitle": "Guarda líneas en japonés del texthooker y envíalas a Anki.",
+  "mineLatest": "Guardar última línea",
+  "shortcut": "Ctrl + Shift + M guarda la última línea aunque otra ventana esté activa. En Windows, también captura la pantalla si el juego o la novela vinculada tiene el foco.",
+  "deck": "Mazo de Anki",
+  "deckHint": "Anki Desktop y AnkiConnect deben estar abiertos. Configura el tipo de nota y sus campos en Ajustes.",
+  "saved": "Frases guardadas ({{count}})",
+  "freeSession": "Sesión libre",
+  "exported": "En Anki",
+  "hasScreenshot": "Captura",
+  "preview": "Ver imagen",
+  "screenshotAlt": "Captura de la ventana de origen",
+  "sendToAnki": "Enviar a Anki",
+  "delete": "Eliminar frase guardada",
+  "empty": "Todavía no hay frases guardadas. Guarda una línea del texthooker o usa el atajo.",
+  "errors": {
+    "lineNotFound": "Esa línea del texthooker ya no está disponible.",
+    "noJapanese": "Esta línea no contiene texto japonés.",
+    "noLine": "Todavía no hay líneas en esta sesión.",
+    "sentenceNotFound": "No se encontró la frase guardada.",
+    "deckMissing": "Elige primero un mazo y tipo de nota de Anki.",
+    "ankiModelMissing": "Elige primero un mazo y tipo de nota de Anki.",
+    "ankiUnavailable": "No se pudo conectar con AnkiConnect. Abre Anki Desktop y comprueba el complemento.",
+    "ankiInvalidResponse": "AnkiConnect devolvió una respuesta no válida."
+  }
+}

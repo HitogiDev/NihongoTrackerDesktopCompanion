@@ -1,0 +1,50 @@
+{
+  "title": "Comunidad",
+  "subtitle": "Ponte al día con tus amigos, clubes y la comunidad de Nihongo Tracker.",
+  "friendActivity": "Tus amigos están aprendiendo",
+  "immersing": { "title": "Amistades aprendiendo ahora", "hint": "Sesiones actuales compartidas por seguidores mutuos.", "empty": "Ninguna amistad comparte una sesión activa.", "elapsed": "{{time}} hasta ahora" },
+  "openSocial": "Ver todo",
+  "ranking": "Ver ranking",
+  "openProfile": "Abrir el perfil de {{username}}",
+  "offline": "Conéctate a Nihongo Tracker para ver la actividad de la comunidad.",
+  "loadError": "No se pudo cargar la actividad de la comunidad.",
+  "retry": "Reintentar",
+  "loadMore": "Cargar más",
+  "followingHint": "Sigue a otros estudiantes en Nihongo Tracker para ver aquí su actividad.",
+  "scope": {
+    "following": "Siguiendo",
+    "clubs": "Clubes",
+    "global": "Todos"
+  },
+  "empty": {
+    "following": "No hay actividad reciente de las personas que sigues.",
+    "clubs": "No hay actividad reciente en los clubes.",
+    "global": "No hay actividad reciente de la comunidad."
+  },
+  "activity": {
+    "generic": "compartió una actualización",
+    "immersion_log": "registró inmersión",
+    "notable_immersion_session": "tuvo una sesión de inmersión destacada",
+    "achievement_unlocked": "desbloqueó un logro",
+    "media_started": "empezó una obra nueva",
+    "media_completed": "completó una obra",
+    "media_review": "reseñó una obra",
+    "journal_entry": "compartió una entrada de diario",
+    "level_milestone": "alcanzó un nuevo nivel",
+    "streak_milestone": "alcanzó un hito de racha",
+    "personal_record": "estableció un récord personal",
+    "goal_completed": "completó un objetivo",
+    "challenge_joined": "se unió a un desafío",
+    "challenge_completed": "completó un desafío",
+    "club_milestone": "celebró un hito del club",
+    "club_challenge_started": "inició un desafío del club",
+    "cooperative_goal_progress": "avanzó en un objetivo compartido",
+    "cooperative_goal_completed": "completó un objetivo compartido"
+  },
+  "metrics": {
+    "characters": "caracteres",
+    "minutes": "min",
+    "episodes": "episodios",
+    "pages": "páginas"
+  }
+}

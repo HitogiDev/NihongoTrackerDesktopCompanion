@@ -1,4 +1,9 @@
 {
+  "mining": {
+    "saveLatest": "Save latest sentence",
+    "saveLine": "Save sentence",
+    "saved": "Sentence saved"
+  },
   "topbar": {
     "timer": "Timer",
     "speed": "Characters per hour",
@@ -16,8 +21,14 @@
     "undo": "Undo delete",
     "stats": "View statistics",
     "settings": "Settings",
+    "dictionary": "Look up the last line or selected text",
     "sessions": "Sessions",
-    "back": "Back"
+    "back": "Back",
+    "hideWindow": "Hide texthooker window",
+    "websocketDisabled": "WebSocket disabled while using LunaHook",
+    "inputSource": "Text input source",
+    "websocketSource": "WebSocket",
+    "sourceFailed": "Could not change the text input source."
   },
   "timer": {
     "title": "Set timer",
@@ -26,7 +37,8 @@
     "seconds": "Seconds",
     "resetConfirm": "Reset the timer?",
     "resetBody": "This session's time goes back to zero. The lines are untouched.",
-    "resetAction": "Reset"
+    "resetAction": "Reset",
+    "saveFailed": "Could not update the timer. Try again."
   },
   "stats": {
     "title": "Session statistics",
@@ -43,13 +55,34 @@
     "noHistory": "You have not logged any session yet.",
     "lines": "Lines",
     "logSession": "Log session",
+    "comment": "Comment (optional)",
+    "commentPlaceholder": "Add a note about this reading session",
     "logged": "Logged",
-    "session": "session"
+    "session": "session",
+    "intelligence": {
+      "title": "Session intelligence",
+      "disabled": "Session intelligence is turned off in settings.",
+      "focus": "Focus",
+      "focused": "Focused",
+      "distracted": "Distracted",
+      "afk": "AFK excluded",
+      "rate": "Japanese characters per minute",
+      "charsPerMinute": "Japanese characters/min",
+      "distractionCount": "{{count}} distraction(s)",
+      "waiting": "Read another line to estimate focus.",
+      "minute": "Minute {{minute}}: {{count}} Japanese characters",
+      "minuteLabel": "Minute {{minute}}"
+    },
+    "progress": "Reading progress",
+    "progressCharacters": "{{current}} / {{total}} characters",
+    "progressUnavailable": "Total character count is unavailable.",
+    "offlineCache": "Showing saved data while offline."
   },
   "settings": {
     "title": "Texthooker settings",
     "tabDisplay": "Display",
     "tabBehavior": "Behavior",
+    "tabIntelligence": "Session Intelligence",
     "displayHeading": "Display",
     "verticalText": "Vertical text",
     "alwaysVerticalBar": "Always vertical bar",
@@ -67,6 +100,8 @@
     "behaviorHeading": "Behavior and connection",
     "autoPause": "Auto-pause (seconds without lines)",
     "autoPauseHint": "0 disables it. Does not affect sessions driven by visual novel detection.",
+    "dictionaryPopupDelay": "Dictionary popup delay (milliseconds)",
+    "dictionaryPopupDelayHint": "0 opens it immediately. Hold Shift over Japanese text to look it up.",
     "runtime": "While running",
     "clipboard": "Read from the clipboard",
     "allowLine": "Accept lines while paused",
@@ -74,12 +109,25 @@
     "autostartByLine": "Start the clock on a line",
     "autostartByClipboard": "Start the clock on copy",
     "pauseOnDisconnect": "Pause on disconnect",
-    "preventDuplicates": "Prevent duplicate lines",
+    "preventDuplicates": "Remove duplicate sentences",
     "autoconnect": "Reconnect automatically",
     "websocketUrl": "WebSocket",
-    "copyAllLines": "Copy every line",
-    "clearAllLines": "Delete every line",
-    "useAppTheme": "Use the app theme"
+    "copyAllLines": "Copy all lines",
+    "clearAllLines": "Clear all lines",
+    "clearConfirmTitle": "Clear all lines?",
+    "clearConfirmBody": "This removes every line from the current texthooker session. Continue?",
+    "clearFailed": "Could not clear the lines. Try again.",
+    "useAppTheme": "Use the app theme",
+    "intelligence": {
+      "title": "Session intelligence",
+      "mode": "Detection mode",
+      "hint": "Estimates focus from gaps between text lines. Analysis stays on this device.",
+      "automatic": "Automatic",
+      "manual": "Manual threshold",
+      "off": "Off",
+      "manualThreshold": "Distraction threshold (seconds)",
+      "afkThreshold": "AFK exclusion threshold (seconds)"
+    }
   },
   "classHelp": {
     "title": "Classes for custom CSS",
@@ -114,6 +162,30 @@
     "title": "Sessions",
     "free": "Free session",
     "linkAnother": "Link another work"
+  },
+  "hookSelection": {
+    "title": "Choose a LunaHook text hook",
+    "description": "Select the source that contains the dialogue you want. NTDC will remember your choice for this game.",
+    "choose": "Choose a LunaHook hook",
+    "button": "LunaHook",
+    "enable": "Enable LunaHook for this game",
+    "enableFailed": "Could not enable LunaHook for this game.",
+    "noGame": "Open a game or visual novel registered in your library with detection enabled.",
+    "trackingRequired": "Enable tracking and game or visual novel detection in Settings to start LunaHook.",
+    "waiting": "Advance dialogue in the game. Detected hooks and their text samples will appear here.",
+    "saved": "Saved hook: {{code}}",
+    "status": {
+      "inactive": "LunaHook is inactive.",
+      "starting": "Connecting LunaHook to the game...",
+      "attached": "LunaHook is attached. Waiting for game text...",
+      "receiving": "LunaHook is receiving game text.",
+      "error": "LunaHook could not capture game text.",
+      "unavailable": "LunaHook is unavailable."
+    },
+    "unnamed": "Unnamed hook",
+    "save": "Save hook",
+    "saving": "Saving...",
+    "saveFailed": "Could not save the selected hook."
   },
   "deleteLine": "Delete line"
 }
