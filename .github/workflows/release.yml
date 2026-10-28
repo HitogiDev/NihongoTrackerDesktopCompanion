@@ -39,7 +39,7 @@ jobs:
             args: '--target universal-apple-darwin'
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -58,7 +58,7 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ninja -y --no-progress
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
