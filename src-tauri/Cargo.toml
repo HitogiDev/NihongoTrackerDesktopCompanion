@@ -35,7 +35,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 sysinfo = "0.32"
 # Wayland clipboard through the data-control protocol instead of XWayland.
 arboard = { version = "3", features = ["wayland-data-control"] }
@@ -51,6 +51,8 @@ chrono-tz = "0.10"
 discord-rich-presence = "1.1.0"
 
 [dev-dependencies]
+# `cargo test` writes src/lib/bindings/*.ts from the types the UI receives.
+ts-rs = { version = "12", features = ["serde-json-impl", "chrono-impl", "no-serde-warnings"] }
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

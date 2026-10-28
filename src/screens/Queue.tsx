@@ -6,6 +6,7 @@ import {
   Check,
   CircleAlert,
   Inbox,
+  Pencil,
   RefreshCw,
   Send,
   Trash2,
@@ -15,18 +16,25 @@ import {
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/Empty';
 import { Modal } from '../components/ui/Modal';
-import { Field } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { MediaWebLink } from '../components/MediaWebLink';
+import { LogForm } from '../components/LogForm';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import { logTypeLabel, relativeDate } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
+import { draftFromPayload, missing, toPayload, type LogDraft } from '../lib/logRules';
+import { isEditableLog, outboxLabel, splitOutbox } from '../lib/queue';
 import type { LogPayload, PendingItem } from '../lib/types';
+
+/** What the editor is open on: a detected log to confirm, or one in the send queue. */
+type Editing =
+  | { kind: 'pending'; id: string; payload: LogPayload }
+  | { kind: 'outbox'; id: string; payload: LogPayload; error: string | null };
 
 export default function Queue() {
   const { t } = useTranslation(['queue', 'common']);
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState<PendingItem | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
 
   const pending = useQuery({ queryKey: ['pending'], queryFn: ipc.listPending });
   const outbox = useQuery({ queryKey: ['outbox'], queryFn: ipc.listOutbox });
@@ -54,6 +62,15 @@ export default function Queue() {
     },
   });
 
+  const updateOutbox = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: LogPayload }) =>
+      ipc.updateOutbox(id, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['outbox'] });
+      setEditing(null);
+    },
+  });
+
   const discard = useMutation({
     mutationFn: (id: string) => ipc.discardPending(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['pending'] }),
@@ -65,8 +82,7 @@ export default function Queue() {
   });
 
   const items = pending.data ?? [];
-  const outboxItems = (outbox.data ?? []).filter((i) => i.status !== 'sent');
-  const sentItems = (outbox.data ?? []).filter((i) => i.status === 'sent').slice(0, 15);
+  const { waiting: outboxItems, sent: sentItems } = splitOutbox(outbox.data ?? []);
 
   return (
     <Page
@@ -98,7 +114,7 @@ export default function Queue() {
             <PendingCard
               key={item.id}
               item={item}
-              onLog={() => setEditing(item)}
+              onLog={() => setEditing({ kind: 'pending', id: item.id, payload: item.payload })}
               onDiscard={() => discard.mutate(item.id)}
               busy={confirm.isPending || discard.isPending}
             />
@@ -120,7 +136,7 @@ export default function Queue() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">
                     <MediaWebLink type={(item.payload as LogPayload).type} mediaId={(item.payload as LogPayload).mediaId}>
-                      {(item.payload as LogPayload).mediaTitle || (item.payload as LogPayload).description || item.kind}
+                      {outboxLabel(item)}
                     </MediaWebLink>
                   </p>
                   <p className="text-xs text-base-content/60 truncate">
@@ -128,9 +144,27 @@ export default function Queue() {
                     {t('attempts', { count: item.attempts })}
                   </p>
                 </div>
+                {isEditableLog(item) ? (
+                  <Button
+                    size="xs"
+                    appearance="ghost"
+                    aria-label={t('edit.title')}
+                    onClick={() =>
+                      setEditing({
+                        kind: 'outbox',
+                        id: item.id,
+                        payload: item.payload,
+                        error: item.status === 'failed' ? item.lastError : null,
+                      })
+                    }
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                ) : null}
                 <Button
                   size="xs"
                   appearance="outline"
+                  aria-label={t('retry')}
                   onClick={() => void ipc.retryOutbox(item.id).then(() => outbox.refetch())}
                 >
                   <Send className="w-3 h-3" />
@@ -138,6 +172,7 @@ export default function Queue() {
                 <Button
                   size="xs"
                   appearance="ghost"
+                  aria-label={t('common:delete')}
                   onClick={() => void ipc.deleteOutbox(item.id).then(() => outbox.refetch())}
                 >
                   <Trash2 className="w-3 h-3" />
@@ -160,7 +195,7 @@ export default function Queue() {
                 <Check className="w-4 h-4 text-success shrink-0" />
                 <span className="text-sm truncate flex-1">
                   <MediaWebLink type={(item.payload as LogPayload).type} mediaId={(item.payload as LogPayload).mediaId}>
-                    {(item.payload as LogPayload).mediaTitle || (item.payload as LogPayload).description || item.kind}
+                    {outboxLabel(item)}
                   </MediaWebLink>
                 </span>
                 <span className="text-xs text-base-content/50">
@@ -172,11 +207,16 @@ export default function Queue() {
         </>
       ) : null}
 
-      <EditPendingModal
-        item={editing}
+      <EditLogModal
+        editing={editing}
         onClose={() => setEditing(null)}
-        onSave={(payload) => editing && confirm.mutate({ id: editing.id, payload })}
-        saving={confirm.isPending}
+        onSave={(payload) => {
+          if (!editing) return;
+          if (editing.kind === 'pending') confirm.mutate({ id: editing.id, payload });
+          else updateOutbox.mutate({ id: editing.id, payload });
+        }}
+        saving={confirm.isPending || updateOutbox.isPending}
+        saveError={editing?.kind === 'outbox' ? updateOutbox.error : confirm.error}
       />
     </Page>
   );
@@ -271,33 +311,31 @@ function PendingCard({
   );
 }
 
-function EditPendingModal({
-  item,
+function EditLogModal({
+  editing,
   onClose,
   onSave,
   saving,
+  saveError,
 }: {
-  item: PendingItem | null;
+  editing: Editing | null;
   onClose: () => void;
   onSave: (payload: LogPayload) => void;
   saving: boolean;
+  saveError: unknown;
 }) {
   const { t } = useTranslation(['queue', 'common']);
-  const [draft, setDraft] = useState<LogPayload | null>(null);
+  const [draft, setDraft] = useState<LogDraft | null>(null);
 
   useEffect(() => {
-    if (item) {
-      const { _detected, ...rest } = item.payload;
-      void _detected;
-      setDraft(rest.mediaTitle ? rest : { ...rest, mediaTitle: rest.description, description: '' });
-    }
-  }, [item]);
+    setDraft(editing ? draftFromPayload(editing.payload) : null);
+  }, [editing]);
 
-  if (!item || !draft) return null;
+  if (!editing || !draft) return null;
 
   return (
     <Modal
-      open={Boolean(item)}
+      open
       onClose={onClose}
       title={t('edit.title')}
       actions={
@@ -305,93 +343,26 @@ function EditPendingModal({
           <Button appearance="ghost" onClick={onClose}>
             {t('common:cancel')}
           </Button>
-          <Button variant="primary" loading={saving} disabled={!draft.mediaTitle?.trim()} onClick={() => onSave({
-            ...draft,
-            mediaTitle: draft.mediaTitle?.trim(),
-            description: draft.description.trim() || (draft.mediaId ? '' : draft.mediaTitle?.trim() ?? ''),
-          })}>
-            {t('log')}
+          <Button
+            variant="primary"
+            loading={saving}
+            disabled={missing(draft) !== null}
+            onClick={() => onSave(toPayload(draft))}
+          >
+            {editing.kind === 'pending' ? t('log') : t('edit.saveAndSend')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label={t('edit.mediaTitle')}>
-          {(id) => (
-            <input
-              id={id}
-              className="input w-full"
-              value={draft.mediaTitle ?? ''}
-              onChange={(e) => setDraft({ ...draft, mediaTitle: e.target.value })}
-            />
-          )}
-        </Field>
-        <Field label={t('edit.comment')}>
-          {(id) => (
-            <textarea
-              id={id}
-              className="textarea w-full"
-              rows={3}
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              placeholder={t('edit.commentPlaceholder')}
-            />
-          )}
-        </Field>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label={t('edit.episodes')}>
-            {(id) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                className="input w-full"
-                value={draft.episodes ?? ''}
-                onChange={(e) =>
-                  setDraft({ ...draft, episodes: e.target.value ? Number(e.target.value) : undefined })
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('edit.minutes')}>
-            {(id) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                className="input w-full"
-                value={draft.time ?? ''}
-                onChange={(e) =>
-                  setDraft({ ...draft, time: e.target.value ? Number(e.target.value) : undefined })
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('edit.characters')}>
-            {(id) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                className="input w-full"
-                value={draft.chars ?? ''}
-                onChange={(e) =>
-                  setDraft({ ...draft, chars: e.target.value ? Number(e.target.value) : undefined })
-                }
-              />
-            )}
-          </Field>
-        </div>
-        <Field label={t('edit.mediaId')} hint={t('edit.mediaIdHint')}>
-          {(id) => (
-            <input
-              id={id}
-              className="input w-full font-mono text-sm"
-              value={draft.mediaId ?? ''}
-              onChange={(e) => setDraft({ ...draft, mediaId: e.target.value || undefined })}
-            />
-          )}
-        </Field>
+        {editing.kind === 'outbox' && editing.error ? (
+          <div className="alert alert-error py-2">
+            <CircleAlert className="w-4 h-4" />
+            <span className="text-sm">{t('edit.rejected', { error: editing.error })}</span>
+          </div>
+        ) : null}
+        <LogForm draft={draft} onChange={setDraft} showDate xpKey={`${editing.kind}:${editing.id}`} />
+        {saveError ? <p className="text-sm text-error">{String(saveError)}</p> : null}
       </div>
     </Modal>
   );

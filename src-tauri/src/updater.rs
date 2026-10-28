@@ -28,6 +28,7 @@ const FIRST_CHECK: Duration = Duration::from_secs(30);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct UpdateInfo {
     pub version: String,
     pub current_version: String,

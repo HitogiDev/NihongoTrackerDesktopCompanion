@@ -167,5 +167,16 @@
     },
     "screenRecordingHint": "macOS hides other apps’ window titles until you allow Screen Recording in System Settings → Privacy & Security. Restart the companion after granting it.",
     "screenRecordingAction": "Request access"
+  },
+  "backup": {
+    "section": "Backup",
+    "title": "Local database",
+    "hint": "Library, queue, texthooker lines, mined sentences and settings, including your API key: keep the file private. Dictionaries and screenshots are not included.",
+    "export": "Export",
+    "restore": "Restore",
+    "exported": "Saved to {{path}}",
+    "confirmTitle": "Restore this backup?",
+    "confirmBody": "Everything stored locally is replaced with the backup and the app restarts. Logs still waiting in the queue are replaced too. The current database is kept as companion.before-restore.sqlite3 in the app data folder.",
+    "confirm": "Restore and restart"
   }
 }

@@ -11,6 +11,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct ParsedAnime {
     pub title: String,
     pub episode: Option<u32>,

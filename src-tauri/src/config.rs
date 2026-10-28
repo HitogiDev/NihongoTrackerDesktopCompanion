@@ -81,6 +81,7 @@ fn d_anki_field_sources() -> std::collections::BTreeMap<String, String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Settings {
     /// Base origin of the NihongoTracker instance, without `/api`.
     #[serde(default = "d_api_url")]
@@ -193,7 +194,10 @@ pub struct Settings {
     #[serde(default = "d_dictionary_popup_delay_ms")]
     pub dictionary_popup_delay_ms: u32,
     pub reading_overlay: ReadingOverlaySettings,
+    /// `automatic` | `manual` | `off`; a string so an unknown value from a newer
+    /// build still loads.
     #[serde(default = "d_intelligence_mode")]
+    #[cfg_attr(test, ts(type = "'automatic' | 'manual' | 'off'"))]
     pub texthooker_intelligence_mode: String,
     #[serde(default = "d_intelligence_manual_threshold")]
     pub texthooker_intelligence_manual_threshold_seconds: u32,
@@ -342,6 +346,7 @@ impl Default for Settings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct ReadingOverlaySettings {
     pub font_size: u32,
     pub font_family: String,
@@ -368,6 +373,7 @@ pub struct ReadingOverlaySettings {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum OverlayTextVisibility {
     #[default]
     Always,

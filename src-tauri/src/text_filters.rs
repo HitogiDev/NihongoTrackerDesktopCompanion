@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct NativeHookTextFilters {
     pub excluded_words: String,
     pub regex_patterns: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "FilterRegexError"))]
 pub struct FilterError {
     pub line: usize,
     pub message: String,
@@ -95,6 +97,7 @@ pub fn normalize(text: &str, reduce_repetitions: bool, filters: Option<&NativeHo
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct FilterPreview {
     pub text: String,
     pub chars: i64,

@@ -145,14 +145,14 @@ pub fn add_pending(app: &AppHandle, payload: &Value, source: &str) -> String {
 }
 
 /// Send one queued item. `Ok(())` means it left the machine.
-async fn deliver(app: &AppHandle, kind: &str, payload: &str) -> Result<(), ApiError> {
+async fn deliver(app: &AppHandle, id: &str, kind: &str, payload: &str) -> Result<(), ApiError> {
     let state = app.state::<AppState>();
     let client = state.client().await;
     let value: Value = serde_json::from_str(payload).unwrap_or(Value::Null);
 
     match kind {
         "log" => {
-            let created = client.create_log(&value).await?;
+            let created = client.create_log(&value, id).await?;
             // The server answers with the celebration payload (XP, level-up,
             // rank overtakes) and any achievements the log unlocked. Forward it
             // so the UI can play the same sequence as the web app.
@@ -229,7 +229,7 @@ pub async fn flush(app: &AppHandle) {
 
     let mut changed = false;
     for item in items {
-        match deliver(app, &item.kind, &item.payload).await {
+        match deliver(app, &item.id, &item.kind, &item.payload).await {
             Ok(()) => {
                 let _ = state.db.mark_sent(&item.id);
                 if item.kind == "log" {

@@ -49,6 +49,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Translations have the same keys in every language
+        run: npm run check:i18n
+
+      - name: Frontend tests
+        run: npm test
+
       - name: Typecheck and build the frontend
         # `generate_context!` embeds dist/, so it must exist before cargo runs.
         run: npm run build
@@ -59,3 +65,14 @@ jobs:
 
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: TypeScript bindings match the Rust types
+        # The test run above rewrites src/lib/bindings from the Rust structs.
+        # Any difference means a Rust type changed without committing them.
+        shell: bash
+        run: |
+          git add --intent-to-add src/lib/bindings
+          git diff --exit-code -- src/lib/bindings || {
+            echo "::error::src/lib/bindings is stale: run 'npm run bindings' and commit the result."
+            exit 1
+          }

@@ -18,6 +18,7 @@ import { Button } from '../components/ui/Button';
 import { DiscordSettings } from '../components/DiscordSettings';
 import { PlatformSupport } from '../components/PlatformSupport';
 import { UpdateSettings } from '../components/UpdateSettings';
+import { BackupSettings } from '../components/BackupSettings';
 import { Field, Toggle } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { ipc } from '../lib/ipc';
@@ -443,6 +444,8 @@ export default function SettingsScreen() {
       <div className="surface p-2"><Toggle label={t('social.share')} description={t('social.shareHint')} checked={settings.share_activity} onChange={(v) => void updateSettings({ share_activity: v })} /></div>
       <SectionTitle>{t('common:update.title')}</SectionTitle>
       <UpdateSettings />
+      <SectionTitle>{t('backup.section')}</SectionTitle>
+      <BackupSettings />
       <SectionTitle>{t('app.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle

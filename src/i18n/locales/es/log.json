@@ -19,5 +19,8 @@
     "time": "Minutos",
     "chars": "Caracteres",
     "pages": "Páginas"
-  }
+  },
+  "search": "Buscar obra",
+  "date": "Fecha",
+  "dateHint": "Cuándo fue, en tu hora local."
 }

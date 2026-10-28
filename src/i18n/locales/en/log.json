@@ -19,5 +19,8 @@
     "time": "Minutes",
     "chars": "Characters",
     "pages": "Pages"
-  }
+  },
+  "search": "Search media",
+  "date": "Date",
+  "dateHint": "When it happened, in your local time."
 }
