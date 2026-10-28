@@ -33,6 +33,12 @@ fn main() {
     if msvc {
         configure.arg("-DCMAKE_CXX_FLAGS=/utf-8 /Zc:__cplusplus");
     }
+    // CMake builds for the host by default; a universal macOS bundle runs this
+    // once per architecture and each half must link its own copy.
+    if target.contains("apple-darwin") {
+        let arch = if target.starts_with("aarch64") { "arm64" } else { "x86_64" };
+        configure.arg(format!("-DCMAKE_OSX_ARCHITECTURES={arch}"));
+    }
     run(configure, "Hoshidicts CMake configure");
 
     let mut build = msvc_command(&cmake, &target, msvc, false);
@@ -55,8 +61,14 @@ fn main() {
         "cargo:rustc-link-lib=static={}",
         if msvc { "deflatestatic" } else { "deflate" }
     );
-    println!("cargo:rustc-link-lib=static=utf8proc_static");
-    if !msvc {
+    // utf8proc only renames its static library under MSVC.
+    println!(
+        "cargo:rustc-link-lib=static={}",
+        if msvc { "utf8proc_static" } else { "utf8proc" }
+    );
+    if target.contains("apple") {
+        println!("cargo:rustc-link-lib=dylib=c++");
+    } else if !msvc {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     }
 

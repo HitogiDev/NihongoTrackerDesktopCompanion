@@ -45,7 +45,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev g++-12
+          # hoshidicts is C++23 and needs <expected>, which GCC 11 (the
+          # 22.04 default) lacks. 22.04 stays for the older glibc baseline.
+          echo "CC=gcc-12" >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
 
       - name: Ninja (native game hook)
         if: runner.os == 'Windows'
