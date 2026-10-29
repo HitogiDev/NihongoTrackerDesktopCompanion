@@ -158,6 +158,7 @@ async fn tick(
 
     crate::reading_overlay::sync_session(app, &snapshot, settings);
     update_native_game_hook(app, &mut snapshot, &observed);
+    crate::reading_overlay::sync_hook(app, &snapshot.game_hook);
 
     snapshot.queued_count = state.db.queued_count();
     snapshot.pending_count = state.db.list_pending().map(|p| p.len() as i64).unwrap_or(0);

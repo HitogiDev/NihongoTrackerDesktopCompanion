@@ -18,7 +18,6 @@ export function ReadingOverlay() {
   const { t } = useTranslation('readingOverlay');
   const view = useReadingOverlay();
   const settings = useAppStore((state) => state.settings);
-  const tracker = useAppStore((state) => state.tracker);
   const popupCloseDelay = useRef(500);
   popupCloseDelay.current = settings?.reading_overlay.popup_close_delay_ms ?? 500;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,8 +85,7 @@ export function ReadingOverlay() {
     }, Math.max(0, Math.min(2000, settings?.reading_overlay.lookup_delay_ms ?? 75)));
   }
 
-  const native = tracker?.game_hook;
-  const status = native && native.pid === view?.target?.pid && native.content_id === view?.target?.content_id ? native : null;
+  const status = view?.hook ?? null;
   const preferences = settings?.reading_overlay;
   const pointerInside = view?.click_through ? view.toolbar_hovered : hovered;
   const idle = Boolean(line) && !view?.reveal_controls && !pointerInside && !view?.popup;
@@ -168,13 +166,11 @@ function OverlayDictionary({ line, offset }: { line: TextLine; offset: number })
 export function ReadingOverlayPopup() {
   const { t } = useTranslation(['texthooker', 'readingOverlay', 'common']);
   const view = useReadingOverlay();
-  const tracker = useAppStore((state) => state.tracker);
   const [selected, setSelected] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const target = view?.target;
-  const native = tracker?.game_hook;
-  const status = native?.pid === target?.pid && native?.content_id === target?.content_id ? native ?? null : null;
+  const status = view?.hook ?? null;
   const popup = view?.popup;
   const liveTarget = useRef(target);
   liveTarget.current = target;
