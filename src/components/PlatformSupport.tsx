@@ -13,6 +13,7 @@ const ROWS = [
   'screenshots',
   'actionable_notifications',
   'native_hook',
+  'ctrl_shield',
 ] as const satisfies ReadonlyArray<keyof Capabilities>;
 
 /**

@@ -101,6 +101,18 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   destruye. El overlay de lectura y su popup se crean la primera vez que se
   quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
   hijas del popup y morirían con él.
+- El overlay de lectura es `focusable(false)`, así que sus teclas van al juego
+  y una VN salta texto con Ctrl. El **escudo de Ctrl**
+  (`platform::shield_ctrl`, `reading_overlay::ctrl_shield_blocks`) se traga
+  las pulsaciones de Ctrl mientras el cursor está sobre el overlay o su popup,
+  el juego tiene el foco y no está en click-through
+  (`reading_overlay.block_ctrl_on_hover`). En Windows es un `WH_KEYBOARD_LL`
+  en su propio hilo, instalado solo mientras el overlay está visible. Cada
+  pulsación y su suelta van por el mismo camino (`platform::ctrl_event`): si
+  no, el juego vería un Ctrl pulsado que nunca se suelta y saltaría sin fin. Si
+  se pulsa otra tecla con un Ctrl tragado, es un atajo (Ctrl+Shift+I): se
+  reinyectan el Ctrl y la tecla con `SendInput` y ese Ctrl deja de tragarse.
+  En Linux y macOS es un no-op (`Capabilities::ctrl_shield`).
 - `window_chrome.rs`: barra de título con el tema de daisyUI y Mica tras la
   sidebar en Windows 11 (`data-vibrancy` en `<html>`; sin él no cambia nada).
 - Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas

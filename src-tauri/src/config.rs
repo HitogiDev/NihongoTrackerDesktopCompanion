@@ -366,6 +366,9 @@ pub struct ReadingOverlaySettings {
     pub text_visibility: OverlayTextVisibility,
     pub always_on_top: bool,
     pub hide_when_unfocused: bool,
+    /// Ctrl does not reach the game while the cursor is over the overlay or its
+    /// popup, so reaching for a lookup does not skip the text.
+    pub block_ctrl_on_hover: bool,
     pub toolbar_title_hover_only: bool,
     pub lookup_delay_ms: u32,
     pub popup_enabled: bool,
@@ -402,6 +405,7 @@ impl Default for ReadingOverlaySettings {
             text_visibility: OverlayTextVisibility::Always,
             always_on_top: true,
             hide_when_unfocused: true,
+            block_ctrl_on_hover: true,
             toolbar_title_hover_only: false,
             lookup_delay_ms: d_dictionary_popup_delay_ms(),
             popup_enabled: true,

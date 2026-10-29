@@ -45,8 +45,12 @@ pub fn capabilities() -> Capabilities {
         screenshots: titles,
         actionable_notifications: false,
         needs_screen_recording: !titles,
+        // A CGEventTap that drops events needs the Accessibility permission.
+        ctrl_shield: false,
     }
 }
+
+pub fn shield_ctrl(_armed: bool, _blocking: bool) {}
 
 /// Shows the system prompt the first time; afterwards macOS only changes its
 /// answer from System Settings, and only after the app restarts.

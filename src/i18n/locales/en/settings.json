@@ -168,7 +168,8 @@
       "idle": "Inactivity detection (AFK timeout)",
       "screenshots": "Game screenshot on mined sentences",
       "actionable_notifications": "“Log now” button on the streak reminder",
-      "native_hook": "Native game hook (LunaHook)"
+      "native_hook": "Native game hook (LunaHook)",
+      "ctrl_shield": "Ctrl kept from the VN while the mouse is over the reading overlay"
     },
     "missing": {
       "window_titles": "Window titles cannot be read here.",
@@ -184,7 +185,8 @@
       "screenshots_linux": "Window capture needs an X11 session.",
       "screenshots_macos": "Needs the Screen Recording permission.",
       "actionable_notifications": "The reminder appears without a button; open the log form from the tray.",
-      "native_hook": "LunaHook injects into Windows processes. With Wine or Proton, run Textractor inside the game’s prefix and connect it over WebSocket."
+      "native_hook": "LunaHook injects into Windows processes. With Wine or Proton, run Textractor inside the game’s prefix and connect it over WebSocket.",
+      "ctrl_shield": "Only Windows lets the companion hold a key back from the game, so Ctrl over the overlay still reaches it."
     },
     "screenRecordingHint": "macOS hides other apps’ window titles until you allow Screen Recording in System Settings → Privacy & Security. Restart the companion after granting it.",
     "screenRecordingAction": "Request access"

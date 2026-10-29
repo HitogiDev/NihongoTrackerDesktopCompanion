@@ -168,7 +168,8 @@
       "idle": "Detección de inactividad (tiempo AFK)",
       "screenshots": "Captura del juego en las frases minadas",
       "actionable_notifications": "Botón «Registrar» en el aviso de racha",
-      "native_hook": "Hook nativo de juegos (LunaHook)"
+      "native_hook": "Hook nativo de juegos (LunaHook)",
+      "ctrl_shield": "Ctrl bloqueado a la VN con el ratón sobre el overlay de lectura"
     },
     "missing": {
       "window_titles": "Aquí no se pueden leer los títulos de las ventanas.",
@@ -184,7 +185,8 @@
       "screenshots_linux": "La captura de ventanas necesita una sesión X11.",
       "screenshots_macos": "Necesita el permiso de grabación de pantalla.",
       "actionable_notifications": "El aviso aparece sin botón; abre el formulario desde la bandeja.",
-      "native_hook": "LunaHook se inyecta en procesos de Windows. Con Wine o Proton, ejecuta Textractor dentro del prefijo del juego y conéctalo por WebSocket."
+      "native_hook": "LunaHook se inyecta en procesos de Windows. Con Wine o Proton, ejecuta Textractor dentro del prefijo del juego y conéctalo por WebSocket.",
+      "ctrl_shield": "Solo Windows deja que el companion retenga una tecla antes de que llegue al juego, así que el Ctrl sobre el overlay le sigue llegando."
     },
     "screenRecordingHint": "macOS oculta los títulos de las ventanas de otras apps hasta que permites la grabación de pantalla en Ajustes del Sistema → Privacidad y seguridad. Reinicia el companion después de concederla.",
     "screenRecordingAction": "Pedir acceso"

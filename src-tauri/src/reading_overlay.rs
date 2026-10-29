@@ -202,12 +202,16 @@ pub fn spawn(app: AppHandle) {
     });
     tauri::async_runtime::spawn(async move {
         loop {
-            let active = {
+            let (active, visible) = {
                 let overlay = runtime(&pointer_app).lock().unwrap();
-                overlay.view.visible && (overlay.view.click_through || overlay.ignored_cursor)
+                (overlay.view.visible && (overlay.view.click_through || overlay.ignored_cursor), overlay.view.visible)
             };
             if active { let _ = refresh_cursor_interaction(&pointer_app); }
-            tokio::time::sleep(Duration::from_millis(if active { 16 } else { 150 })).await;
+            let shielded = visible && ctrl_shield_wanted(&pointer_app);
+            crate::platform::shield_ctrl(shielded, shielded && ctrl_shield_blocks(&pointer_app));
+            // The shield only has to be right when Ctrl goes down; 30 ms is well
+            // under a hand moving from the mouse to the key.
+            tokio::time::sleep(Duration::from_millis(if active { 16 } else if shielded { 30 } else { 150 })).await;
         }
     });
 }
@@ -379,6 +383,43 @@ fn cursor_over_toolbar(cursor: PhysicalPosition<f64>, origin: PhysicalPosition<i
     let x = cursor.x - origin.x as f64;
     let y = cursor.y - origin.y as f64;
     x >= 0.0 && x < size.width as f64 && y >= 0.0 && y < (32.0 * scale).min(size.height as f64)
+}
+
+/// The Ctrl shield's hook exists only while the overlay is on screen, the
+/// platform can drop keys and the user has not turned it off.
+fn ctrl_shield_wanted(app: &AppHandle) -> bool {
+    static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SUPPORTED.get_or_init(|| crate::platform::capabilities().ctrl_shield)
+        && app.state::<AppState>().settings.try_read()
+            .map(|settings| settings.reading_overlay.block_ctrl_on_hover).unwrap_or(true)
+}
+
+/// Ctrl is kept from the game while the cursor is over the overlay or its
+/// popup and the game has focus (otherwise the Ctrl would go to whatever the
+/// user is working in). Not in click-through: the overlay is then out of the
+/// way on purpose, and Ctrl means the game.
+fn ctrl_shield_blocks(app: &AppHandle) -> bool {
+    let (click_through, pid) = {
+        let overlay = runtime(app).lock().unwrap();
+        (overlay.view.click_through, overlay.view.target.as_ref().map(|target| target.pid))
+    };
+    if click_through || pid.is_none() { return false; }
+    if !crate::platform::foreground_window().is_some_and(|fg| Some(fg.pid) == pid) { return false; }
+    // Window queries go through the event loop: no overlay lock held here.
+    let Some(cursor) = app.get_webview_window(LABEL).and_then(|window| window.cursor_position().ok()) else { return false; };
+    [LABEL, POPUP_LABEL].into_iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .filter(|window| window.is_visible().unwrap_or(false))
+        .any(|window| match (window.outer_position(), window.outer_size()) {
+            (Ok(origin), Ok(size)) => point_in(cursor, origin, size),
+            _ => false,
+        })
+}
+
+fn point_in(point: PhysicalPosition<f64>, origin: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> bool {
+    let x = point.x - origin.x as f64;
+    let y = point.y - origin.y as f64;
+    x >= 0.0 && y >= 0.0 && x < size.width as f64 && y < size.height as f64
 }
 
 fn refresh_cursor_interaction(app: &AppHandle) -> Result<(), String> {
@@ -714,6 +755,17 @@ mod tests {
         overlay.set_session(None, false);
         assert!(!overlay.manual_show);
         assert!(!overlay.should_show(Some(99), false, false, false));
+    }
+
+    #[test]
+    fn the_shield_covers_the_whole_window_on_any_monitor() {
+        let origin = PhysicalPosition::new(-800, 200);
+        let size = PhysicalSize::new(800, 180);
+        assert!(point_in(PhysicalPosition::new(-800.0, 200.0), origin, size));
+        assert!(point_in(PhysicalPosition::new(-0.5, 379.0), origin, size));
+        assert!(!point_in(PhysicalPosition::new(0.0, 300.0), origin, size));
+        assert!(!point_in(PhysicalPosition::new(-400.0, 380.0), origin, size));
+        assert!(!point_in(PhysicalPosition::new(-801.0, 300.0), origin, size));
     }
 
     #[test]

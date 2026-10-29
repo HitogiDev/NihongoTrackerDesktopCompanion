@@ -17,3 +17,5 @@ pub fn foreground_window() -> Option<WindowInfo> {
 pub fn idle_seconds() -> u64 {
     0
 }
+
+pub fn shield_ctrl(_armed: bool, _blocking: bool) {}

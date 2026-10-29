@@ -79,8 +79,13 @@ pub fn capabilities() -> Capabilities {
         screenshots: x11 && !wayland,
         actionable_notifications: true,
         needs_screen_recording: false,
+        // Keeping a key from the focused client needs an X grab, and Wayland
+        // has no protocol for it.
+        ctrl_shield: false,
     }
 }
+
+pub fn shield_ctrl(_armed: bool, _blocking: bool) {}
 
 fn window_pid(x: &X11, window: Window) -> Option<u32> {
     let reply = x.conn
