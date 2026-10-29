@@ -33,29 +33,52 @@ export function PlatformSupport() {
   if (!caps) return null;
 
   const platform = caps.session ? `${t(`platform.os.${caps.os}`, caps.os)} · ${caps.session}` : t(`platform.os.${caps.os}`, caps.os);
+  // MPRIS only exists on Linux; elsewhere the row would only be noise.
+  const rows = ROWS.filter((key) => key !== 'media_sessions' || caps.os === 'linux');
+  const missing = rows.filter((key) => !caps[key]);
+  const available = rows.filter((key) => caps[key]);
 
+  // What is missing explains why something does not work, so it stays in view;
+  // the list of what works folds away.
   return (
     <div className="surface p-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">{platform}</p>
+      <div className="flex items-center gap-2">
+        {missing.length === 0 ? <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" /> : null}
+        <p className="text-sm font-medium">
+          {platform}
+          {missing.length === 0 ? <span className="font-normal text-base-content/60"> · {t('platform.allAvailable')}</span> : null}
+        </p>
       </div>
-      <ul className="space-y-2">
-        {/* MPRIS only exists on Linux; elsewhere the row would only be noise. */}
-        {ROWS.filter((key) => key !== 'media_sessions' || caps.os === 'linux').map((key) => (
-          <li key={key} className="flex items-start gap-2.5 text-sm">
-            {caps[key]
-              ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-              : <MinusCircle className="mt-0.5 h-4 w-4 shrink-0 text-base-content/40" aria-hidden="true" />}
-            <div className="min-w-0">
-              <p className={caps[key] ? '' : 'text-base-content/60'}>
+      {missing.length > 0 ? (
+        <ul className="space-y-2">
+          {missing.map((key) => (
+            <li key={key} className="flex items-start gap-2.5 text-sm">
+              <MinusCircle className="mt-0.5 h-4 w-4 shrink-0 text-base-content/40" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-base-content/60">
+                  {t(`platform.features.${key}`)}
+                  <span className="sr-only">: {t('platform.unavailable')}</span>
+                </p>
+                <p className="text-xs text-base-content/60">{t(`platform.missing.${key}`, { context: caps.os })}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <details>
+        <summary className="cursor-pointer text-xs text-base-content/60">{t('platform.availableList', { count: available.length })}</summary>
+        <ul className="mt-2 space-y-2">
+          {available.map((key) => (
+            <li key={key} className="flex items-start gap-2.5 text-sm">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+              <p>
                 {t(`platform.features.${key}`)}
-                <span className="sr-only">: {caps[key] ? t('platform.available') : t('platform.unavailable')}</span>
+                <span className="sr-only">: {t('platform.available')}</span>
               </p>
-              {!caps[key] ? <p className="text-xs text-base-content/60">{t(`platform.missing.${key}`, { context: caps.os })}</p> : null}
-            </div>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      </details>
       {caps.needs_screen_recording ? (
         <div className="surface-muted flex items-start gap-3 p-3">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />

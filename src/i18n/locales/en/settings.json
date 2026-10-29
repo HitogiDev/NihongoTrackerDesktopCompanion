@@ -5,6 +5,7 @@
     "label": "Settings sections",
     "account": "Account",
     "tracking": "Tracking",
+    "discord": "Discord",
     "anki": "Anki",
     "app": "App"
   },
@@ -117,6 +118,8 @@
     "streakAt": "Also at a fixed time",
     "streakAtHint": "Leave empty to rely on the window before midnight only.",
     "theme": "Theme",
+    "themeSystem": "Same as the system",
+    "advanced": "Advanced",
     "poll": "Polling interval: {{ms}} ms",
     "pollHint": "Higher means less CPU."
   },
@@ -155,6 +158,8 @@
   "platform": {
     "title": "Platform support",
     "available": "available",
+    "allAvailable": "everything is available",
+    "availableList": "Available here ({{count}})",
     "unavailable": "not available",
     "os": {
       "windows": "Windows",
