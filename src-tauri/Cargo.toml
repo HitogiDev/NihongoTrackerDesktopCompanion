@@ -1,6 +1,6 @@
 [package]
 name = "nt-companion"
-version = "0.1.1"
+version = "0.1.2"
 description = "NihongoTracker Desktop Companion"
 authors = ["HitogiDev"]
 edition = "2021"
