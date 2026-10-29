@@ -39,6 +39,8 @@
     "idleFor": "No activity for {{duration}}.",
     "notFocused": "The window is not in the foreground.",
     "openTexthooker": "Open texthooker",
+    "pause": "Pause",
+    "resume": "Resume",
     "nativeHookStarting": "Attaching native text hook…",
     "nativeHookAttached": "Hook attached, waiting for dialogue.",
     "nativeHookReceiving": "Capturing game text",
@@ -54,16 +56,6 @@
     "longestStreak": "best {{count}} d",
     "reading": "Reading Level",
     "listening": "Listening Level"
-  },
-  "summary": {
-    "title": "Summary",
-    "pending": "Pending",
-    "pendingHint": "awaiting confirmation",
-    "queued": "Queued",
-    "queuedHint": "not sent to the server yet",
-    "idle": "Idle",
-    "idleHint": "AFK at {{seconds}}s",
-    "activeWindow": "Active window"
   },
   "recent": {
     "title": "Latest logs",

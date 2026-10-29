@@ -32,11 +32,19 @@ export function LogForm({
 }) {
   const { t } = useTranslation(['log', 'common']);
   const [picking, setPicking] = useState(false);
+  // A blank form is not a mistake yet: what is missing shows once the user has
+  // typed something, or right away for a log that already has a title (the
+  // queue editor opens one the server turned down).
+  const [edited, setEdited] = useState(false);
 
   const problem = missing(draft);
   const rule = ruleFor(draft.type);
   const type = getMediaTypeClasses(draft.type);
-  const set = (patch: Partial<LogDraft>) => onChange({ ...draft, ...patch });
+  const set = (patch: Partial<LogDraft>) => {
+    setEdited(true);
+    onChange({ ...draft, ...patch });
+  };
+  const showProblem = edited || draft.mediaTitle.trim() !== '';
 
   // XP belongs to the server (the calculateXp middleware overwrites anything a
   // client sends), so it is asked for rather than guessed. Offline: no badge.
@@ -152,7 +160,7 @@ export function LogForm({
         </div>
 
         <div className="flex items-center gap-2 min-h-6">
-          {problem ? (
+          {problem ? (showProblem ? (
             <span className="text-xs text-warning">
               {problem === 'any'
                 ? t('requiredAny', {
@@ -162,7 +170,7 @@ export function LogForm({
                     field: problem === 'mediaTitle' ? t('mediaTitle') : t(`amount.${problem}`),
                   })}
             </span>
-          ) : typeof preview?.xp === 'number' ? (
+          ) : null) : typeof preview?.xp === 'number' ? (
             <span className={`badge badge-outline badge-sm gap-1 ${type.color}`}>
               <TrendingUp className="w-3 h-3" />
               {t('estimatedXp', { xp: preview.xp })}

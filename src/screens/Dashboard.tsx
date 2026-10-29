@@ -6,11 +6,9 @@ import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   AlertTriangle,
-  AppWindow,
   BookOpenText,
   Check,
   Clock,
-  CloudUpload,
   Film,
   Flame,
   Headphones,
@@ -18,6 +16,7 @@ import {
   KeyRound,
   MonitorPlay,
   Pause,
+  Play,
   Plus,
   RefreshCw,
   Type,
@@ -177,10 +176,22 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {anime ? <AnimeCard key={anime.key} session={anime} /> : <IdleCard kind="anime" />}
-        {vn ? <VnCard session={vn} idleSeconds={idle} /> : <IdleCard kind="vn" />}
-      </div>
+      {anime || vn ? (
+        // What is running comes first; what isn't shrinks to a line under it.
+        <div className="space-y-2">
+          <div className={`grid gap-4 ${anime && vn ? 'lg:grid-cols-2' : ''}`}>
+            {anime ? <AnimeCard key={anime.key} session={anime} /> : null}
+            {vn ? <VnCard session={vn} idleSeconds={idle} /> : null}
+          </div>
+          {!anime ? <IdleCard kind="anime" compact /> : null}
+          {!vn ? <IdleCard kind="vn" compact /> : null}
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <IdleCard kind="anime" />
+          <IdleCard kind="vn" />
+        </div>
+      )}
 
       {stats ? (
         <section className="space-y-3" aria-labelledby="dashboard-progress">
@@ -225,42 +236,6 @@ export default function Dashboard() {
           </div>
         </section>
       ) : null}
-
-      <section className="space-y-3" aria-labelledby="dashboard-summary">
-        <h2 id="dashboard-summary" className="text-base font-semibold">{t('summary.title')}</h2>
-        <div className="surface grid grid-cols-2 xl:grid-cols-4">
-          <StatTile
-            compact
-            icon={Inbox}
-            label={t('summary.pending')}
-            value={tracker?.pending_count ?? 0}
-            hint={t('summary.pendingHint')}
-          />
-          <StatTile
-            compact
-            icon={CloudUpload}
-            label={t('summary.queued')}
-            value={tracker?.queued_count ?? 0}
-            hint={t('summary.queuedHint')}
-          />
-          <StatTile
-            compact
-            icon={Clock}
-            label={t('summary.idle')}
-            value={formatDuration(idle)}
-            hint={t('summary.idleHint', { seconds: settings?.afk_timeout_secs ?? 0 })}
-            accent="text-base-content"
-          />
-          <StatTile
-            compact
-            icon={AppWindow}
-            label={t('summary.activeWindow')}
-            value={<span className="block truncate text-base font-semibold" title={tracker?.active_process ?? undefined}>{tracker?.active_process ?? '-'}</span>}
-            hint={tracker?.active_window ?? undefined}
-            accent="text-base-content"
-          />
-        </div>
-      </section>
 
       <FriendsImmersing />
       <SocialActivityFeed compact />
@@ -329,9 +304,26 @@ export default function Dashboard() {
   );
 }
 
-function IdleCard({ kind }: { kind: 'anime' | 'vn' }) {
+function IdleCard({ kind, compact = false }: { kind: 'anime' | 'vn'; compact?: boolean }) {
   const { t } = useTranslation('dashboard');
   const isAnime = kind === 'anime';
+  if (compact) {
+    const Icon = isAnime ? MonitorPlay : BookOpenText;
+    return (
+      <div className="surface-muted flex items-center gap-3 px-4 py-2.5">
+        <Icon className="w-4 h-4 shrink-0 text-base-content/50" />
+        <p className="min-w-0 flex-1 text-sm">
+          <span className="font-medium">{isAnime ? t('anime.empty') : t('vn.empty')}</span>
+          <span className="text-base-content/60"> · {isAnime ? t('anime.emptyBody') : t('vn.emptyBody')}</span>
+        </p>
+        {!isAnime ? (
+          <Link to="/library" className="btn btn-ghost btn-xs shrink-0">
+            {t('vn.add')}
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className="surface overflow-hidden">
       <div className={`h-1 w-full ${getMediaTypeClasses(isAnime ? 'anime' : 'vn').accentColor}`} />
@@ -612,10 +604,16 @@ function VnCard({ session, idleSeconds }: { session: VnSession; idleSeconds: num
           </p>
         ) : null}
 
-        <button type="button" onClick={() => void ipc.openWorkTexthooker(session.content_id)} className="btn btn-primary btn-sm w-full">
-          <Type className="w-4 h-4" />
-          {t('vn.openTexthooker')}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void ipc.setSessionPaused(!session.paused_by_user)} className="btn btn-outline btn-sm">
+            {session.paused_by_user ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+            {session.paused_by_user ? t('vn.resume') : t('vn.pause')}
+          </button>
+          <button type="button" onClick={() => void ipc.openWorkTexthooker(session.content_id)} className="btn btn-primary btn-sm flex-1">
+            <Type className="w-4 h-4" />
+            {t('vn.openTexthooker')}
+          </button>
+        </div>
       </div>
     </article>
   );

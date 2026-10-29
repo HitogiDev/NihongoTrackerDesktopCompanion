@@ -5,6 +5,7 @@
     "label": "Secciones de ajustes",
     "account": "Cuenta",
     "tracking": "Seguimiento",
+    "discord": "Discord",
     "anki": "Anki",
     "app": "App"
   },
@@ -117,6 +118,8 @@
     "streakAt": "También a una hora fija",
     "streakAtHint": "Déjalo vacío para usar solo la ventana antes de medianoche.",
     "theme": "Tema",
+    "themeSystem": "El del sistema",
+    "advanced": "Avanzado",
     "poll": "Frecuencia de sondeo: {{ms}} ms",
     "pollHint": "Más alto = menos CPU."
   },
@@ -155,6 +158,8 @@
   "platform": {
     "title": "Compatibilidad del sistema",
     "available": "disponible",
+    "allAvailable": "todo disponible",
+    "availableList": "Disponible aquí ({{count}})",
     "unavailable": "no disponible",
     "os": {
       "windows": "Windows",

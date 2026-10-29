@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
@@ -102,15 +102,14 @@ export function Sidebar() {
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-base-content/45">{t('trackerGroup')}</p>
         <ul className="menu menu-sm w-full gap-1 p-0">
           {TRACKER_NAV.map(renderNavItem)}
-          <li>
-            <button type="button" title={t('shortcutHint', { label: t('openTexthooker'), keys: shortcutLabel('T') })} className="gap-3 rounded-field px-3 py-2 text-sm font-medium text-base-content/75 transition-colors hover:bg-base-200 hover:text-base-content" onClick={() => void ipc.openWorkTexthooker()}>
-              <BookOpenText className="h-4 w-4" />
-              <span>{t('openTexthooker')}</span>
-            </button>
-          </li>
         </ul>
         <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-base-content/45">{t('communityGroup')}</p>
         <ul className="menu menu-sm w-full gap-1 p-0">{COMMUNITY_NAV.map(renderNavItem)}</ul>
+        {/* An action, not a place: it opens its own window, so it sits apart from the sections. */}
+        <button type="button" title={t('shortcutHint', { label: t('openTexthooker'), keys: shortcutLabel('T') })} className="btn btn-outline btn-sm mt-7 w-full justify-start gap-3" onClick={() => void ipc.openWorkTexthooker()}>
+          <BookOpenText className="h-4 w-4" />
+          {t('openTexthooker')}
+        </button>
       </nav>
 
       <div className="space-y-3 border-t border-base-300/70 p-4">
@@ -134,7 +133,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2 text-xs text-base-content/60">
           {online ? <Cloud className="h-3.5 w-3.5 text-success" /> : <CloudOff className="h-3.5 w-3.5 text-warning" />}
           <span>{online === null ? t('status.checking') : online ? t('status.online') : t('status.offline')}</span>
-          {queued > 0 && <span className="badge badge-xs badge-warning ml-auto">{queued}</span>}
+          {queued > 0 && <Link to="/queue" className="link link-hover ml-auto text-warning">{t('status.queued', { count: queued })}</Link>}
         </div>
         <div className="flex items-center gap-2 text-xs text-base-content/60">
           {nativeActive ? <>

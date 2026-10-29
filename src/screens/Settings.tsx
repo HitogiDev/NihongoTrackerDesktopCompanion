@@ -73,7 +73,7 @@ export default function SettingsScreen() {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [dictionaryBusy, setDictionaryBusy] = useState(false);
   const [dictionaryError, setDictionaryError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'account' | 'tracking' | 'anki' | 'app'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'tracking' | 'discord' | 'anki' | 'app'>('account');
 
   if (!settings) return null;
 
@@ -125,8 +125,8 @@ export default function SettingsScreen() {
 
   return (
     <Page title={t('title')} description={t('subtitle')}>
-      <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm grid grid-cols-4">
-        {(['account', 'tracking', 'anki', 'app'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={`tab ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>{t(`tabs.${tab}`)}</button>)}
+      <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm grid grid-cols-5">
+        {(['account', 'tracking', 'discord', 'anki', 'app'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={`tab ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>{t(`tabs.${tab}`)}</button>)}
       </div>
       {activeTab === 'account' ? <>
       <SectionTitle>{t('account.title')}</SectionTitle>
@@ -354,7 +354,7 @@ export default function SettingsScreen() {
                 min={0}
                 max={600}
                 step={1}
-                className="input w-full"
+                className="input w-32"
                 value={settings.afk_timeout_secs}
                 onChange={(e) => void updateSettings({ afk_timeout_secs: Number(e.target.value) })}
               />
@@ -374,12 +374,15 @@ export default function SettingsScreen() {
         <p className="p-3 text-sm text-base-content/60">{t('game.rules')}</p>
       </div>
 
-      <DiscordSettings settings={settings} onChange={(patch) => void updateSettings(patch)} />
       <NativeHookTextFilters />
       <SectionTitle>{t('readingOverlay:title')}</SectionTitle>
       <div className="surface p-4">
         <Button appearance="outline" onClick={() => void ipc.openAuxWindow('reading-overlay-settings')}>{t('readingOverlay:openSettings')}</Button>
       </div>
+      </> : null}
+
+      {activeTab === 'discord' ? <>
+      <DiscordSettings settings={settings} onChange={(patch) => void updateSettings(patch)} />
       </> : null}
 
       {activeTab === 'anki' ? <>
@@ -443,12 +446,6 @@ export default function SettingsScreen() {
       </> : null}
 
       {activeTab === 'app' ? <>
-      <SectionTitle>{t('social.title')}</SectionTitle>
-      <div className="surface p-2"><Toggle label={t('social.share')} description={t('social.shareHint')} checked={settings.share_activity} onChange={(v) => void updateSettings({ share_activity: v })} /></div>
-      <SectionTitle>{t('common:update.title')}</SectionTitle>
-      <UpdateSettings />
-      <SectionTitle>{t('backup.section')}</SectionTitle>
-      <BackupSettings />
       <SectionTitle>{t('app.title')}</SectionTitle>
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
@@ -541,7 +538,7 @@ export default function SettingsScreen() {
             </Field>
           </div>
         ) : null}
-        <div className="grid gap-3 p-3 lg:grid-cols-2">
+        <div className="p-3">
           <Field label={t('app.theme')}>
             {(id) => (
               <select
@@ -552,12 +549,23 @@ export default function SettingsScreen() {
               >
                 {THEMES.map((theme) => (
                   <option key={theme} value={theme}>
-                    {theme}
+                    {theme === 'system' ? t('app.themeSystem') : theme.charAt(0).toUpperCase() + theme.slice(1)}
                   </option>
                 ))}
               </select>
             )}
           </Field>
+        </div>
+      </div>
+      <SectionTitle>{t('social.title')}</SectionTitle>
+      <div className="surface p-2"><Toggle label={t('social.share')} description={t('social.shareHint')} checked={settings.share_activity} onChange={(v) => void updateSettings({ share_activity: v })} /></div>
+      <SectionTitle>{t('common:update.title')}</SectionTitle>
+      <UpdateSettings />
+      <SectionTitle>{t('backup.section')}</SectionTitle>
+      <BackupSettings />
+      <SectionTitle>{t('app.advanced')}</SectionTitle>
+      <div className="surface p-2">
+        <div className="p-3">
           <Field
             label={t('app.poll', { ms: settings.poll_interval_ms })}
             hint={t('app.pollHint')}

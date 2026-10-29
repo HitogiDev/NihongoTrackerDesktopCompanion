@@ -39,6 +39,8 @@
     "idleFor": "Sin actividad desde hace {{duration}}.",
     "notFocused": "La ventana no está en primer plano.",
     "openTexthooker": "Abrir texthooker",
+    "pause": "Pausar",
+    "resume": "Reanudar",
     "nativeHookStarting": "Conectando el hook de texto nativo…",
     "nativeHookAttached": "Hook conectado, esperando diálogo.",
     "nativeHookReceiving": "Capturando texto del juego",
@@ -54,16 +56,6 @@
     "longestStreak": "máx. {{count}} d",
     "reading": "Nivel de lectura",
     "listening": "Nivel de escucha"
-  },
-  "summary": {
-    "title": "Resumen",
-    "pending": "Pendientes",
-    "pendingHint": "esperan confirmación",
-    "queued": "En cola",
-    "queuedHint": "sin enviar al servidor",
-    "idle": "Inactividad",
-    "idleHint": "AFK a los {{seconds}}s",
-    "activeWindow": "Ventana activa"
   },
   "recent": {
     "title": "Últimos registros",

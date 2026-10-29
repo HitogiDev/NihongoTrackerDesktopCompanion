@@ -63,7 +63,8 @@ export function QuickLogModal({
           </div>
         ) : null}
 
-        <LogForm draft={draft} onChange={setDraft} active={open} xpKey="quick" />
+        {/* Remounted on each opening, so a fresh form starts without warnings. */}
+        <LogForm key={open ? 'open' : 'closed'} draft={draft} onChange={setDraft} active={open} xpKey="quick" />
 
         {save.error ? <p className="text-sm text-error">{String(save.error)}</p> : null}
       </div>

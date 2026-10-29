@@ -100,11 +100,9 @@ export function SocialActivityFeed({ compact = false }: { compact?: boolean }) {
 
   return (
     <section aria-label={t('title')}>
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">{compact ? t('friendActivity') : t('title')}</h2>
-          {!compact && <p className="mt-0.5 text-sm text-base-content/60">{t('subtitle')}</p>}
-        </div>
+      <header className={`mb-3 flex flex-wrap items-center gap-3 ${compact ? 'justify-between' : 'justify-end'}`}>
+        {/* On its own screen the page header already carries the title. */}
+        {compact ? <h2 className="text-lg font-semibold">{t('friendActivity')}</h2> : null}
         {compact ? (
           <Link to="/social" className="btn btn-ghost btn-sm">{t('openSocial')}</Link>
         ) : (
