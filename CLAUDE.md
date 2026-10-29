@@ -101,6 +101,12 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   destruye. El overlay de lectura y su popup se crean la primera vez que se
   quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
   hijas del popup y morirían con él.
+- El estado del overlay de lectura (`reading_overlay::Runtime`, en `AppState`)
+  existe aunque sus ventanas no: la última línea y el hook nativo de la obra
+  (`OverlayState::hook`, por `content_id`, venga de donde venga la selección)
+  los fija Rust (`sync_hook` en cada tick y al elegir hook). El overlay no lee
+  `tracker.game_hook`, así que si se crea con la VN ya hookeada desde el
+  texthooker, arranca enganchado.
 - El overlay de lectura es `focusable(false)`, así que sus teclas van al juego
   y una VN salta texto con Ctrl. El **escudo de Ctrl**
   (`platform::shield_ctrl`, `reading_overlay::ctrl_shield_blocks`) se traga
