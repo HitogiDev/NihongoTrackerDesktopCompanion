@@ -20,8 +20,42 @@ permissions:
   contents: write
 
 jobs:
+  notes:
+    name: Release notes
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.notes.outputs.tag }}
+      app: ${{ steps.notes.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+      # GitHub's generated notes, minus the version-bump PRs. The in-app
+      # updater shows `app` as plain text (it becomes `notes` in latest.json),
+      # so there it is just the PR titles, without authors or links.
+      - id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" -q .body \
+            | { grep -v 'chore: release' || true; } > notes.md
+          app=$({ grep '^\* ' notes.md || true; } \
+            | { grep -v 'made their first contribution' || true; } \
+            | sed -E 's/^\* (.*) by @[^ ]+ in https:[^ ]+$/- \1/')
+          {
+            echo "tag=$tag"
+            echo "app<<NOTES_EOF"
+            echo "$app"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: notes.md
+
   release:
     name: ${{ matrix.name }}
+    needs: notes
     strategy:
       fail-fast: false
       matrix:
@@ -83,10 +117,49 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: NihongoTracker Companion v__VERSION__
-          releaseBody: See the commits since the previous release.
+          releaseBody: ${{ needs.notes.outputs.app }}
+          # Without it the names come from productName, whose space GitHub
+          # turns into a dot (`NihongoTracker.Companion_…`).
+          assetNamePattern: NihongoTrackerDesktopCompanion_[version]_[arch][setup][ext]
           # Published, not a draft: the updater follows `releases/latest`,
           # which skips drafts and pre-releases.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # Puts a "which file do I want" table above the changelog. Only the page
+  # changes: latest.json keeps the plain notes the app shows.
+  downloads:
+    name: Download table
+    needs: [notes, release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.notes.outputs.tag }}
+        run: |
+          assets=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')
+          link() {
+            name=$(grep -E "$1" <<<"$assets" | grep -v '\.sig$' | head -n 1)
+            [ -n "$name" ] && echo "[\`$name\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$name)"
+          }
+          {
+            echo '## Downloads'
+            echo
+            echo '| System | File |'
+            echo '| --- | --- |'
+            echo "| Windows 10/11 | $(link 'setup\.exe$') |"
+            echo "| macOS 10.15+ (Intel and Apple Silicon) | $(link '\.dmg$') |"
+            echo "| Linux, any distro (updates itself) | $(link '\.AppImage$') |"
+            echo "| Debian / Ubuntu | $(link '\.deb$') |"
+            echo "| Fedora / openSUSE | $(link '\.rpm$') |"
+            echo
+            echo 'Linux builds need glibc 2.39 or newer (Ubuntu 24.04, Fedora 40). The `.sig` files, `.app.tar.gz` and `latest.json` are for the in-app updater: you do not need to download them.'
+            echo
+            cat notes.md
+          } > body.md
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file body.md
