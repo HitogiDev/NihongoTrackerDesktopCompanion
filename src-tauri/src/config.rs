@@ -111,6 +111,9 @@ pub struct Settings {
     /// mpv's `input-ipc-server` path.
     #[serde(default = "d_mpv_ipc")]
     pub mpv_ipc_path: String,
+    /// The dashboard stops offering to set up mpv's IPC (Settings still can).
+    #[serde(default)]
+    pub mpv_setup_dismissed: bool,
     /// Port of the MPC-HC / MPC-BE web interface.
     #[serde(default = "d_mpc_port")]
     pub mpc_web_port: u16,
@@ -279,6 +282,7 @@ impl Default for Settings {
             anime_log_time: false,
             use_player_position: true,
             mpv_ipc_path: d_mpv_ipc(),
+            mpv_setup_dismissed: false,
             mpc_web_port: d_mpc_port(),
             detect_visual_novels: true,
             detect_games: true,

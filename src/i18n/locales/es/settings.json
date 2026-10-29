@@ -50,6 +50,27 @@
     "detectHint": "Cuenta el tiempo activo de los juegos vinculados en la biblioteca.",
     "rules": "La sesión se pausa cuando el juego pierde el foco o estás ausente. Al terminar, pasa a Pendientes para confirmarla."
   },
+  "mpv": {
+    "configure": "Configurar {{player}} automáticamente",
+    "configureHint": "Añade input-ipc-server al mpv.conf que lee el reproductor, después de enseñarte exactamente qué cambia.",
+    "player": "Reproductor",
+    "prompt": "{{player}} no está compartiendo por dónde va el episodio, así que se cuenta el tiempo con la ventana abierta (pausas incluidas). El companion puede activarlo en mpv.conf por ti.",
+    "dismiss": "No volver a ofrecerlo",
+    "confirmTitle": "Configurar {{player}}",
+    "addBody": "Se añadirá esta línea a tu mpv.conf:",
+    "createBody": "Todavía no hay mpv.conf; se creará con esta línea:",
+    "backupNote": "Se guarda una copia del archivo actual a su lado como mpv.conf.before-nihongotracker.",
+    "restartNote": "mpv solo lee mpv.conf al arrancar: ciérralo y vuelve a abrirlo después.",
+    "adoptBody": "Tu mpv.conf ya abre un socket. No se toca el archivo; el companion escuchará ahí.",
+    "nothingBody": "Ya coincide todo; no hay nada que cambiar. Si la posición sigue sin aparecer, cierra mpv y vuelve a abrirlo.",
+    "apply": "Añadir la línea",
+    "adopt": "Usar ese socket",
+    "done": {
+      "add": "Listo. Reinicia mpv y el companion leerá la posición de {{path}}.",
+      "adopt": "Listo. El companion escucha ahora en {{path}}.",
+      "nothing": "Ya estaba configurado."
+    }
+  },
   "anime": {
     "title": "Anime",
     "detect": "Detectar reproductores de vídeo",

@@ -33,6 +33,10 @@ use_player_position: boolean,
  */
 mpv_ipc_path: string, 
 /**
+ * The dashboard stops offering to set up mpv's IPC (Settings still can).
+ */
+mpv_setup_dismissed: boolean, 
+/**
  * Port of the MPC-HC / MPC-BE web interface.
  */
 mpc_web_port: number, detect_visual_novels: boolean, 

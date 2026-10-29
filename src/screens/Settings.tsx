@@ -19,6 +19,7 @@ import { DiscordSettings } from '../components/DiscordSettings';
 import { PlatformSupport } from '../components/PlatformSupport';
 import { UpdateSettings } from '../components/UpdateSettings';
 import { BackupSettings } from '../components/BackupSettings';
+import { MpvSetupSettings } from '../components/MpvSetup';
 import { Field, Toggle } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { ipc } from '../lib/ipc';
@@ -59,6 +60,7 @@ export default function SettingsScreen() {
   const online = useAppStore((s) => s.online);
   const user = useAppStore((s) => s.user);
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const trackedPlayer = useAppStore((s) => s.tracker?.anime?.player);
   const refreshConnection = useAppStore((s) => s.refreshConnection);
   const queryClient = useQueryClient();
   const dictionaries = useQuery({ queryKey: ['dictionaries'], queryFn: ipc.dictionaryList });
@@ -268,6 +270,7 @@ export default function SettingsScreen() {
             </Field>
           </div>
         ) : null}
+        {settings.use_player_position ? <MpvSetupSettings current={trackedPlayer} /> : null}
         <Toggle
           label={t('anime.autoLog')}
           description={t('anime.autoLogHint')}

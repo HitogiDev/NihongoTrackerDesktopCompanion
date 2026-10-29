@@ -5,7 +5,7 @@
 //! expose the truth over a local channel, so ask them:
 //!
 //! * **mpv** — JSON IPC over a named pipe (Windows) or unix socket. Needs
-//!   `input-ipc-server=\\.\pipe\mpvsocket` in `mpv.conf`.
+//!   `input-ipc-server` in `mpv.conf`, which `mpv_config.rs` can add.
 //! * **MPC-HC / MPC-BE** — the built-in web interface's `variables.html`.
 //!   Needs Options → Player → Web Interface → *Listen on port*.
 //!
@@ -74,7 +74,7 @@ async fn mpv(path: &str) -> Option<Playback> {
 /// Windows and Linux", and on Windows mpv turns that into the named pipe
 /// `\\.\pipe\tmp\mpv-socket`. Do the same mapping so whatever the user already
 /// has in `mpv.conf` works verbatim.
-fn normalize_ipc_path(path: &str) -> String {
+pub fn normalize_ipc_path(path: &str) -> String {
     if !cfg!(windows) {
         return path.to_string();
     }

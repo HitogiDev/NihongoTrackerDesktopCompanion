@@ -39,6 +39,7 @@ import { events, ipc } from '../lib/ipc';
 import { useAppStore } from '../store/useAppStore';
 import type { AnimeSession, VnSession } from '../lib/types';
 import { MediaSearchModal } from '../components/MediaSearchModal';
+import { MpvSetupPrompt, needsMpvSetup } from '../components/MpvSetup';
 import { useQuickLogStore } from '../store/useQuickLogStore';
 import { SocialActivityFeed } from '../components/SocialActivityFeed';
 import { FriendsImmersing } from '../components/FriendsImmersing';
@@ -358,6 +359,8 @@ function AnimeCard({ session }: { session: AnimeSession }) {
   const [comment, setComment] = useState('');
   const progress = Math.round(session.progress * 100);
   const fromPlayer = session.source === 'player';
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
 
   const title = session.media?.title ?? session.parsed.title;
 
@@ -419,6 +422,10 @@ function AnimeCard({ session }: { session: AnimeSession }) {
 
         {!session.resolved ? (
           <p className="text-xs text-base-content/60">{t('anime.resolving')}</p>
+        ) : null}
+
+        {needsMpvSetup(session, settings) ? (
+          <MpvSetupPrompt player={session.player} onDismiss={() => void updateSettings({ mpv_setup_dismissed: true })} />
         ) : null}
 
         {session.unmatched ? (

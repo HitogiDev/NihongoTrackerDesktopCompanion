@@ -16,6 +16,7 @@ import type {
   MediaHit,
   MediaMatch,
   MinedSentence,
+  MpvSetup,
   OutboxItem,
   PendingItem,
   ProcessEntry,
@@ -58,6 +59,8 @@ export const ipc = {
   // tracker
   getTrackerState: () => invoke<TrackerSnapshot>('get_tracker_state'),
   listProcesses: () => invoke<ProcessEntry[]>('list_processes'),
+  mpvSetupPlan: (player: string) => invoke<MpvSetup>('mpv_setup_plan', { player }),
+  mpvSetupApply: (player: string) => invoke<MpvSetup>('mpv_setup_apply', { player }),
   platformSupported: () => invoke<boolean>('platform_supported'),
   platformCapabilities: () => invoke<Capabilities>('platform_capabilities'),
   pendingUpdate: () => invoke<UpdateInfo | null>('pending_update'),

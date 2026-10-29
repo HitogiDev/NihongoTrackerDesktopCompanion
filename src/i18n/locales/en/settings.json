@@ -50,6 +50,27 @@
     "detectHint": "Count active time for games linked in the library.",
     "rules": "Game sessions pause when the game is out of focus or you are AFK. Completed sessions go to Pending for confirmation."
   },
+  "mpv": {
+    "configure": "Set up {{player}} automatically",
+    "configureHint": "Adds input-ipc-server to the mpv.conf the player reads, after showing you exactly what changes.",
+    "player": "Player",
+    "prompt": "{{player}} isn't sharing where the episode is, so time with the window open is being counted (pauses included). The companion can enable it in mpv.conf for you.",
+    "dismiss": "Don't offer again",
+    "confirmTitle": "Set up {{player}}",
+    "addBody": "This line will be added to your mpv.conf:",
+    "createBody": "There's no mpv.conf yet; one will be created with this line:",
+    "backupNote": "A copy of the current file is kept next to it as mpv.conf.before-nihongotracker.",
+    "restartNote": "mpv only reads mpv.conf when it starts: close it and open it again afterwards.",
+    "adoptBody": "Your mpv.conf already opens a socket. The file won't be touched; the companion will listen there instead.",
+    "nothingBody": "Everything already matches; nothing needs changing. If the position still doesn't show, close mpv and open it again.",
+    "apply": "Add the line",
+    "adopt": "Use that socket",
+    "done": {
+      "add": "Done. Restart mpv and the companion will read the position from {{path}}.",
+      "adopt": "Done. The companion now listens on {{path}}.",
+      "nothing": "Already set up."
+    }
+  },
   "anime": {
     "title": "Anime",
     "detect": "Detect video players",

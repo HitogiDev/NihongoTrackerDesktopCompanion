@@ -7,6 +7,7 @@ mod dictionary;
 mod discord;
 mod i18n;
 mod mining;
+mod mpv_config;
 mod native_hook;
 mod native_bridge;
 mod notifications;
@@ -256,6 +257,8 @@ pub fn run() {
             commands::connection_status,
             commands::get_tracker_state,
             commands::list_processes,
+            commands::mpv_setup_plan,
+            commands::mpv_setup_apply,
             commands::log_current_anime,
             commands::list_pending,
             commands::confirm_pending,
