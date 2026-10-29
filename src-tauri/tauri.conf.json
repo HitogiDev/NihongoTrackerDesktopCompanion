@@ -19,7 +19,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["nsis", "deb", "appimage", "dmg"],
+    "targets": ["nsis", "deb", "rpm", "appimage", "app", "dmg"],
     "shortDescription": "Automatic immersion tracking for NihongoTracker",
     "longDescription": "Detects video players and visual novels, logs episodes and reading sessions automatically, and includes an offline texthooker that syncs with NihongoTracker.",
     "icon": [

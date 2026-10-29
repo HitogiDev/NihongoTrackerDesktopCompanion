@@ -133,6 +133,15 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
 - La clave pública está en `plugins.updater.pubkey`; la privada no está en el
   repo: va en el secreto `TAURI_SIGNING_PRIVATE_KEY`. Si se pierde, las copias
   instaladas no aceptarán ninguna release nueva.
+- En macOS el actualizador necesita el `.app.tar.gz`, que solo sale con `"app"`
+  en `bundle.targets`: sin él `latest.json` no tiene entradas `darwin-*` y
+  los Mac nunca se actualizan. El `.dmg` es solo para la primera instalación.
+- Las notas salen de los títulos de los PRs (`generate-notes`, sin los
+  `chore: release`). En `latest.json`, que la app enseña como texto plano, van
+  solo los títulos; la página de la release añade la tabla de descargas
+  (job `downloads`). Así que el título del PR es lo que lee el usuario.
+- Los archivos se llaman `NihongoTrackerDesktopCompanion_<versión>_…`
+  (`assetNamePattern`): con el `productName` GitHub cambia el espacio por un punto.
 - Solo la AppImage se reemplaza sola en Linux; con .deb/.rpm la UI enlaza a la
   release (`UpdateInfo::can_install`).
 - `tauri-plugin-updater` está fijado a `~2.12`: desde 2.13 exige Tauri 2.12.

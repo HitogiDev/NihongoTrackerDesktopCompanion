@@ -346,7 +346,9 @@ git push origin v0.2.0
 ```
 
 `.github/workflows/release.yml` builds and signs the installers for the three
-systems and publishes them with the `latest.json` manifest the app reads. It
+systems and publishes them with the `latest.json` manifest the app reads. The release notes
+are the titles of the pull requests merged since the previous release, so name
+them for the people reading the update notice. It
 needs the repository secret `TAURI_SIGNING_PRIVATE_KEY`, matching
 `plugins.updater.pubkey`. The repository must be public, since the app downloads
 releases without authenticating.
