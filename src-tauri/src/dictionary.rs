@@ -21,6 +21,7 @@ const DEFAULT_MAX_RESULTS: i32 = 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct DictionarySummary {
     pub id: String,
     pub title: String,
@@ -31,6 +32,7 @@ pub struct DictionarySummary {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct DictionaryFrequency {
     pub dictionary: String,
     pub display: String,
@@ -39,6 +41,7 @@ pub struct DictionaryFrequency {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct DictionaryEntry {
     pub dictionary: String,
     pub expression: String,
@@ -54,6 +57,7 @@ pub struct DictionaryEntry {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "DictionaryLookupResponse"))]
 pub struct LookupResponse {
     pub query: String,
     pub matched: String,

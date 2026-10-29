@@ -180,8 +180,10 @@ pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource<'_>) {
     let filters = matches!(source, IngestSource::NativeHook { .. }).then_some(&settings.native_hook_text_filters);
     let Ok(filtered) = crate::text_filters::normalize(text, settings.texthooker_prevent_duplicates, filters) else { return };
     // Every source, like the duplicate filter: a dual-language hook arrives over
-    // the socket as often as through LunaHook.
-    let filtered = if settings.texthooker_filter_chinese { crate::text_filters::drop_chinese(&filtered) } else { filtered };
+    // the socket as often as through LunaHook. A work in the library can turn it
+    // on or off for itself; the global setting covers everything else.
+    let filter_chinese = state.db.chinese_filter_for(&content_id).unwrap_or(settings.texthooker_filter_chinese);
+    let filtered = if filter_chinese { crate::text_filters::drop_chinese(&filtered) } else { filtered };
     let text = filtered.as_str();
     if text.is_empty() || (matches!(source, IngestSource::NativeHook { .. }) && count_japanese(text) == 0) {
         return;

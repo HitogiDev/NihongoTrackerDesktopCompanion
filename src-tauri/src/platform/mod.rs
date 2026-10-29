@@ -42,6 +42,7 @@ pub struct MediaPlayer {
 
 /// What this platform can observe right now. Mirrored in `src/lib/types.ts`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Capabilities {
     /// `windows`, `linux` or `macos`.
     pub os: String,

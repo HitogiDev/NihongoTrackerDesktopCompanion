@@ -79,6 +79,7 @@ const TICK: Duration = Duration::from_millis(500);
 
 /// Exactly what the outside world would see.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "DiscordPresence"))]
 pub struct Presence {
     pub details: String,
     pub state: String,
@@ -97,6 +98,7 @@ pub struct Presence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "DiscordPresenceButton"))]
 pub struct PresenceButton {
     pub label: String,
     pub url: String,
@@ -105,6 +107,7 @@ pub struct PresenceButton {
 /// What should be published right now, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "DiscordDecision"))]
 pub enum Decision {
     /// The feature is switched off.
     Off,
@@ -119,6 +122,7 @@ pub enum Decision {
 /// stripping is visible rather than mysterious.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "DiscordReason"))]
 pub enum Reason {
     Full,
     /// The work is flagged `isAdult` on NihongoTracker.

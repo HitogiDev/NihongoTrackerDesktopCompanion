@@ -47,6 +47,7 @@ const POLL_IDLE: Duration = Duration::from_secs(60 * 60);
 const FRESH: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct StreakStatus {
     #[serde(rename = "currentStreak")]
     pub current_streak: i64,

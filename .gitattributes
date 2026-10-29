@@ -1,0 +1,2 @@
+# Written by ts-rs on `cargo test`; LF on every OS so CI can diff them.
+src/lib/bindings/** linguist-generated=true eol=lf

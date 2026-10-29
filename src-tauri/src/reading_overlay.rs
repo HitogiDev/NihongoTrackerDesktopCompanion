@@ -14,6 +14,7 @@ pub const POPUP_LABEL: &str = "reading-overlay-popup";
 pub const SETTINGS_LABEL: &str = "reading-overlay-settings";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "ReadingOverlayTarget"))]
 pub struct Target {
     pub pid: u32,
     pub exe: String,
@@ -23,6 +24,7 @@ pub struct Target {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "ReadingOverlayPopup"))]
 pub struct Popup {
     pub mode: String,
     pub line: Option<TextLine>,
@@ -30,6 +32,7 @@ pub struct Popup {
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "ReadingOverlayState"))]
 pub struct OverlayState {
     pub target: Option<Target>,
     pub line: Option<TextLine>,

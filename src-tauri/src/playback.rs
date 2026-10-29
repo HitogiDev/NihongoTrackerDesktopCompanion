@@ -21,6 +21,7 @@ use crate::config::Settings;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum PlaybackSource {
     /// Reported by the player itself.
     Player,

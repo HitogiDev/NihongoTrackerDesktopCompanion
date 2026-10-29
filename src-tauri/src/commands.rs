@@ -214,6 +214,7 @@ pub async fn log_current_anime(
 }
 
 #[derive(Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct ProcessEntry {
     pub name: String,
     pub pid: u32,
@@ -339,6 +340,57 @@ pub async fn list_outbox(state: State<'_, AppState>) -> CmdResult<Vec<Value>> {
 #[tauri::command]
 pub async fn retry_outbox(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.db.requeue(&id).map_err(err)?;
+    sync::flush(&app).await;
+    Ok(())
+}
+
+/// Copy the whole local database to `path`. Includes the API key.
+#[tauri::command]
+pub async fn export_database(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.db.export_to(std::path::Path::new(&path)).map_err(err)
+}
+
+/// Replace the local database with a backup and restart, so every loop and
+/// cache starts again from what was restored. The current database is kept
+/// next to it first, in case the wrong file was picked.
+#[tauri::command]
+pub async fn restore_database(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    let data_dir = app.path().app_data_dir().map_err(err)?;
+    {
+        let _drain = state.outbox_flush.lock().await;
+        state
+            .db
+            .export_to(&data_dir.join("companion.before-restore.sqlite3"))
+            .map_err(err)?;
+        state.db.restore_from(std::path::Path::new(&path)).map_err(err)?;
+    }
+    app.restart();
+}
+
+/// Edit a queued or failed log before it goes out.
+#[tauri::command]
+pub async fn update_outbox(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    mut payload: Value,
+) -> CmdResult<()> {
+    if let Some(obj) = payload.as_object_mut() {
+        obj.remove("_detected");
+    }
+    {
+        // A drain in flight holds the old payload in memory and would mark the
+        // row sent after delivering it, so the edit waits for it to finish.
+        let _drain = state.outbox_flush.lock().await;
+        let updated = state
+            .db
+            .update_outbox_log(&id, &payload.to_string())
+            .map_err(err)?;
+        if !updated {
+            return Err("this log was already sent".into());
+        }
+    }
+    let _ = app.emit(sync::EVT_OUTBOX, json!({ "queued": state.db.queued_count() }));
     sync::flush(&app).await;
     Ok(())
 }

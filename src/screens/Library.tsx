@@ -259,6 +259,7 @@ const EMPTY: VnApp = {
   enabled: true,
   is_adult: false,
   is_adult_image: null,
+  filter_chinese: null,
 };
 
 function VnAppModal({
@@ -278,6 +279,7 @@ function VnAppModal({
   // Windows programs are .exe files; elsewhere any file (or a macOS .app) runs.
   const os = useAppStore((s) => s.tracker?.capabilities.os);
   const nativeHookAvailable = useAppStore((s) => s.tracker?.capabilities.native_hook ?? false);
+  const globalChineseFilter = useAppStore((s) => s.settings?.texthooker_filter_chinese ?? false);
   const programFilters = os === 'windows' ? [{ name: 'Programs', extensions: ['exe'] }] : undefined;
   const [draft, setDraft] = useState<VnApp>(EMPTY);
   const [picking, setPicking] = useState(false);
@@ -406,6 +408,20 @@ function VnAppModal({
                   className={draft.reader_mode === mode ? 'join-item btn btn-primary btn-sm' : 'join-item btn btn-outline btn-sm'}
                   onClick={() => setDraft({ ...draft, reader_mode: mode, native_hook_enabled: mode === 'overlay' || draft.native_hook_enabled })}>
                   {t(`modal.readerModes.${mode}`)}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={t('modal.filterChinese')} hint={t('modal.filterChineseHint')}>
+            <div className="join flex flex-wrap" role="group" aria-label={t('modal.filterChinese')}>
+              {([null, true, false] as const).map((value) => (
+                <button key={String(value)} type="button" aria-pressed={draft.filter_chinese === value}
+                  className={draft.filter_chinese === value ? 'join-item btn btn-primary btn-sm' : 'join-item btn btn-outline btn-sm'}
+                  onClick={() => setDraft({ ...draft, filter_chinese: value })}>
+                  {value === null
+                    ? t('modal.filterChineseModes.global', { state: t(globalChineseFilter ? 'modal.filterChineseModes.on' : 'modal.filterChineseModes.off') })
+                    : t(value ? 'modal.filterChineseModes.on' : 'modal.filterChineseModes.off')}
                 </button>
               ))}
             </div>

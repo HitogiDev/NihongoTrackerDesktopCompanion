@@ -50,7 +50,14 @@
       "browser": "Navegador",
       "overlay": "Overlay"
     },
-    "overlayHint": "Abre solo el overlay de lectura y activa LunaHook para esta VN."
+    "overlayHint": "Abre solo el overlay de lectura y activa LunaHook para esta VN.",
+    "filterChinese": "Filtro de chino",
+    "filterChineseHint": "Quita las líneas en chino y las traducciones pegadas al japonés, solo en esta obra.",
+    "filterChineseModes": {
+      "global": "Ajuste global ({{state}})",
+      "on": "Activado",
+      "off": "Desactivado"
+    }
   },
   "processes": {
     "title": "Elegir proceso",

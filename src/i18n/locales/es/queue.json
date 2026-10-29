@@ -15,13 +15,8 @@
   "sent": "Enviados recientemente",
   "edit": {
     "title": "Editar registro",
-    "mediaTitle": "Obra o actividad",
-    "comment": "Comentario (opcional)",
-    "commentPlaceholder": "Añade una nota sobre esta sesión",
-    "episodes": "Episodios",
-    "minutes": "Minutos",
-    "characters": "Caracteres",
-    "mediaId": "Media ID",
-    "mediaIdHint": "Vacío = el registro quedará sin vincular en la web."
-  }
+    "saveAndSend": "Guardar y enviar",
+    "rejected": "El servidor lo rechazó: {{error}}"
+  },
+  "retry": "Volver a enviar"
 }

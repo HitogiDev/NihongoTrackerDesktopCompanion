@@ -18,6 +18,7 @@ pub struct Db {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum ReaderMode {
     #[default]
     Integrated,
@@ -36,6 +37,7 @@ impl ReaderMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct VnApp {
     /// Executable file name, lowercased. Primary key.
     pub exe: String,
@@ -62,11 +64,15 @@ pub struct VnApp {
     /// Use the VN cover rating for Discord, including while offline.
     #[serde(default)]
     pub is_adult_image: Option<bool>,
+    /// Chinese filter for this work's lines; `None` follows the global setting.
+    #[serde(default)]
+    pub filter_chinese: Option<bool>,
 }
 
 /// One entry of the Discord presence blacklist: a media contentId or an
 /// executable the user never wants published.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct BlacklistEntry {
     /// contentId or executable, lowercased.
     pub key: String,
@@ -98,6 +104,7 @@ pub struct PendingLog {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct TextLine {
     pub id: String,
     pub content_id: String,
@@ -108,6 +115,7 @@ pub struct TextLine {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MinedSentence {
     pub id: String,
     pub line_id: String,
@@ -242,7 +250,31 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE vn_apps ADD COLUMN native_hook_code TEXT",
     "ALTER TABLE text_history ADD COLUMN intelligence TEXT",
     "ALTER TABLE mined_sentences ADD COLUMN screenshot_path TEXT",
+    "ALTER TABLE vn_apps ADD COLUMN filter_chinese INTEGER",
 ];
+
+#[derive(Debug, thiserror::Error)]
+pub enum RestoreError {
+    #[error("not a NihongoTracker Companion backup")]
+    NotABackup,
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+/// Bring any database, new or restored from an old backup, to the current schema.
+fn migrate(conn: &Connection) -> Result<()> {
+    conn.execute_batch(SCHEMA)?;
+    for statement in MIGRATIONS {
+        let _ = conn.execute(statement, []);
+    }
+    if conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).is_ok() {
+        conn.execute("UPDATE vn_apps SET browser_texthooker = 1 WHERE texthooker_url IS NOT NULL AND TRIM(texthooker_url) != ''", [])?;
+    }
+    if conn.execute("ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'", []).is_ok() {
+        conn.execute("UPDATE vn_apps SET reader_mode = CASE WHEN browser_texthooker = 1 THEN 'browser' ELSE 'integrated' END", [])?;
+    }
+    Ok(())
+}
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
@@ -252,19 +284,46 @@ impl Db {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
-        conn.execute_batch(SCHEMA)?;
-        for statement in MIGRATIONS {
-            let _ = conn.execute(statement, []);
-        }
-        if conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).is_ok() {
-            conn.execute("UPDATE vn_apps SET browser_texthooker = 1 WHERE texthooker_url IS NOT NULL AND TRIM(texthooker_url) != ''", [])?;
-        }
-        if conn.execute("ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'", []).is_ok() {
-            conn.execute("UPDATE vn_apps SET reader_mode = CASE WHEN browser_texthooker = 1 THEN 'browser' ELSE 'integrated' END", [])?;
-        }
+        migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    // ── backups ────────────────────────────────────────────────────────
+
+    /// A consistent copy of the whole database, whatever is still in the WAL
+    /// included. `VACUUM INTO` refuses to overwrite, so an old file goes first.
+    pub fn export_to(&self, dest: &Path) -> Result<()> {
+        let _ = std::fs::remove_file(dest);
+        self.with(|c| {
+            c.execute("VACUUM INTO ?1", params![dest.to_string_lossy()])
+                .map(|_| ())
+        })
+    }
+
+    /// Replace everything with `source`'s contents, in place: the connection
+    /// other threads hold stays valid. A backup from an older version is
+    /// migrated like any database on open.
+    pub fn restore_from(&self, source: &Path) -> std::result::Result<(), RestoreError> {
+        let backup = Connection::open_with_flags(source, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| RestoreError::NotABackup)?;
+        let ours: i64 = backup
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('kv', 'vn_apps', 'outbox')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|_| RestoreError::NotABackup)?;
+        if ours < 3 {
+            return Err(RestoreError::NotABackup);
+        }
+
+        let mut conn = self.conn.lock().expect("db mutex poisoned");
+        rusqlite::backup::Backup::new(&backup, &mut conn)?
+            .run_to_completion(256, std::time::Duration::ZERO, None)?;
+        migrate(&conn)?;
+        Ok(())
     }
 
     fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
@@ -349,7 +408,7 @@ impl Db {
     pub fn list_vn_apps(&self) -> Result<Vec<VnApp>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image
+                "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese
                  FROM vn_apps ORDER BY media_title COLLATE NOCASE",
             )?;
             let rows = stmt.query_map([], |r| {
@@ -371,6 +430,7 @@ impl Db {
                     hooker_path: r.get(9)?,
                     native_hook_enabled: r.get::<_, i64>(10)? != 0,
                     native_hook_code: r.get(11)?,
+                    filter_chinese: r.get::<_, Option<i64>>(13)?.map(|value| value != 0),
                 })
             })?;
             rows.collect()
@@ -380,8 +440,8 @@ impl Db {
     pub fn upsert_vn_app(&self, app: &VnApp) -> Result<()> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(exe) DO UPDATE SET
                     media_id = excluded.media_id,
                     media_type = excluded.media_type,
@@ -394,7 +454,8 @@ impl Db {
                     launch_path = excluded.launch_path,
                     hooker_path = excluded.hooker_path,
                     native_hook_enabled = excluded.native_hook_enabled,
-                    native_hook_code = COALESCE(excluded.native_hook_code, vn_apps.native_hook_code)",
+                    native_hook_code = COALESCE(excluded.native_hook_code, vn_apps.native_hook_code),
+                    filter_chinese = excluded.filter_chinese",
                 params![
                     app.exe.to_lowercase(),
                     app.media_id,
@@ -408,11 +469,28 @@ impl Db {
                     app.hooker_path,
                     app.native_hook_enabled as i64,
                     app.native_hook_code,
-                    app.is_adult_image.map(i64::from)
+                    app.is_adult_image.map(i64::from),
+                    app.filter_chinese.map(i64::from)
                 ],
             )
             .map(|_| ())
         })
+    }
+
+    /// The per-work Chinese filter, if any executable of `content_id` sets one.
+    pub fn chinese_filter_for(&self, content_id: &str) -> Option<bool> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT filter_chinese FROM vn_apps WHERE media_id = ?1 AND filter_chinese IS NOT NULL
+                 ORDER BY enabled DESC LIMIT 1",
+                params![content_id],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+        })
+        .ok()
+        .flatten()
+        .map(|value| value != 0)
     }
 
     pub fn set_native_hook_code(&self, exe: &str, hook_code: &str) -> Result<()> {
@@ -538,6 +616,19 @@ impl Db {
                 params![id],
             )
             .map(|_| ())
+        })
+    }
+
+    /// Replace a log that hasn't left yet and queue it again. `false` when it
+    /// was already sent (or isn't a log), so the edit would be lost.
+    pub fn update_outbox_log(&self, id: &str, payload: &str) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "UPDATE outbox SET payload = ?2, status = 'queued', last_error = NULL, attempts = 0
+                 WHERE id = ?1 AND kind = 'log' AND status != 'sent'",
+                params![id, payload],
+            )
+            .map(|changed| changed > 0)
         })
     }
 
@@ -1017,6 +1108,69 @@ mod mining_tests {
     }
 
     #[test]
+    fn backup_round_trips_and_rejects_foreign_files() {
+        let dir = std::env::temp_dir().join(format!("ntdc-backup-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let backup = dir.join("backup.sqlite3");
+
+        let source = Db::open(&dir.join("source.sqlite3")).unwrap();
+        source.enqueue("log-1", "log", r#"{"type":"anime"}"#).unwrap();
+        source.export_to(&backup).unwrap();
+        // A second export over the first must not fail on the existing file.
+        source.export_to(&backup).unwrap();
+
+        let target = Db::open(&dir.join("target.sqlite3")).unwrap();
+        target.enqueue("other", "log", "{}").unwrap();
+        target.restore_from(&backup).unwrap();
+        let ids: Vec<String> = target.outbox_all(10).unwrap().into_iter().map(|i| i.id).collect();
+        assert_eq!(ids, vec!["log-1".to_string()], "restore replaces, it does not merge");
+
+        let foreign = dir.join("notes.txt");
+        std::fs::write(&foreign, "not sqlite").unwrap();
+        assert!(matches!(target.restore_from(&foreign), Err(super::RestoreError::NotABackup)));
+        let other_db = dir.join("other.sqlite3");
+        rusqlite::Connection::open(&other_db).unwrap().execute("CREATE TABLE t (x)", []).unwrap();
+        assert!(matches!(target.restore_from(&other_db), Err(super::RestoreError::NotABackup)));
+        assert_eq!(target.outbox_all(10).unwrap().len(), 1, "a rejected file changes nothing");
+
+        drop((source, target));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn chinese_filter_is_per_work_and_falls_back_to_global() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let mut app = VnApp {
+            exe: "air.exe".into(),
+            media_id: "v36".into(),
+            media_type: "vn".into(),
+            media_title: "AIR".into(),
+            image: None,
+            launch_path: None,
+            hooker_path: None,
+            native_hook_enabled: false,
+            native_hook_code: None,
+            reader_mode: ReaderMode::Integrated,
+            enabled: true,
+            is_adult: false,
+            is_adult_image: None,
+            filter_chinese: None,
+        };
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.chinese_filter_for("v36"), None, "unset follows the global toggle");
+
+        app.filter_chinese = Some(true);
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.chinese_filter_for("v36"), Some(true));
+        assert_eq!(db.list_vn_apps().unwrap()[0].filter_chinese, Some(true));
+
+        app.filter_chinese = Some(false);
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.chinese_filter_for("v36"), Some(false), "off overrides a global on");
+        assert_eq!(db.chinese_filter_for("v1"), None);
+    }
+
+    #[test]
     fn selected_native_hook_is_saved_per_executable() {
         let db = Db::open(Path::new(":memory:")).unwrap();
         let app = VnApp {
@@ -1033,6 +1187,7 @@ mod mining_tests {
             enabled: true,
             is_adult: false,
             is_adult_image: None,
+            filter_chinese: None,
         };
 
         db.upsert_vn_app(&app).unwrap();

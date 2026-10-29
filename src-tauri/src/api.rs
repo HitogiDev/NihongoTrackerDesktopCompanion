@@ -152,12 +152,19 @@ impl ApiClient {
         }
 
         let parsed: Option<Value> = serde_json::from_str(&body).ok();
-        let message = parsed
+        let mut message = parsed
             .as_ref()
             .and_then(|v| v.get("message"))
             .and_then(|v| v.as_str())
             .unwrap_or("Request failed")
             .to_string();
+        // Validation errors name each failing path with mongoose's reason.
+        if let Some(fields) = parsed.as_ref().and_then(|v| v.get("fields")).and_then(Value::as_object) {
+            let reasons: Vec<&str> = fields.values().filter_map(Value::as_str).collect();
+            if !reasons.is_empty() {
+                message = format!("{message} — {}", reasons.join(" "));
+            }
+        }
         let code = parsed
             .as_ref()
             .and_then(|v| v.get("code"))
@@ -179,8 +186,15 @@ impl ApiClient {
 
     // ── logs ───────────────────────────────────────────────────────────
 
-    pub async fn create_log(&self, payload: &Value) -> Result<Value> {
-        let req = self.auth(self.http.post(self.url("logs")).json(payload))?;
+    /// `key` is the outbox id: the backend answers a repeated key with the log
+    /// it already created, so a retry after a lost response can't duplicate it.
+    pub async fn create_log(&self, payload: &Value, key: &str) -> Result<Value> {
+        let req = self.auth(
+            self.http
+                .post(self.url("logs"))
+                .header("Idempotency-Key", key)
+                .json(payload),
+        )?;
         self.send(req).await
     }
 

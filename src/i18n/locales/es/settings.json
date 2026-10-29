@@ -167,5 +167,16 @@
     },
     "screenRecordingHint": "macOS oculta los títulos de las ventanas de otras apps hasta que permites la grabación de pantalla en Ajustes del Sistema → Privacidad y seguridad. Reinicia el companion después de concederla.",
     "screenRecordingAction": "Pedir acceso"
+  },
+  "backup": {
+    "section": "Copia de seguridad",
+    "title": "Base de datos local",
+    "hint": "Biblioteca, cola, líneas del texthooker, frases minadas y ajustes, incluida tu clave de API: guarda el archivo en privado. No incluye los diccionarios ni las capturas.",
+    "export": "Exportar",
+    "restore": "Restaurar",
+    "exported": "Guardada en {{path}}",
+    "confirmTitle": "¿Restaurar esta copia?",
+    "confirmBody": "Todo lo guardado en local se sustituye por la copia y la app se reinicia. Los logs que esperan en la cola también se sustituyen. La base de datos actual se guarda como companion.before-restore.sqlite3 en la carpeta de datos de la app.",
+    "confirm": "Restaurar y reiniciar"
   }
 }

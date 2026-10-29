@@ -12,6 +12,9 @@ npm run build          # tsc + vite build
 npm run typecheck      # tsc --noEmit
 npm run tauri build    # instalador (NSIS en Windows)
 npm run test:rust      # cargo test (parser de releases y reproductores)
+npm test               # vitest: lógica pura y stores del frontend
+npm run check:i18n     # en y es con las mismas claves y {{placeholders}}
+npm run bindings       # regenera src/lib/bindings desde los tipos de Rust
 cd src-tauri && cargo check   # el ciclo rápido cuando tocas Rust
 ```
 
@@ -46,7 +49,9 @@ packages/
 src/
   i18n/          i18next: `locales/{en,es}/*.json`, un namespace por pantalla
   lib/ipc.ts     Único punto de entrada a los comandos Rust, tipado
-  lib/types.ts   Espejo de los tipos de Rust — hay que mantenerlos sincronizados
+  lib/bindings/  Tipos generados por ts-rs desde los structs de Rust (no editar)
+  lib/types.ts   Reexporta bindings/ + lo que Rust pasa sin tipar (respuestas de la API)
+  lib/logRules.ts Campos obligatorios por tipo de log, compartidos por todos los formularios
   store/         zustand: settings, tracker, hooker (se alimentan de eventos)
   screens/       Dashboard, Queue, Library, Texthooker, Settings, Onboarding
   components/ui/ Design system copiado de NihongoTracker/Frontend
@@ -60,7 +65,10 @@ src/
 3. Los logs terminados van al **outbox** de SQLite, nunca directos a la red.
    `sync.rs` los drena cada 30 s y al confirmar desde la UI. Cada drenaje va
    bajo `AppState::outbox_flush`: sin él, dos drenajes simultáneos leen las
-   mismas filas y el log sale dos veces (el backend no deduplica).
+   mismas filas y el log sale dos veces. Además cada envío lleva el id de la
+   fila como `Idempotency-Key`, así que reintentar tras una respuesta perdida
+   tampoco duplica. Editar una fila (`update_outbox`) toma el mismo lock: un
+   drenaje en curso tiene el payload viejo en memoria.
 4. El cronómetro de una sesión suma el tiempo real entre ticks (`Instant`), no
    el intervalo configurado: el resto por debajo del segundo se arrastra en
    `elapsed_carry_ms`.
@@ -234,6 +242,16 @@ Lo que hay que saber antes de tocarlo:
 - El paquete no tiene ni una cadena visible: el botón de volver y sus textos los
   pone cada app con su i18n. `useLookupHistory` solo lleva la pila.
 
+### Copia de seguridad
+
+`export_database` hace `VACUUM INTO` (copia consistente aunque haya WAL) y
+`restore_database` copia el archivo encima de la conexión viva con la API de
+backup de SQLite, la migra y **reinicia la app**, para que ningún bucle siga con
+los datos viejos. Antes guarda la actual como `companion.before-restore.sqlite3`.
+Rechaza cualquier archivo sin las tablas `kv`, `vn_apps` y `outbox`. La copia
+lleva la clave de API (los ajustes viven en `kv`); los diccionarios y las
+capturas no van dentro.
+
 ### Eventos Rust → frontend
 
 `tracker://state`, `vn://started`, `vn://ended`, `texthooker://line`,
@@ -290,9 +308,18 @@ se encoló sin conexión celebra igual cuando por fin sale.
   la prop `size`.
 - Añadir un comando Rust implica: `commands.rs` → `invoke_handler` en `lib.rs`
   → wrapper en `src/lib/ipc.ts`. Los tres pasos, siempre.
+- Un struct que Rust manda a la UI lleva
+  `#[cfg_attr(test, derive(ts_rs::TS), ts(export))]` y su tipo TS sale de
+  `src/lib/bindings/` (reexportado en `types.ts`), nunca copiado a mano. Tras
+  cambiarlo, `npm run bindings` y commitear el resultado: el CI falla si
+  `bindings/` no coincide. Solo queda escrito a mano lo que Rust no tipa
+  (respuestas de la API que pasan como `Value`, objetos hechos con `json!`).
+- Los campos obligatorios de un log por tipo están en `src/lib/logRules.ts` y
+  los usan el registro rápido y el editor de la cola (`LogForm`).
 - **Ningún texto visible se escribe a pelo.** Todo pasa por `useTranslation` y
   vive en `src/i18n/locales/en` y `.../es`; las dos carpetas tienen que tener
-  exactamente las mismas claves. Inglés es el idioma de respaldo.
+  exactamente las mismas claves (lo comprueba `npm run check:i18n` en el CI).
+  Inglés es el idioma de respaldo.
 - Los textos que enseña Rust (bandeja, notificaciones) están en
   `src-tauri/src/i18n.rs` y hay que mantenerlos a mano en los dos idiomas. El
   menú de la bandeja se reconstruye en `save_settings` al cambiar de idioma.
@@ -311,8 +338,10 @@ equivocarse:
   como opcional. Devuelve **200**, no 201.
 - El `xp` que envíe el cliente se ignora: lo recalcula el middleware
   `calculateXp`. Para estimar, `POST /api/logs/preview-xp`.
-- Los errores de validación llegan como `{ message: "Validation Error" }` sin
-  decir qué campo falla. Valida en el cliente.
+- Los errores de validación de mongoose llegan como `{ message: "Validation
+  Error: <rutas>", fields: { ruta: motivo } }` (los servidores anteriores, solo
+  `"Validation Error"`). `api.rs` añade los motivos al mensaje que ve la cola.
+  Igualmente valida en el cliente (`logRules.ts`).
 - Campos obligatorios por tipo: `anime` → `episodes`; `vn` → `chars` o `time`;
   `manga`/`reading`/`book` → `pages`, `chars` o `time`; `video`/`movie`/`audio`
   → `time`. `time` siempre en **minutos**.
@@ -321,8 +350,10 @@ equivocarse:
   `gbooks-<id>` para libros.
 - `/api/media/search` usa la ortografía `tv_show` (con guion bajo) mientras que
   el tipo de log es `tv show` (con espacio). Conversión en `api::search_type_for`.
-- No hay endpoint de lote ni clave de idempotencia: cada log es una petición y la
-  deduplicación es responsabilidad nuestra (`watch_history` en SQLite).
+- No hay endpoint de lote: cada log es una petición. `POST /api/logs` acepta
+  `Idempotency-Key` (`[a-zA-Z0-9._:-]{1,128}`) y ante una clave repetida
+  devuelve el log que ya creó; mandamos el id del outbox. Que un episodio no se
+  registre dos veces sigue siendo cosa nuestra (`watch_history` en SQLite).
 - Texthooker: `POST /api/texthooker/:contentId/lines` espera `charsCount`,
   mientras que el formato de socket de la web usa `japaneseCount`.
 
@@ -345,7 +376,9 @@ equivocarse:
   camino. El del portapapeles además exige que la copia lleve japonés, o cada
   Ctrl+C acabaría siendo una línea.
 - El filtro de chino (`texthooker_filter_chinese`, `text_filters::drop_chinese`)
-  juzga línea a línea: con kana nunca es chino; sin kana, solo si tiene 4+ kanji
+  es global, pero cada obra de la biblioteca puede activarlo o desactivarlo
+  para sí (`vn_apps.filter_chinese`, `NULL` = el global; lo consulta `ingest`
+  por `content_id`). Juzga línea a línea: con kana nunca es chino; sin kana, solo si tiene 4+ kanji
   y una marca china (`CHINESE_MARKERS`) o 12+ kanji. Las marcas excluyen a
   propósito kanji de cabeceras japonesas (都, 過, 着…): añade casos al test
   antes de tocar la lista. Una línea con kana puede traer la traducción pegada

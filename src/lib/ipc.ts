@@ -79,6 +79,12 @@ export const ipc = {
   // outbox
   listOutbox: () => invoke<OutboxItem[]>('list_outbox'),
   retryOutbox: (id: string) => invoke<void>('retry_outbox', { id }),
+  /** A full copy of the local database; it includes the API key. */
+  exportDatabase: (path: string) => invoke<void>('export_database', { path }),
+  /** Replaces the local database and restarts; resolves only on failure. */
+  restoreDatabase: (path: string) => invoke<void>('restore_database', { path }),
+  /** Replace a queued or failed log and send it again. */
+  updateOutbox: (id: string, payload: LogPayload) => invoke<void>('update_outbox', { id, payload }),
   deleteOutbox: (id: string) => invoke<void>('delete_outbox', { id }),
   flushOutbox: () => invoke<void>('flush_outbox'),
 

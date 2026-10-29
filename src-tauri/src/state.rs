@@ -15,6 +15,7 @@ use crate::streak::StreakCache;
 
 /// Media the tracker managed to resolve for a detected title.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MediaMatch {
     pub content_id: String,
     pub title: String,
@@ -30,6 +31,7 @@ pub struct MediaMatch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct AnimeSession {
     /// Stable identity for the episode currently on screen.
     pub key: String,
@@ -99,6 +101,7 @@ impl AnimeSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct VnSession {
     pub exe: String,
     /// Concrete process instance selected by the detector.
@@ -135,6 +138,7 @@ impl VnSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct TrackerSnapshot {
     pub platform_supported: bool,
     /// What detection can see on this OS and session (see `platform`).
@@ -202,6 +206,7 @@ mod timer_tests {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum NativeGameHookPhase {
     #[default]
     Inactive,
@@ -213,6 +218,7 @@ pub enum NativeGameHookPhase {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct NativeGameHookStatus {
     pub phase: NativeGameHookPhase,
     pub content_id: Option<String>,
@@ -228,6 +234,7 @@ pub struct NativeGameHookStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct NativeHookCandidate {
     pub selection_key: String,
     pub hook_code: String,
@@ -244,6 +251,7 @@ impl NativeGameHookStatus {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum HookerStatus {
     Disconnected,
     Connecting,
@@ -252,6 +260,7 @@ pub enum HookerStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct HookerState {
     pub status: HookerStatus,
     pub url: String,
