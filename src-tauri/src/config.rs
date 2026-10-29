@@ -111,6 +111,9 @@ pub struct Settings {
     /// mpv's `input-ipc-server` path.
     #[serde(default = "d_mpv_ipc")]
     pub mpv_ipc_path: String,
+    /// The dashboard stops offering to set up mpv's IPC (Settings still can).
+    #[serde(default)]
+    pub mpv_setup_dismissed: bool,
     /// Port of the MPC-HC / MPC-BE web interface.
     #[serde(default = "d_mpc_port")]
     pub mpc_web_port: u16,
@@ -279,6 +282,7 @@ impl Default for Settings {
             anime_log_time: false,
             use_player_position: true,
             mpv_ipc_path: d_mpv_ipc(),
+            mpv_setup_dismissed: false,
             mpc_web_port: d_mpc_port(),
             detect_visual_novels: true,
             detect_games: true,
@@ -362,6 +366,9 @@ pub struct ReadingOverlaySettings {
     pub text_visibility: OverlayTextVisibility,
     pub always_on_top: bool,
     pub hide_when_unfocused: bool,
+    /// Ctrl does not reach the game while the cursor is over the overlay or its
+    /// popup, so reaching for a lookup does not skip the text.
+    pub block_ctrl_on_hover: bool,
     pub toolbar_title_hover_only: bool,
     pub lookup_delay_ms: u32,
     pub popup_enabled: bool,
@@ -398,6 +405,7 @@ impl Default for ReadingOverlaySettings {
             text_visibility: OverlayTextVisibility::Always,
             always_on_top: true,
             hide_when_unfocused: true,
+            block_ctrl_on_hover: true,
             toolbar_title_hover_only: false,
             lookup_delay_ms: d_dictionary_popup_delay_ms(),
             popup_enabled: true,

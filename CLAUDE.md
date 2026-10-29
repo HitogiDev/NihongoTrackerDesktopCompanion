@@ -35,6 +35,7 @@ src-tauri/src/
   players.rs     Reproductores conocidos + limpieza del título de ventana
   parser.rs      Parser de nombres de release (tests dentro)
   playback.rs    Posición real: IPC de mpv y interfaz web de MPC
+  mpv_config.rs  Activa input-ipc-server en el mpv.conf del usuario (con su permiso)
   watcher.rs     Bucle de detección; convierte sesiones en logs
   texthooker.rs  Cliente WebSocket Textractor/Agent + lector de portapapeles
   api.rs         Cliente REST (x-api-key)
@@ -100,6 +101,18 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   destruye. El overlay de lectura y su popup se crean la primera vez que se
   quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
   hijas del popup y morirían con él.
+- El overlay de lectura es `focusable(false)`, así que sus teclas van al juego
+  y una VN salta texto con Ctrl. El **escudo de Ctrl**
+  (`platform::shield_ctrl`, `reading_overlay::ctrl_shield_blocks`) se traga
+  las pulsaciones de Ctrl mientras el cursor está sobre el overlay o su popup,
+  el juego tiene el foco y no está en click-through
+  (`reading_overlay.block_ctrl_on_hover`). En Windows es un `WH_KEYBOARD_LL`
+  en su propio hilo, instalado solo mientras el overlay está visible. Cada
+  pulsación y su suelta van por el mismo camino (`platform::ctrl_event`): si
+  no, el juego vería un Ctrl pulsado que nunca se suelta y saltaría sin fin. Si
+  se pulsa otra tecla con un Ctrl tragado, es un atajo (Ctrl+Shift+I): se
+  reinyectan el Ctrl y la tecla con `SendInput` y ese Ctrl deja de tragarse.
+  En Linux y macOS es un no-op (`Capabilities::ctrl_shield`).
 - `window_chrome.rs`: barra de título con el tema de daisyUI y Mica tras la
   sidebar en Windows 11 (`data-vibrancy` en `<html>`; sin él no cambia nada).
 - Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas
@@ -368,6 +381,18 @@ equivocarse:
   Un reproductor nuevo con API se añade a `playback::probe`, no al watcher.
 - El sondeo de posición sale del tick (`request_playback`) con un `AtomicBool`
   que impide que se acumulen sondas si el reproductor tarda.
+- `mpv_config.rs` configura el IPC de mpv por el usuario, **siempre tras
+  confirmar** (aviso en la tarjeta de anime del Dashboard si mpv lleva 5 s sin
+  dar posición, `needsMpvSetup`, y botón en Ajustes). Elige el `mpv.conf` que
+  mpv lee: `portable_config` junto al ejecutable en marcha, si no
+  `%APPDATA%\mpv` (`mpv.net` para mpv.net), `$XDG_CONFIG_HOME/mpv` o
+  `~/.var/app/io.mpv.Mpv/config/mpv` si el proceso es un Flatpak (exe bajo
+  `/app`), cuyo socket va en `$XDG_RUNTIME_DIR/app/io.mpv.Mpv/` porque su `/tmp`
+  es privado. Un `input-ipc-server` de nivel superior que ya exista **manda**:
+  se adopta su ruta en vez de reescribirlo. Si no, añade la línea con un
+  comentario antes del primer perfil y guarda el original una sola vez como
+  `mpv.conf.before-nihongotracker`. mpv solo lo lee al arrancar: hay que
+  reiniciarlo. IINA no lee `mpv.conf` por defecto y no se sondea.
 - El conteo de caracteres debe seguir siendo solo kana + kanji
   (`texthooker::count_japanese`), igual que `countJapaneseCharacters` en la web,
   o las estadísticas dejarán de cuadrar con el sitio.

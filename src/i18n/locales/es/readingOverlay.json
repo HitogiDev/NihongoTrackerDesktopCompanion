@@ -24,6 +24,8 @@
   "alwaysOnTop": "Mantener el overlay sobre otras ventanas",
   "hideWhenUnfocused": "Ocultar el overlay al cambiar de ventana de la VN",
   "hideWhenUnfocusedHint": "Desactívalo para mantenerlo visible mientras la VN está abierta. Mostrar overlay lo revela hasta volver a la VN.",
+  "blockCtrl": "Bloquear el Ctrl a la VN con el ratón sobre el overlay",
+  "blockCtrlHint": "La mayoría de VNs saltan texto mientras Ctrl está pulsado. Los atajos como Ctrl+Shift+I siguen funcionando, y en modo click-through no cambia nada.",
   "toolbarTitleHoverOnly": "Mostrar los botones solo al pasar por la barra de título",
   "textVisibility": "Texto cuando el mouse está fuera",
   "visibilityModes": {

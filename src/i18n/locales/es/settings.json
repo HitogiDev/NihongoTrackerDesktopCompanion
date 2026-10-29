@@ -50,6 +50,27 @@
     "detectHint": "Cuenta el tiempo activo de los juegos vinculados en la biblioteca.",
     "rules": "La sesión se pausa cuando el juego pierde el foco o estás ausente. Al terminar, pasa a Pendientes para confirmarla."
   },
+  "mpv": {
+    "configure": "Configurar {{player}} automáticamente",
+    "configureHint": "Añade input-ipc-server al mpv.conf que lee el reproductor, después de enseñarte exactamente qué cambia.",
+    "player": "Reproductor",
+    "prompt": "{{player}} no está compartiendo por dónde va el episodio, así que se cuenta el tiempo con la ventana abierta (pausas incluidas). El companion puede activarlo en mpv.conf por ti.",
+    "dismiss": "No volver a ofrecerlo",
+    "confirmTitle": "Configurar {{player}}",
+    "addBody": "Se añadirá esta línea a tu mpv.conf:",
+    "createBody": "Todavía no hay mpv.conf; se creará con esta línea:",
+    "backupNote": "Se guarda una copia del archivo actual a su lado como mpv.conf.before-nihongotracker.",
+    "restartNote": "mpv solo lee mpv.conf al arrancar: ciérralo y vuelve a abrirlo después.",
+    "adoptBody": "Tu mpv.conf ya abre un socket. No se toca el archivo; el companion escuchará ahí.",
+    "nothingBody": "Ya coincide todo; no hay nada que cambiar. Si la posición sigue sin aparecer, cierra mpv y vuelve a abrirlo.",
+    "apply": "Añadir la línea",
+    "adopt": "Usar ese socket",
+    "done": {
+      "add": "Listo. Reinicia mpv y el companion leerá la posición de {{path}}.",
+      "adopt": "Listo. El companion escucha ahora en {{path}}.",
+      "nothing": "Ya estaba configurado."
+    }
+  },
   "anime": {
     "title": "Anime",
     "detect": "Detectar reproductores de vídeo",
@@ -147,7 +168,8 @@
       "idle": "Detección de inactividad (tiempo AFK)",
       "screenshots": "Captura del juego en las frases minadas",
       "actionable_notifications": "Botón «Registrar» en el aviso de racha",
-      "native_hook": "Hook nativo de juegos (LunaHook)"
+      "native_hook": "Hook nativo de juegos (LunaHook)",
+      "ctrl_shield": "Ctrl bloqueado a la VN con el ratón sobre el overlay de lectura"
     },
     "missing": {
       "window_titles": "Aquí no se pueden leer los títulos de las ventanas.",
@@ -163,7 +185,8 @@
       "screenshots_linux": "La captura de ventanas necesita una sesión X11.",
       "screenshots_macos": "Necesita el permiso de grabación de pantalla.",
       "actionable_notifications": "El aviso aparece sin botón; abre el formulario desde la bandeja.",
-      "native_hook": "LunaHook se inyecta en procesos de Windows. Con Wine o Proton, ejecuta Textractor dentro del prefijo del juego y conéctalo por WebSocket."
+      "native_hook": "LunaHook se inyecta en procesos de Windows. Con Wine o Proton, ejecuta Textractor dentro del prefijo del juego y conéctalo por WebSocket.",
+      "ctrl_shield": "Solo Windows deja que el companion retenga una tecla antes de que llegue al juego, así que el Ctrl sobre el overlay le sigue llegando."
     },
     "screenRecordingHint": "macOS oculta los títulos de las ventanas de otras apps hasta que permites la grabación de pantalla en Ajustes del Sistema → Privacidad y seguridad. Reinicia el companion después de concederla.",
     "screenRecordingAction": "Pedir acceso"

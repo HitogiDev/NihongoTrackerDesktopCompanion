@@ -16,6 +16,7 @@ import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
 import type { MediaMatch } from './bindings/MediaMatch';
 import type { MinedSentence } from './bindings/MinedSentence';
+import type { MpvSetup } from './bindings/MpvSetup';
 import type { NativeGameHookPhase } from './bindings/NativeGameHookPhase';
 import type { NativeGameHookStatus } from './bindings/NativeGameHookStatus';
 import type { NativeHookCandidate } from './bindings/NativeHookCandidate';
@@ -47,6 +48,7 @@ export type {
   HookerStatus,
   MediaMatch,
   MinedSentence,
+  MpvSetup,
   NativeGameHookPhase,
   NativeGameHookStatus,
   NativeHookCandidate,

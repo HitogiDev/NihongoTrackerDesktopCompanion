@@ -65,6 +65,34 @@ pub struct Capabilities {
     /// macOS only: titles are hidden until the Screen Recording permission is
     /// granted; the settings screen offers to request it.
     pub needs_screen_recording: bool,
+    /// Ctrl can be kept from the game while the cursor is over the reading
+    /// overlay (a novel skips text while Ctrl is held).
+    pub ctrl_shield: bool,
+}
+
+/// Where a Ctrl key is in the shield: what the game saw of its last press.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const CTRL_UP: u8 = 0;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const CTRL_SWALLOWED: u8 = 1;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const CTRL_PASSED: u8 = 2;
+
+/// One Ctrl event through the shield: the key's new state and whether to
+/// swallow it. A press and its release always go the same way, so the game
+/// never sees a release without its press, nor keeps a Ctrl held that it will
+/// never see released (which would leave the novel skipping).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn ctrl_event(state: u8, up: bool, blocking: bool) -> (u8, bool) {
+    match (up, state) {
+        (true, CTRL_SWALLOWED) => (CTRL_UP, true),
+        (true, _) => (CTRL_UP, false),
+        // Auto-repeat follows the first press, wherever the cursor is now.
+        (false, CTRL_SWALLOWED) => (CTRL_SWALLOWED, true),
+        (false, CTRL_PASSED) => (CTRL_PASSED, false),
+        (false, _) if blocking => (CTRL_SWALLOWED, true),
+        (false, _) => (CTRL_PASSED, false),
+    }
 }
 
 #[cfg(windows)]
@@ -89,7 +117,10 @@ mod stub;
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 use stub as imp;
 
-pub use imp::{capabilities, foreground_window, game_window_center, idle_seconds, visible_windows};
+/// `shield_ctrl(armed, blocking)`: while `armed` a keyboard hook is installed
+/// (and removed when disarmed); while `blocking` new Ctrl presses do not reach
+/// any application. A no-op where `Capabilities::ctrl_shield` is false.
+pub use imp::{capabilities, foreground_window, game_window_center, idle_seconds, shield_ctrl, visible_windows};
 
 /// Saves a PNG of `pid`'s window titled `title` (the focused game, for a mined
 /// sentence). False when the platform cannot capture it.
@@ -162,6 +193,23 @@ fn wine_executable(arg: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ctrl_presses_and_releases_go_the_same_way() {
+        // Pressed over the overlay: swallowed, repeats too, and its release
+        // even after the cursor left.
+        let (state, swallow) = ctrl_event(CTRL_UP, false, true);
+        assert!(swallow);
+        assert_eq!(ctrl_event(state, false, false), (CTRL_SWALLOWED, true));
+        assert_eq!(ctrl_event(state, true, false), (CTRL_UP, true));
+        // Pressed elsewhere: the game keeps it, and gets its release over the overlay.
+        let (state, swallow) = ctrl_event(CTRL_UP, false, false);
+        assert!(!swallow);
+        assert_eq!(ctrl_event(state, false, true), (CTRL_PASSED, false));
+        assert_eq!(ctrl_event(state, true, true), (CTRL_UP, false));
+        // A stray release passes untouched.
+        assert_eq!(ctrl_event(CTRL_UP, true, true), (CTRL_UP, false));
+    }
 
     #[test]
     fn wine_command_lines_resolve_to_the_windows_executable() {

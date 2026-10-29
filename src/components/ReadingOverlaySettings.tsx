@@ -13,6 +13,7 @@ export function ReadingOverlaySettings() {
   const { t } = useTranslation('readingOverlay');
   const settings = useAppStore((state) => state.settings);
   const updateSettings = useAppStore((state) => state.updateSettings);
+  const ctrlShield = useAppStore((state) => state.tracker?.capabilities.ctrl_shield ?? false);
   const view = useReadingOverlay();
   const preferences = settings?.reading_overlay;
   const [toggleShortcut, setToggleShortcut] = useState(preferences?.toggle_shortcut ?? '');
@@ -82,6 +83,7 @@ export function ReadingOverlaySettings() {
         <Toggle label={t('centerText')} checked={preferences.center_text} onChange={(value) => save({ center_text: value })} />
         <Toggle label={t('alwaysOnTop')} checked={preferences.always_on_top} onChange={(value) => save({ always_on_top: value })} />
         <Toggle label={t('hideWhenUnfocused')} description={t('hideWhenUnfocusedHint')} checked={preferences.hide_when_unfocused ?? true} onChange={(value) => save({ hide_when_unfocused: value })} />
+        {ctrlShield ? <Toggle label={t('blockCtrl')} description={t('blockCtrlHint')} checked={preferences.block_ctrl_on_hover} onChange={(value) => save({ block_ctrl_on_hover: value })} /> : null}
         <Toggle label={t('toolbarTitleHoverOnly')} checked={preferences.toolbar_title_hover_only} onChange={(value) => save({ toolbar_title_hover_only: value })} />
       </div>
       <section aria-labelledby="overlay-dictionary-settings" className="surface-muted space-y-3 p-3">

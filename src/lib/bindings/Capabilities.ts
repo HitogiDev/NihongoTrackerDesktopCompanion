@@ -44,4 +44,9 @@ actionable_notifications: boolean,
  * macOS only: titles are hidden until the Screen Recording permission is
  * granted; the settings screen offers to request it.
  */
-needs_screen_recording: boolean, };
+needs_screen_recording: boolean, 
+/**
+ * Ctrl can be kept from the game while the cursor is over the reading
+ * overlay (a novel skips text while Ctrl is held).
+ */
+ctrl_shield: boolean, };

@@ -24,6 +24,8 @@
   "alwaysOnTop": "Keep overlay above other windows",
   "hideWhenUnfocused": "Hide overlay when switching away from the VN",
   "hideWhenUnfocusedHint": "Turn off to keep it visible while the VN is running. Show Overlay reveals it until you return to the VN.",
+  "blockCtrl": "Keep Ctrl from the VN while the mouse is over the overlay",
+  "blockCtrlHint": "Most VNs skip text while Ctrl is held. Shortcuts like Ctrl+Shift+I still work, and nothing changes in click-through mode.",
   "toolbarTitleHoverOnly": "Show toolbar buttons only when hovering over the title bar",
   "textVisibility": "Text when the pointer is away",
   "visibilityModes": {

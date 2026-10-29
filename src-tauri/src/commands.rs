@@ -261,6 +261,63 @@ pub fn list_processes() -> CmdResult<Vec<ProcessEntry>> {
     Ok(entries)
 }
 
+// ── mpv setup ──────────────────────────────────────────────────────────
+
+/// The running `player`'s executable, for its `portable_config`.
+fn player_exe(player: &str) -> Option<std::path::PathBuf> {
+    let mut sys = System::new();
+    let refresh = ProcessRefreshKind::new().with_exe(sysinfo::UpdateKind::OnlyIfNotSet);
+    #[cfg(not(windows))]
+    let refresh = refresh.with_cmd(sysinfo::UpdateKind::OnlyIfNotSet);
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh);
+    sys.processes().values().find_map(|process| {
+        let key = crate::platform::process_key(process);
+        (crate::players::lookup(&key)?.name == player).then(|| process.exe().map(|exe| exe.to_path_buf()))?
+    })
+}
+
+fn mpv_player(player: &str) -> CmdResult<&str> {
+    match player {
+        "mpv" | "mpv.net" => Ok(player),
+        _ => Err(format!("{player} is not mpv")),
+    }
+}
+
+/// What enabling mpv's IPC would change, without changing it.
+#[tauri::command]
+pub async fn mpv_setup_plan(state: State<'_, AppState>, player: String) -> CmdResult<crate::mpv_config::MpvSetup> {
+    let player = mpv_player(&player)?.to_string();
+    let configured = state.settings_snapshot().await.mpv_ipc_path;
+    let env = crate::mpv_config::Env::current(player_exe(&player));
+    crate::mpv_config::plan(&env, &player, &configured)
+}
+
+/// Adds `input-ipc-server` to `mpv.conf` (or adopts the one there) and points
+/// the companion at it. Only ever called after the user said yes.
+#[tauri::command]
+pub async fn mpv_setup_apply(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    player: String,
+) -> CmdResult<crate::mpv_config::MpvSetup> {
+    let player = mpv_player(&player)?.to_string();
+    let configured = state.settings_snapshot().await.mpv_ipc_path;
+    let env = crate::mpv_config::Env::current(player_exe(&player));
+    let setup = crate::mpv_config::apply(&env, &player, &configured)?;
+
+    let mut current = state.settings.write().await;
+    if current.mpv_ipc_path != setup.ipc_path || !current.use_player_position {
+        let mut updated = current.clone();
+        updated.mpv_ipc_path = setup.ipc_path.clone();
+        updated.use_player_position = true;
+        state.db.save_settings(&updated).map_err(err)?;
+        *current = updated.clone();
+        drop(current);
+        let _ = app.emit("settings://changed", updated);
+    }
+    Ok(setup)
+}
+
 // ── pending confirmations ──────────────────────────────────────────────
 
 #[tauri::command]
