@@ -706,11 +706,13 @@ pub async fn delete_vn_app(state: State<'_, AppState>, exe: String) -> CmdResult
 
 #[tauri::command]
 pub async fn select_native_hook(
+    app: AppHandle,
     state: State<'_, AppState>,
     exe: String,
     hook_code: String,
 ) -> CmdResult<()> {
     state.game_hook.select_hook(&exe, &hook_code)?;
+    crate::reading_overlay::sync_hook(&app, &state.game_hook.status());
     state.db.set_native_hook_code(&exe, &hook_code).map_err(err)
 }
 
@@ -779,6 +781,7 @@ pub async fn change_native_input_source(app: &AppHandle, content_id: &str, sourc
         _ => return Err("Unknown text input source.".into()),
     }
     let status = state.game_hook.status();
+    crate::reading_overlay::sync_hook(app, &status);
     let snapshot = {
         let mut tracker = state.tracker.write().await;
         tracker.game_hook = status.clone();
@@ -996,6 +999,7 @@ pub async fn reading_overlay_select_hook(app: AppHandle, pid: u32, content_id: S
         return Err("Session changed".into());
     }
     state.game_hook.select_hook(&target.exe, &hook_code)?;
+    crate::reading_overlay::sync_hook(&app, &state.game_hook.status());
     state.db.set_native_hook_code(&target.exe, &hook_code).map_err(err)
 }
 

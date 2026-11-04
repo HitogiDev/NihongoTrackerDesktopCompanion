@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 use crate::config::Settings;
 use crate::db::{ReaderMode, TextLine};
-use crate::state::{AppState, TrackerSnapshot, VnSession};
+use crate::state::{AppState, NativeGameHookPhase, NativeGameHookStatus, TrackerSnapshot, VnSession};
 
 pub const EVT_STATE: &str = "reading-overlay://state";
 pub const LABEL: &str = "reading-overlay";
@@ -36,6 +36,10 @@ pub struct Popup {
 pub struct OverlayState {
     pub target: Option<Target>,
     pub line: Option<TextLine>,
+    /// The game hook of `target`'s work, whoever attached it (the texthooker,
+    /// the overlay or a saved selection). Kept here rather than read from the
+    /// window's tracker copy, so an overlay built after the hook starts with it.
+    pub hook: Option<NativeGameHookStatus>,
     pub visible: bool,
     pub click_through: bool,
     pub toolbar_hovered: bool,
@@ -73,6 +77,7 @@ impl Runtime {
         self.view.target = target;
         if !same_session {
             self.view.line = None;
+            self.view.hook = None;
             self.view.popup = None;
             self.view.click_through = false;
             self.view.toolbar_hovered = false;
@@ -89,6 +94,15 @@ impl Runtime {
             self.desired = automatic;
         }
         self.auto_mode = automatic;
+        changed
+    }
+
+    fn set_hook(&mut self, status: &NativeGameHookStatus) -> bool {
+        let hook = self.view.target.as_ref()
+            .filter(|target| status.content_id.as_deref() == Some(target.content_id.as_str()))
+            .map(|_| status.clone());
+        let changed = self.view.hook != hook;
+        self.view.hook = hook;
         changed
     }
 
@@ -163,6 +177,21 @@ pub fn sync_session(app: &AppHandle, tracker: &TrackerSnapshot, settings: &Setti
         if let Some(window) = app.get_webview_window(POPUP_LABEL) { let _ = window.hide(); }
         publish(app);
     }
+}
+
+/// Follows the native hook of the current work. When the hook is already
+/// receiving but the overlay has no line yet, the session's latest one is taken
+/// from the database, so the overlay picks up where the texthooker is.
+pub fn sync_hook(app: &AppHandle, status: &NativeGameHookStatus) {
+    let mut overlay = runtime(app).lock().unwrap();
+    if !overlay.set_hook(status) { return; }
+    let receiving = overlay.view.hook.as_ref().is_some_and(|hook| hook.phase == NativeGameHookPhase::Receiving);
+    if let (true, None, Some(target)) = (receiving, &overlay.view.line, overlay.view.target.clone()) {
+        overlay.view.line = app.state::<AppState>().db.latest_line(&target.content_id).ok().flatten()
+            .filter(|line| accepts_line(&target, line));
+    }
+    drop(overlay);
+    publish(app);
 }
 
 pub fn accept_line(app: &AppHandle, line: &TextLine) {
@@ -853,5 +882,28 @@ mod tests {
         assert!(overlay.view.line.is_none());
         assert!(overlay.view.popup.is_none());
         assert!(!overlay.view.click_through);
+    }
+
+    #[test]
+    fn the_hook_follows_the_work_not_the_window_or_pid() {
+        let target = Target { pid: 42, exe: "game.exe".into(), content_id: "v1".into(), title: "VN".into(), started_at: "start".into() };
+        let mut overlay = Runtime::default();
+        let hook = NativeGameHookStatus {
+            content_id: Some("v1".into()), phase: NativeGameHookPhase::Receiving,
+            exe: Some("game.exe".into()), pid: Some(7), selected_hook_code: Some("HS0@0".into()),
+            ..Default::default()
+        };
+        // No session yet: nothing to attach the hook to.
+        assert!(!overlay.set_hook(&hook));
+        overlay.set_session(Some(target.clone()), false);
+        assert!(overlay.set_hook(&hook));
+        assert_eq!(overlay.view.hook.as_ref(), Some(&hook));
+        assert!(!overlay.set_hook(&hook));
+        // Another work's hook never shows up in this overlay.
+        assert!(overlay.set_hook(&NativeGameHookStatus { content_id: Some("v2".into()), ..hook.clone() }));
+        assert!(overlay.view.hook.is_none());
+        overlay.set_hook(&hook);
+        overlay.set_session(Some(Target { started_at: "next".into(), ..target }), false);
+        assert!(overlay.view.hook.is_none());
     }
 }

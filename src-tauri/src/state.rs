@@ -217,7 +217,7 @@ pub enum NativeGameHookPhase {
     Unavailable,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct NativeGameHookStatus {
     pub phase: NativeGameHookPhase,
