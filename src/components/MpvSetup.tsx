@@ -69,7 +69,8 @@ export function MpvSetupButton({ player, size = 'sm' }: { player: string; size?:
         {t('mpv.configure', { player })}
       </Button>
       {message ? (
-        <p className={`text-xs break-all ${message.ok ? 'text-success' : 'text-error'}`}>{message.text}</p>
+        // Its own surface: the dashboard shows this inside a coloured alert.
+        <p className={`rounded-field bg-base-100 px-2 py-1 text-xs break-all ${message.ok ? 'text-success' : 'text-error'}`}>{message.text}</p>
       ) : null}
 
       <Modal
