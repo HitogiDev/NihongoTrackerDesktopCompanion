@@ -60,6 +60,8 @@ pub struct AnimeSession {
     /// 0.0–1.0 towards being logged; computed here so the UI never re-derives it.
     pub progress: f64,
     pub logged: bool,
+    /// The log went to the pending queue to be confirmed, not to the outbox.
+    pub pending: bool,
     pub started_at: String,
 }
 

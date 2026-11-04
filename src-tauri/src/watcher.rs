@@ -288,6 +288,7 @@ async fn update_anime(
             source: PlaybackSource::Elapsed,
             progress: 0.0,
             logged: false,
+            pending: false,
             started_at: crate::db::now_iso(),
         });
         // The lookup runs off the tick so a slow network never stalls detection.
@@ -348,9 +349,21 @@ async fn update_anime(
 
     if session.ready() && !session.logged {
         session.logged = true;
-        let session = session.clone();
-        commit_anime(app, &session, settings, false, "").await;
+        let snapshot = session.clone();
+        session.pending =
+            commit_anime(app, &snapshot, settings, false, "").await == AnimeCommit::Pending;
     }
+}
+
+/// Where `commit_anime` put the episode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnimeCommit {
+    /// Straight to the outbox.
+    Sent,
+    /// Parked in the pending queue until the user confirms it.
+    Pending,
+    /// Already logged today, or nothing to log it as.
+    Skipped,
 }
 
 fn media_playback(media: &platform::MediaPlayer) -> Option<Playback> {
@@ -376,20 +389,19 @@ fn threshold_for(settings: &Settings, media: Option<&MediaMatch>) -> u64 {
 
 /// Turn a finished (or manually accepted) episode into a log.
 /// `forced` comes from the user pressing "log now", which also means the
-/// confirmation step is redundant. Returns true when the log was queued for
-/// delivery rather than parked for confirmation.
+/// confirmation step is redundant.
 pub async fn commit_anime(
     app: &AppHandle,
     session: &AnimeSession,
     settings: &Settings,
     forced: bool,
     comment: &str,
-) -> bool {
+) -> AnimeCommit {
     let state = app.state::<AppState>();
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let dedup_key = format!("anime:{}:{today}", session.key);
     if state.db.was_logged(&dedup_key) {
-        return false;
+        return AnimeCommit::Skipped;
     }
 
     let title = session
@@ -398,7 +410,7 @@ pub async fn commit_anime(
         .map(|m| m.title.clone())
         .unwrap_or_else(|| session.parsed.title.clone());
     if title.trim().is_empty() {
-        return false;
+        return AnimeCommit::Skipped;
     }
 
     let mut payload = json!({
@@ -444,6 +456,7 @@ pub async fn commit_anime(
             &format!("{title} — {episode_label}"),
         );
         flush_later(app);
+        AnimeCommit::Sent
     } else {
         sync::add_pending(app, &payload, "anime");
         notify(
@@ -452,8 +465,8 @@ pub async fn commit_anime(
             crate::i18n::ready_to_log(lang),
             &format!("{title} — {episode_label}"),
         );
+        AnimeCommit::Pending
     }
-    send_now
 }
 
 // ── visual novels ──────────────────────────────────────────────────────

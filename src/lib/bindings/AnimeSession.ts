@@ -28,4 +28,8 @@ position_secs: number | null, duration_secs: number | null, paused: boolean, sou
 /**
  * 0.0–1.0 towards being logged; computed here so the UI never re-derives it.
  */
-progress: number, logged: boolean, started_at: string, };
+progress: number, logged: boolean, 
+/**
+ * The log went to the pending queue to be confirmed, not to the outbox.
+ */
+pending: boolean, started_at: string, };
