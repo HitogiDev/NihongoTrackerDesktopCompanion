@@ -36,6 +36,7 @@ src-tauri/src/
   parser.rs      Parser de nombres de release (tests dentro)
   playback.rs    Posición real: IPC de mpv y interfaz web de MPC
   mpv_config.rs  Activa input-ipc-server en el mpv.conf del usuario (con su permiso)
+  fushi.rs       Lee qué reproduce Fushi de su propia SQLite (solo lectura)
   watcher.rs     Bucle de detección; convierte sesiones en logs
   texthooker.rs  Cliente WebSocket Textractor/Agent + lector de portapapeles
   api.rs         Cliente REST (x-api-key)
@@ -148,6 +149,11 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   (job `downloads`). Así que el título del PR es lo que lee el usuario.
 - Los archivos se llaman `NihongoTrackerDesktopCompanion_<versión>_…`
   (`assetNamePattern`): con el `productName` GitHub cambia el espacio por un punto.
+- La AppImage que sube tauri-action lleva el `libwayland` de Ubuntu, que choca
+  con una Mesa más nueva (Arch: `EGL_BAD_PARAMETER` y ventana en blanco). El
+  job `appimage` lo quita (`scripts/appimage-unbundle-wayland.sh`), la vuelve a
+  firmar y corrige la firma en `latest.json`, después de todos los builds para
+  no pisarse con ellos. `WEBKIT_DISABLE_DMABUF_RENDERER` solo no basta.
 - Solo la AppImage se reemplaza sola en Linux; con .deb/.rpm la UI enlaza a la
   release (`UpdateInfo::can_install`).
 - `tauri-plugin-updater` está fijado a `~2.12`: desde 2.13 exige Tauri 2.12.
@@ -396,6 +402,16 @@ equivocarse:
   Un reproductor nuevo con API se añade a `playback::probe`, no al watcher.
 - El sondeo de posición sale del tick (`request_playback`) con un `AtomicBool`
   que impide que se acumulen sondas si el reproductor tarda.
+- **Fushi** (Flutter + libmpv embebido) titula su ventana siempre "Fushi" y no
+  lee `mpv.conf`, así que `fushi.rs` lee su `fushi.db` en solo lectura mientras
+  el proceso `fushi` corre: `video_books` (`video_path`, `last_position_ms`,
+  `last_played_at`, que escribe cada segundo de reproducción) y la preferencia
+  `video_duration_ms_<bookUid>` (codificada `i:<ms>`). Lo presenta como un
+  `MediaPlayer` del bus de medios. Sin escritura en 5 s = pausa; un Fushi en
+  pausa mantiene una sesión pero nunca la abre. La base está en
+  `%APPDATA%\Fushi\Fushi` (macOS `app.fushi.reader`) o, si el usuario movió los
+  datos, en `<flutter.data_root>/support` según su `shared_preferences.json`.
+  Es su esquema interno, no una API: si cambia, la consulta falla en silencio.
 - `mpv_config.rs` configura el IPC de mpv por el usuario, **siempre tras
   confirmar** (aviso en la tarjeta de anime del Dashboard si mpv lleva 5 s sin
   dar posición, `needsMpvSetup`, y botón en Ajustes). Elige el `mpv.conf` que
