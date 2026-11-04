@@ -17,7 +17,11 @@ pub fn register(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     std::thread::spawn(move || -> windows::core::Result<()> {
         let _com = ComApartment::new()?;
         let shortcut = programs_folder()?.join(format!("{display_name}.lnk"));
-        register_shortcut(&shortcut, &executable, &identifier, &display_name, &icon)?;
+        // A dev build must not take over the installed app's shortcut: launched
+        // from the Start menu it opens a console and a page that needs Vite.
+        if !(cfg!(debug_assertions) && shortcut.exists()) {
+            register_shortcut(&shortcut, &executable, &identifier, &display_name, &icon)?;
+        }
         unsafe {
             windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(
                 &windows::core::HSTRING::from(identifier),
