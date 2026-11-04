@@ -47,7 +47,9 @@ export function Modal({
 
   return (
     <dialog ref={ref} className="modal modal-bottom sm:modal-middle">
-      <div className={`modal-box ${MODAL_SIZE[size]} ${className}`}>
+      {/* The dialog sits in the top layer but still inherits text styles from
+          where it is mounted: inside an alert it would take the alert's colour. */}
+      <div className={`modal-box text-base-content text-base font-normal text-start ${MODAL_SIZE[size]} ${className}`}>
         {(title || dismissable) && (
           <div className="flex items-start justify-between gap-4 mb-4">
             {title ? <h3 className="text-lg font-bold">{title}</h3> : <span />}
