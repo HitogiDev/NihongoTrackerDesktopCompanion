@@ -184,8 +184,12 @@ pub async fn ingest(app: &AppHandle, text: &str, source: IngestSource<'_>) {
     // on or off for itself; the global setting covers everything else.
     let filter_chinese = state.db.chinese_filter_for(&content_id).unwrap_or(settings.texthooker_filter_chinese);
     let filtered = if filter_chinese { crate::text_filters::drop_chinese(&filtered) } else { filtered };
+    let filtered = crate::text_filters::clean_game_text(&filtered, crate::text_filters::GameTextCleanup::from_settings(&settings));
     let text = filtered.as_str();
     if text.is_empty() || (matches!(source, IngestSource::NativeHook { .. }) && count_japanese(text) == 0) {
+        return;
+    }
+    if settings.texthooker_drop_repeated_lines && crate::text_filters::is_recent_repeat(&content_id, text) {
         return;
     }
     let timer_active = if matches!(source, IngestSource::NativeHook { .. }) {

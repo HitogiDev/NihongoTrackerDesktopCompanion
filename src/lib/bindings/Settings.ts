@@ -73,7 +73,20 @@ texthooker_clipboard: boolean, texthooker_prevent_duplicates: boolean,
  * Drop Chinese lines from hooks that send a translation along with the
  * Japanese (AIR and other dual-language releases). Every input source.
  */
-texthooker_filter_chinese: boolean, native_hook_text_filters: NativeHookTextFilters, texthooker_font_size: number, texthooker_font_family: string, texthooker_line_spacing: number, texthooker_line_gap: number, texthooker_vertical: boolean, 
+texthooker_filter_chinese: boolean, 
+/**
+ * Skip a line the game already sent a moment ago (redraws, the same line
+ * again with the name glued on). Every input source.
+ */
+texthooker_drop_repeated_lines: boolean, 
+/**
+ * Drop save-slot previews and save/load messages.
+ */
+texthooker_drop_system_text: boolean, 
+/**
+ * Take the speaker's name off dialogue and drop lines that are only a name.
+ */
+texthooker_strip_speaker_names: boolean, native_hook_text_filters: NativeHookTextFilters, texthooker_font_size: number, texthooker_font_family: string, texthooker_line_spacing: number, texthooker_line_gap: number, texthooker_vertical: boolean, 
 /**
  * Theme applied only inside the reader, like the web client's own picker.
  */

@@ -207,9 +207,147 @@ pub fn drop_chinese(text: &str) -> String {
         .to_owned()
 }
 
-pub fn preview(filters: &NativeHookTextFilters, text: &str, reduce_repetitions: bool, filter_chinese: bool) -> FilterPreview {
+/// The parts of hooked text that the game's own UI puts there rather than the
+/// script: save-slot previews and load messages, and the speaker's name.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GameTextCleanup {
+    pub drop_system_text: bool,
+    pub strip_speaker_names: bool,
+}
+
+impl GameTextCleanup {
+    pub fn from_settings(settings: &crate::config::Settings) -> Self {
+        Self {
+            drop_system_text: settings.texthooker_drop_system_text,
+            strip_speaker_names: settings.texthooker_strip_speaker_names,
+        }
+    }
+}
+
+/// The date of a save slot (2026/02/17 13:28:24). A hook that also catches the
+/// save or load screen sends every slot's last line followed by its date.
+static SAVE_SLOT_DATE: Lazy<Regex> = Lazy::new(||
+    Regex::new(r"\d{4}/\d{1,2}(?:/\d{1,2})?\s*\d{1,2}:\d{2}").expect("The save slot pattern is valid"));
+/// 1番をロードしました, クイックセーブしました, ロードしますか？
+static SAVE_LOAD_MESSAGE: Lazy<Regex> = Lazy::new(||
+    Regex::new(r"^[^「」『』。]{0,12}?(?:クイック)?(?:セーブ|ロード)(?:しました|が完了しました|しますか|してよろしいですか)[。？?]?$")
+        .expect("The save message pattern is valid"));
+
+fn is_system_text(line: &str) -> bool {
+    SAVE_SLOT_DATE.is_match(line) || SAVE_LOAD_MESSAGE.is_match(line)
+}
+
+/// Whether a piece of text reads as a speaker's name: short, and only kana,
+/// kanji and the marks names use. No punctuation, quotes or digits, which keeps
+/// out dialogue, narration and system messages.
+fn is_speaker_name(text: &str) -> bool {
+    let count = text.chars().count();
+    (1..=8).contains(&count)
+        && text.chars().any(|c| is_kana(c) || is_han(c))
+        && text.chars().all(|c| is_kana(c) || is_han(c) || matches!(c, '々' | 'ー' | '・' | '＝') || c.is_alphabetic())
+}
+
+/// A name glued after a line of dialogue (「車で、轢くぞ」屈強な男). A particle
+/// right after the quote is narration instead: 「うん」と言った.
+fn is_trailing_name(text: &str) -> bool {
+    is_speaker_name(text)
+        && !text.starts_with(['と', 'っ', 'も', 'は', 'が', 'を', 'に', 'で', 'や', 'か', 'の', 'へ'])
+}
+
+/// Takes the speaker's name off a line of dialogue, whether the game puts it
+/// before the quote (太郎「…」, 【太郎】「…」) or after it (「…」太郎). A line
+/// that is only a name goes entirely.
+fn strip_speaker_name(line: &str) -> &str {
+    if is_speaker_name(line) {
+        return "";
+    }
+    let mut line = line;
+    if line.ends_with(['」', '』']) {
+        if let Some(open) = line.find(['「', '『']) {
+            let prefix = &line[..open];
+            let bracketed = prefix.strip_prefix('【').and_then(|name| name.strip_suffix('】'));
+            if bracketed.or(Some(prefix)).is_some_and(is_speaker_name) {
+                line = &line[open..];
+            }
+        }
+    }
+    if line.starts_with(['「', '『']) {
+        if let Some(close) = line.rfind(['」', '』']) {
+            let end = close + line[close..].chars().next().map_or(0, char::len_utf8);
+            if is_trailing_name(&line[end..]) {
+                line = &line[..end];
+            }
+        }
+    }
+    line
+}
+
+/// Drops what the game's UI adds to a hook, line by line.
+pub fn clean_game_text(text: &str, cleanup: GameTextCleanup) -> String {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !(cleanup.drop_system_text && is_system_text(line)))
+        .map(|line| if cleanup.strip_speaker_names { strip_speaker_name(line) } else { line })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// How many lines back a repeat is caught, like Textractor's "Remove 30
+/// Repeated Sentences".
+const RECENT_LINES: usize = 30;
+/// Short lines (「うん」) are said again for real, so only a quick repeat of one
+/// is a redraw.
+const SHORT_LINE_CHARS: i64 = 6;
+const SHORT_LINE_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The same line, or the same line with the speaker's name glued to one of them.
+fn same_line(a: &str, b: &str) -> bool {
+    let glued = |long: &str, short: &str| long.strip_prefix(short).is_some_and(is_speaker_name)
+        || long.strip_suffix(short).is_some_and(is_speaker_name);
+    a == b || glued(a, b) || glued(b, a)
+}
+
+/// The lines a work received last. Games redraw a line several times (once
+/// per text box refresh, again with the name glued on), and each draw reaches
+/// the hook.
+#[derive(Default)]
+pub struct RecentLines {
+    by_content: std::collections::HashMap<String, std::collections::VecDeque<(String, std::time::Instant)>>,
+}
+
+impl RecentLines {
+    /// Whether `text` repeats a recent line of `content_id`; it is remembered
+    /// either way, so a line drawn over and over stays recent.
+    pub fn is_repeat(&mut self, content_id: &str, text: &str, now: std::time::Instant) -> bool {
+        let key: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let short = crate::texthooker::count_japanese(&key) < SHORT_LINE_CHARS;
+        let recent = self.by_content.entry(content_id.to_owned()).or_default();
+        let found = recent.iter().position(|(previous, at)| {
+            same_line(previous, &key) && (!short || now.saturating_duration_since(*at) <= SHORT_LINE_WINDOW)
+        });
+        if let Some(index) = found {
+            recent.remove(index);
+        }
+        recent.push_back((key, now));
+        if recent.len() > RECENT_LINES {
+            recent.pop_front();
+        }
+        found.is_some()
+    }
+}
+
+static RECENT: Lazy<Mutex<RecentLines>> = Lazy::new(|| Mutex::new(RecentLines::default()));
+
+pub fn is_recent_repeat(content_id: &str, text: &str) -> bool {
+    RECENT.lock().unwrap_or_else(|error| error.into_inner())
+        .is_repeat(content_id, text, std::time::Instant::now())
+}
+
+pub fn preview(filters: &NativeHookTextFilters, text: &str, reduce_repetitions: bool, filter_chinese: bool, cleanup: GameTextCleanup) -> FilterPreview {
     let normalized = normalize(text, reduce_repetitions, Some(filters))
-        .map(|text| if filter_chinese { drop_chinese(&text) } else { text });
+        .map(|text| if filter_chinese { drop_chinese(&text) } else { text })
+        .map(|text| clean_game_text(&text, cleanup));
     match normalized {
         Ok(text) => {
             let chars = crate::texthooker::count_japanese(&text);
@@ -285,6 +423,82 @@ mod tests {
         }
     }
 
+    const ALL_CLEANUP: GameTextCleanup = GameTextCleanup { drop_system_text: true, strip_speaker_names: true };
+
+    #[test]
+    fn save_screen_and_load_messages_are_dropped() {
+        for system in [
+            "「まぁね。……ある程度切って、と」2026/05 13:36:47「まぁね。……ある程度切って、と」2026/05 13:36:44「大抵お目当てはモモ先輩とかの運動能力だけど2026/10/01 02:48:38",
+            "「でないと、貴様の先輩のように」2026/02/17 13:28:24",
+            "1番をロードしました",
+            "クイックセーブしました。",
+            "ロードしますか？",
+        ] {
+            assert_eq!(clean_game_text(system, ALL_CLEANUP), "", "{system}");
+            assert_eq!(clean_game_text(system, GameTextCleanup::default()), system);
+        }
+        for script in ["「セーブしました、って言ったでしょ」", "ロードの途中で止まった。", "二時三十分。"] {
+            assert_eq!(clean_game_text(script, ALL_CLEANUP), script, "{script}");
+        }
+    }
+
+    #[test]
+    fn speaker_names_are_taken_off_dialogue() {
+        for (input, expected) in [
+            ("「でないと、貴様の先輩のように」屈強な男", "「でないと、貴様の先輩のように」"),
+            ("屈強な男", ""),
+            ("一子", ""),
+            ("太郎「今日は雨だ。」", "「今日は雨だ。」"),
+            ("【後輩】「ああ……」", "「ああ……」"),
+            ("ルーシー・ハート『はい』", "『はい』"),
+            ("「うん」と言った", "「うん」と言った"),
+            ("「うん」って頷いた。", "「うん」って頷いた。"),
+            ("男は、強そうな獲物とは勝負するが、それ以外は効率良く事を処理するタイプだった。", "男は、強そうな獲物とは勝負するが、それ以外は効率良く事を処理するタイプだった。"),
+            ("彼は「うん」と言った。", "彼は「うん」と言った。"),
+        ] {
+            assert_eq!(clean_game_text(input, ALL_CLEANUP), expected, "{input}");
+        }
+        assert_eq!(clean_game_text("「車で、轢くぞ」屈強な男", GameTextCleanup::default()), "「車で、轢くぞ」屈強な男");
+    }
+
+    #[test]
+    fn redrawn_lines_are_skipped_even_with_the_name_glued_on() {
+        let mut recent = RecentLines::default();
+        let start = std::time::Instant::now();
+        let mut kept = Vec::new();
+        for (index, line) in [
+            "「車で、轢くぞ」", "「車で、轢くぞ」", "「車で、轢くぞ」屈強な男",
+            "男は、強そうな獲物とは勝負するが、それ以外は効率良く事を処理するタイプだった。",
+            "男は、強そうな獲物とは勝負するが、それ以外は効率良く事を処理するタイプだった。",
+            "一子", "「ふーっ、ここまで来れば九鬼クンも……」", "「ふーっ、ここまで来れば九鬼クンも……」",
+            "「ふーっ、ここまで来れば九鬼クンも……」一子", "「ふーっ、ここまで来れば九鬼クンも……」",
+            "英雄", "「一子殿どこへ行った？まだ我の話は終わっていないというのに」",
+        ].into_iter().enumerate() {
+            if !recent.is_repeat("v1", line, start + std::time::Duration::from_millis(index as u64 * 300)) {
+                kept.push(line);
+            }
+        }
+        assert_eq!(kept, [
+            "「車で、轢くぞ」",
+            "男は、強そうな獲物とは勝負するが、それ以外は効率良く事を処理するタイプだった。",
+            "一子", "「ふーっ、ここまで来れば九鬼クンも……」",
+            "英雄", "「一子殿どこへ行った？まだ我の話は終わっていないというのに」",
+        ]);
+    }
+
+    #[test]
+    fn short_lines_only_repeat_within_a_few_seconds() {
+        let mut recent = RecentLines::default();
+        let start = std::time::Instant::now();
+        assert!(!recent.is_repeat("v1", "「うん」", start));
+        assert!(recent.is_repeat("v1", "「うん」", start + std::time::Duration::from_secs(1)));
+        assert!(!recent.is_repeat("v1", "「うん」", start + std::time::Duration::from_secs(30)));
+        assert!(!recent.is_repeat("v2", "「うん」", start + std::time::Duration::from_secs(30)));
+        let long = "「今日はいい天気だから散歩に行こう」";
+        assert!(!recent.is_repeat("v1", long, start));
+        assert!(recent.is_repeat("v1", long, start + std::time::Duration::from_secs(600)));
+    }
+
     #[test]
     fn empty_filters_preserve_dialogue() {
         assert_eq!(apply(&NativeHookTextFilters::default(), " 太郎「こんにちは」 ").unwrap(), "太郎「こんにちは」");
@@ -315,7 +529,7 @@ mod tests {
 
     #[test]
     fn expressive_dialogue_keeps_its_characters_in_preview_and_storage() {
-        let result = preview(&NativeHookTextFilters::default(), "【後輩】「ああ…………」", true, false);
+        let result = preview(&NativeHookTextFilters::default(), "【後輩】「ああ…………」", true, false, GameTextCleanup::default());
         assert_eq!(result.text, "【後輩】「ああ…………」");
         assert_eq!(result.chars, 4);
         let db = crate::db::Db::open(std::path::Path::new(":memory:")).unwrap();
@@ -331,11 +545,11 @@ mod tests {
         let filters = NativeHookTextFilters {
             regex_patterns: r"\[[^\]]*\]".into(), excluded_words: "太郎".into(),
         };
-        let result = preview(&filters, "太郎太郎[声][声]「こんにちはこんにちは」", true, false);
+        let result = preview(&filters, "太郎太郎[声][声]「こんにちはこんにちは」", true, false, GameTextCleanup::default());
         assert_eq!(result.text, "「こんにちは」");
         assert_eq!(result.chars, 5);
         assert!(result.regex_error.is_none());
-        let result = preview(&filters, "太郎太郎[声][声]「こんにちはこんにちは」", false, false);
+        let result = preview(&filters, "太郎太郎[声][声]「こんにちはこんにちは」", false, false, GameTextCleanup::default());
         assert_eq!(result.text, "「こんにちはこんにちは」");
         assert_eq!(result.chars, 10);
     }
@@ -352,7 +566,7 @@ mod tests {
             regex_patterns: "^名前：\n\\[[^\\]]*\\]".into(),
             excluded_words: "太郎".into(),
         };
-        let result = preview(&filters, "名前：太郎[音声]「今日は雨だ。」[音声]", false, false);
+        let result = preview(&filters, "名前：太郎[音声]「今日は雨だ。」[音声]", false, false, GameTextCleanup::default());
         assert_eq!(result.text, "「今日は雨だ。」");
         assert_eq!(result.chars, 5);
         assert!(result.regex_error.is_none());
@@ -361,7 +575,7 @@ mod tests {
     #[test]
     fn removed_lines_have_no_characters() {
         let filters = NativeHookTextFilters { excluded_words: "太郎".into(), ..Default::default() };
-        let result = preview(&filters, "太郎", false, false);
+        let result = preview(&filters, "太郎", false, false, GameTextCleanup::default());
         assert!(result.text.is_empty());
         assert_eq!(result.chars, 0);
     }
@@ -385,8 +599,8 @@ mod tests {
     fn repeated_dialogue_is_stored_as_separate_lines_with_cleaned_character_counts() {
         let db = crate::db::Db::open(std::path::Path::new(":memory:")).unwrap();
         let filters = NativeHookTextFilters { excluded_words: "太郎\n花子".into(), ..Default::default() };
-        let first = preview(&filters, "太郎「今日は雨だ。今日は雨だ。」", true, false);
-        let next = preview(&filters, "花子「今日は雨だ。今日は雨だ。」", true, false);
+        let first = preview(&filters, "太郎「今日は雨だ。今日は雨だ。」", true, false, GameTextCleanup::default());
+        let next = preview(&filters, "花子「今日は雨だ。今日は雨だ。」", true, false, GameTextCleanup::default());
         assert_eq!(first.text, next.text);
         db.insert_line(&crate::db::TextLine {
             id: "test-filtered".into(), content_id: "v1".into(),

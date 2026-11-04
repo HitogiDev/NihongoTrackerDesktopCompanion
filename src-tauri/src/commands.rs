@@ -29,8 +29,14 @@ pub fn preview_native_hook_filters(
     text: String,
     reduce_repetitions: Option<bool>,
     filter_chinese: Option<bool>,
+    drop_system_text: Option<bool>,
+    strip_speaker_names: Option<bool>,
 ) -> crate::text_filters::FilterPreview {
-    crate::text_filters::preview(&filters, &text, reduce_repetitions.unwrap_or(false), filter_chinese.unwrap_or(false))
+    let cleanup = crate::text_filters::GameTextCleanup {
+        drop_system_text: drop_system_text.unwrap_or(false),
+        strip_speaker_names: strip_speaker_names.unwrap_or(false),
+    };
+    crate::text_filters::preview(&filters, &text, reduce_repetitions.unwrap_or(false), filter_chinese.unwrap_or(false), cleanup)
 }
 
 #[tauri::command]

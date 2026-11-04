@@ -158,6 +158,13 @@ pub struct Settings {
     /// Drop Chinese lines from hooks that send a translation along with the
     /// Japanese (AIR and other dual-language releases). Every input source.
     pub texthooker_filter_chinese: bool,
+    /// Skip a line the game already sent a moment ago (redraws, the same line
+    /// again with the name glued on). Every input source.
+    pub texthooker_drop_repeated_lines: bool,
+    /// Drop save-slot previews and save/load messages.
+    pub texthooker_drop_system_text: bool,
+    /// Take the speaker's name off dialogue and drop lines that are only a name.
+    pub texthooker_strip_speaker_names: bool,
     pub native_hook_text_filters: crate::text_filters::NativeHookTextFilters,
     #[serde(default = "d_font_size")]
     pub texthooker_font_size: u32,
@@ -299,6 +306,9 @@ impl Default for Settings {
             texthooker_clipboard: false,
             texthooker_prevent_duplicates: false,
             texthooker_filter_chinese: false,
+            texthooker_drop_repeated_lines: true,
+            texthooker_drop_system_text: true,
+            texthooker_strip_speaker_names: true,
             native_hook_text_filters: Default::default(),
             texthooker_font_size: d_font_size(),
             texthooker_font_family: d_font_family(),

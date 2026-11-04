@@ -42,8 +42,12 @@ import type {
 export const ipc = {
   // settings & auth
   getSettings: () => invoke<Settings>('get_settings'),
-  previewNativeHookFilters: (filters: NativeHookTextFilters, text: string, reduceRepetitions = false, filterChinese = false) =>
-    invoke<FilterPreview>('preview_native_hook_filters', { filters, text, reduceRepetitions, filterChinese }),
+  previewNativeHookFilters: (
+    filters: NativeHookTextFilters, text: string, reduceRepetitions = false, filterChinese = false,
+    dropSystemText = false, stripSpeakerNames = false,
+  ) => invoke<FilterPreview>('preview_native_hook_filters', {
+    filters, text, reduceRepetitions, filterChinese, dropSystemText, stripSpeakerNames,
+  }),
   saveSettings: (settings: Settings) => invoke<Settings>('save_settings', { settings }),
   openAuxWindow: (kind: 'settings' | 'texthooker' | 'reading-overlay-settings') => invoke<void>('open_aux_window', { kind }),
   openWorkTexthooker: (contentId?: string, allowStartingSession = false) =>

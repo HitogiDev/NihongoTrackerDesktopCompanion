@@ -40,6 +40,7 @@ export function NativeHookTextFilters() {
       const filters = { excluded_words: words, regex_patterns: patterns };
       const result = await ipc.previewNativeHookFilters(
         filters, sample, settings?.texthooker_prevent_duplicates ?? false, settings?.texthooker_filter_chinese ?? false,
+        settings?.texthooker_drop_system_text ?? false, settings?.texthooker_strip_speaker_names ?? false,
       );
       setPreview(result);
       if (result.regex_error) return;
@@ -55,6 +56,14 @@ export function NativeHookTextFilters() {
   };
 
   if (!settings) return null;
+
+  const toggle = (key: 'texthooker_drop_repeated_lines' | 'texthooker_drop_system_text' | 'texthooker_strip_speaker_names') =>
+    (value: boolean) => {
+      changed();
+      void updateSettings({ [key]: value }).catch((cause) => {
+        setError(t('filters.failed', { message: String(cause) }));
+      });
+    };
 
   return <section className="surface space-y-3 p-4" aria-label={t('filters.title')}>
     <h3 className="font-semibold">{t('filters.title')}</h3>
@@ -74,6 +83,15 @@ export function NativeHookTextFilters() {
           setError(t('filters.failed', { message: String(cause) }));
         });
       }} />
+    <Toggle label={t('filters.repeatedLines')} description={t('filters.repeatedLinesHint')}
+      checked={settings.texthooker_drop_repeated_lines ?? true} disabled={busy}
+      onChange={toggle('texthooker_drop_repeated_lines')} />
+    <Toggle label={t('filters.systemText')} description={t('filters.systemTextHint')}
+      checked={settings.texthooker_drop_system_text ?? true} disabled={busy}
+      onChange={toggle('texthooker_drop_system_text')} />
+    <Toggle label={t('filters.speakerNames')} description={t('filters.speakerNamesHint')}
+      checked={settings.texthooker_strip_speaker_names ?? true} disabled={busy}
+      onChange={toggle('texthooker_strip_speaker_names')} />
     <p className="text-sm text-base-content/60">{t('filters.scope')}</p>
     <div className="grid gap-3 lg:grid-cols-2">
       <Field label={t('filters.words')} hint={t('filters.wordsHint')}>
