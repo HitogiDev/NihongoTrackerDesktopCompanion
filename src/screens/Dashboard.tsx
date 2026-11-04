@@ -433,7 +433,11 @@ function AnimeCard({ session }: { session: AnimeSession }) {
         <div>
           <div className="flex justify-between text-xs text-base-content/60 mb-1">
             <span>
-              {session.logged
+              {session.logged && session.pending ? (
+                <Link to="/queue" className="link link-warning">
+                  {t('anime.sentToPending')}
+                </Link>
+              ) : session.logged
                 ? t('anime.logged')
                 : fromPlayer
                   ? t('anime.progressPlayer', { percent: session.threshold_percent })
@@ -442,7 +446,9 @@ function AnimeCard({ session }: { session: AnimeSession }) {
             <span>{progress}%</span>
           </div>
           <progress
-            className={`progress w-full ${session.logged ? 'progress-success' : 'progress-info'}`}
+            className={`progress w-full ${
+              session.pending ? 'progress-warning' : session.logged ? 'progress-success' : 'progress-info'
+            }`}
             value={progress}
             max={100}
           />

@@ -19,6 +19,7 @@
     "unmatched": "No match on NihongoTracker.",
     "link": "Link",
     "logged": "Logged",
+    "sentToPending": "Sent to Pending, waiting for your confirmation",
     "progressPlayer": "Real position · {{percent}}% to log",
     "progressElapsed": "Time with the player open",
     "logNow": "Log now",
