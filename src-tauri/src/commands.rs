@@ -202,15 +202,17 @@ pub async fn log_current_anime(
     }
 
     let settings = state.settings_snapshot().await;
-    let sent = crate::watcher::commit_anime(&app, &session, &settings, true, &comment).await;
+    let outcome = crate::watcher::commit_anime(&app, &session, &settings, true, &comment).await;
+    let pending = outcome == crate::watcher::AnimeCommit::Pending;
 
     // Keep the snapshot honest so the UI stops offering the button.
     if let Some(current) = state.tracker.write().await.anime.as_mut() {
         if current.key == session.key {
             current.logged = true;
+            current.pending = pending;
         }
     }
-    Ok(json!({ "pending": !sent }))
+    Ok(json!({ "pending": pending }))
 }
 
 #[derive(Serialize)]

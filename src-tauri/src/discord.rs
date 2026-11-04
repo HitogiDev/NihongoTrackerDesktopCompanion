@@ -627,6 +627,7 @@ mod tests {
             source: PlaybackSource::Elapsed,
             progress: 0.3,
             logged: false,
+            pending: false,
             started_at: "2026-08-12T20:00:00Z".into(),
         }
     }

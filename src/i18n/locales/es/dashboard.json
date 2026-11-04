@@ -19,6 +19,7 @@
     "unmatched": "Sin coincidencia en NihongoTracker.",
     "link": "Vincular",
     "logged": "Registrado",
+    "sentToPending": "Enviado a Pendientes, esperando tu confirmación",
     "progressPlayer": "Posición real · {{percent}}% para registrar",
     "progressElapsed": "Tiempo con el reproductor abierto",
     "logNow": "Registrar ahora",
