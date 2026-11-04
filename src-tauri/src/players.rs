@@ -23,6 +23,8 @@ const PLAYERS: &[(&str, &str, &[&str])] = &[
     ("io.github.celluloid_player.celluloid", "Celluloid", &[]),
     ("haruna", "Haruna", &[" — Haruna", " - Haruna"]),
     ("iina", "IINA", &[]),
+    // Its window is always "Fushi": what it plays comes from its database (`fushi.rs`).
+    ("fushi", "Fushi", &[]),
 ];
 
 /// Titles a player shows when nothing is playing.
@@ -42,6 +44,8 @@ const IDLE_TITLES: &[&str] = &[
     "celluloid",
     "haruna",
     "iina",
+    "fushi",
+    "fushi dev",
 ];
 
 pub struct Player {
@@ -144,6 +148,7 @@ mod tests {
     fn detects_idle_player() {
         let p = lookup("vlc.exe").unwrap();
         assert_eq!(p.extract_file_name("VLC media player"), None);
+        assert_eq!(lookup("fushi.exe").unwrap().extract_file_name("Fushi"), None);
     }
 
     #[test]
@@ -152,6 +157,7 @@ mod tests {
         assert_eq!(lookup("mpv").map(|p| p.name), Some("mpv"));
         assert_eq!(lookup("IINA").map(|p| p.name), Some("IINA"));
         assert_eq!(lookup("haruna").map(|p| p.name), Some("Haruna"));
+        assert_eq!(lookup("fushi.exe").map(|p| p.name), Some("Fushi"));
         assert!(lookup("firefox").is_none());
     }
 

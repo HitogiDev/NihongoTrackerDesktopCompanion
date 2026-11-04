@@ -5,6 +5,7 @@ mod config;
 mod db;
 mod dictionary;
 mod discord;
+mod fushi;
 mod i18n;
 mod mining;
 mod mpv_config;

@@ -221,13 +221,24 @@ async fn update_anime(
     settings: &Settings,
     elapsed: Duration,
 ) {
+    // Fushi's window never names the file; its database does (`fushi.rs`), so
+    // it joins the media bus. A paused row is also what any old one looks like:
+    // it keeps a Fushi session going but never starts one.
+    let fushi = observed
+        .running
+        .keys()
+        .any(|key| key.trim_end_matches(".exe") == crate::fushi::PROCESS)
+        .then(crate::fushi::now_playing)
+        .flatten()
+        .filter(|media| !media.paused || snapshot.anime.as_ref().is_some_and(|s| s.player == "Fushi"));
+
     // Window titles first, as on Windows; then the media bus, which is all a
     // Wayland session or a macOS install without Screen Recording offers.
     let detected = observed.windows.iter().find_map(|w| {
         let player = players::lookup(&w.process)?;
         let file = player.extract_file_name(&w.title)?;
         Some((player.name.to_string(), file, None))
-    }).or_else(|| observed.media.iter().find_map(|media| {
+    }).or_else(|| observed.media.iter().chain(fushi.iter()).find_map(|media| {
         let player = players::lookup(&media.name)?;
         let file = players::media_file_name(media.url.as_deref(), media.title.as_deref())?;
         let file = player.extract_file_name(&file)?;
