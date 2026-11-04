@@ -140,6 +140,13 @@ pub fn capture_window(_pid: u32, _title: &str, _path: &std::path::Path) -> bool 
     false
 }
 
+/// Environment the system webview needs before it starts. Called first thing
+/// in `run`, while the process is still single-threaded.
+pub fn prepare_webview() {
+    #[cfg(target_os = "linux")]
+    linux_impl::prepare_webview();
+}
+
 /// Players on the media bus. Empty where there is no such bus.
 pub fn media_players() -> Vec<MediaPlayer> {
     #[cfg(target_os = "linux")]

@@ -39,6 +39,7 @@ use crate::state::{AppState, HookerCommand, HookerState, TrackerSnapshot};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    platform::prepare_webview();
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]

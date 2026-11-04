@@ -87,6 +87,18 @@ pub fn capabilities() -> Capabilities {
 
 pub fn shield_ctrl(_armed: bool, _blocking: bool) {}
 
+/// WebKitGTK's DMA-BUF renderer fails to create its EGL display on many
+/// setups (NVIDIA, and the AppImage, whose bundled libraries are older than the
+/// system Mesa): "Could not create default EGL display: EGL_BAD_PARAMETER"
+/// and a blank window. The fallback renderer is fine for this UI. Must run
+/// before GTK starts and before any other thread exists; a value the user set
+/// is kept, so `WEBKIT_DISABLE_DMABUF_RENDERER=0` opts back in.
+pub fn prepare_webview() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 fn window_pid(x: &X11, window: Window) -> Option<u32> {
     let reply = x.conn
         .get_property(false, window, x.atoms._NET_WM_PID, AtomEnum::CARDINAL, 0, 1)
