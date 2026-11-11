@@ -21,3 +21,12 @@ export function outboxLabel(item: OutboxItem): string {
   const payload = item.payload as Partial<LogPayload>;
   return payload.mediaTitle || payload.description || item.kind;
 }
+
+/** " (#1–3)" for a run, " (#1, 3)" otherwise, " (#2)" for one episode. */
+export function episodeLabel(episodes: number[] | undefined, single: number | null | undefined): string {
+  const list = episodes?.length ? [...episodes].sort((a, b) => a - b) : single ? [single] : [];
+  if (list.length === 0) return '';
+  if (list.length === 1) return ` (#${list[0]})`;
+  const consecutive = list.every((n, i) => i === 0 || n === list[i - 1] + 1);
+  return consecutive ? ` (#${list[0]}–${list[list.length - 1]})` : ` (#${list.join(', ')})`;
+}

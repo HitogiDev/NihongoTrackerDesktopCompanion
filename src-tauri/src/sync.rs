@@ -144,6 +144,101 @@ pub fn add_pending(app: &AppHandle, payload: &Value, source: &str) -> String {
     id
 }
 
+/// Park an anime episode for confirmation. Another episode of the same show
+/// already waiting from the same day absorbs it, so a binge is one log
+/// ("2 ep., 34 min") rather than a card per episode.
+pub fn add_anime_pending(app: &AppHandle, payload: &Value) {
+    add_pending(app, payload, "anime");
+    compact_anime_pending(app);
+}
+
+/// Fold every waiting anime row into the oldest one it matches. Also run at
+/// startup, so rows queued before merging existed join up too.
+pub fn compact_anime_pending(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let rows = state.db.list_pending().unwrap_or_default();
+    let mut kept: Vec<(String, Value)> = Vec::new();
+    let mut changed = false;
+    for row in rows.into_iter().filter(|row| row.source == "anime") {
+        let Ok(payload) = serde_json::from_str::<Value>(&row.payload) else { continue };
+        let target = kept.iter_mut().find_map(|(id, existing)| {
+            merge_anime_episode(existing, &payload).map(|merged| (id, existing, merged))
+        });
+        let Some((id, existing, merged)) = target else {
+            kept.push((row.id, payload));
+            continue;
+        };
+        // The row it joins was confirmed or discarded meanwhile: leave this one be.
+        if !matches!(state.db.update_pending_payload(id, &merged.to_string()), Ok(true)) {
+            continue;
+        }
+        *existing = merged;
+        let _ = state.db.delete_pending(&row.id);
+        changed = true;
+    }
+    if changed {
+        let _ = app.emit(EVT_PENDING, json!({ "merged": true }));
+    }
+}
+
+/// `existing` with the episode in `next` added, or `None` when they are not
+/// the same show on the same day. Resolved media match by `mediaId`; an
+/// unresolved title only matches another unresolved one with the same season.
+pub fn merge_anime_episode(existing: &Value, next: &Value) -> Option<Value> {
+    let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+    let detected = |v: &Value, key: &str| v.get("_detected").and_then(|d| d.get(key)).cloned().unwrap_or(Value::Null);
+
+    if existing.get("type")?.as_str()? != "anime" || next.get("type")?.as_str()? != "anime" {
+        return None;
+    }
+    match (str_of(existing, "mediaId"), str_of(next, "mediaId")) {
+        (Some(a), Some(b)) if a == b => {}
+        (None, None) => {
+            let title = str_of(existing, "mediaTitle")?;
+            if Some(&title) != str_of(next, "mediaTitle").as_ref()
+                || detected(existing, "season") != detected(next, "season")
+            {
+                return None;
+            }
+        }
+        _ => return None,
+    }
+    let local_day = |v: &Value| {
+        let date = chrono::DateTime::parse_from_rfc3339(v.get("date")?.as_str()?).ok()?;
+        Some(date.with_timezone(&chrono::Local).date_naive())
+    };
+    if local_day(existing)? != local_day(next)? {
+        return None;
+    }
+
+    let mut episodes: Vec<i64> = match detected(existing, "episodes") {
+        Value::Array(list) => list.iter().filter_map(Value::as_i64).collect(),
+        _ => detected(existing, "episode").as_i64().into_iter().collect(),
+    };
+    let next_episode = detected(next, "episode").as_i64();
+    if next_episode.is_some_and(|episode| episodes.contains(&episode)) {
+        // Already counted (a rewatch the same day): nothing to add.
+        return Some(existing.clone());
+    }
+    episodes.extend(next_episode);
+    episodes.sort_unstable();
+
+    let count = |v: &Value, key: &str| v.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let mut merged = existing.clone();
+    merged["episodes"] = json!(count(existing, "episodes").max(1) + count(next, "episodes").max(1));
+    if existing.get("time").is_some() || next.get("time").is_some() {
+        merged["time"] = json!(count(existing, "time") + count(next, "time"));
+    }
+    merged["date"] = next["date"].clone();
+    if let Some(detected) = merged.get_mut("_detected").and_then(Value::as_object_mut) {
+        detected.insert("episodes".into(), json!(episodes));
+        if let Some(file) = next.get("_detected").and_then(|d| d.get("file")) {
+            detected.insert("file".into(), file.clone());
+        }
+    }
+    Some(merged)
+}
+
 /// Send one queued item. `Ok(())` means it left the machine.
 async fn deliver(app: &AppHandle, id: &str, kind: &str, payload: &str) -> Result<(), ApiError> {
     let state = app.state::<AppState>();
@@ -323,5 +418,77 @@ pub async fn sync_text_lines(app: &AppHandle) {
             }
             Err(_) => break,
         }
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::merge_anime_episode;
+    use serde_json::{json, Value};
+
+    fn episode(media_id: Option<&str>, n: i64, date: &str) -> Value {
+        let mut payload = json!({
+            "type": "anime",
+            "description": "Seitokai no Ichizon Lv.2",
+            "mediaTitle": "Seitokai no Ichizon Lv.2",
+            "episodes": 1,
+            "time": 17,
+            "date": date,
+            "_detected": { "episode": n, "season": null, "file": format!("ep {n}.mkv"), "image": "cover" },
+        });
+        if let Some(id) = media_id {
+            payload["mediaId"] = json!(id);
+        }
+        payload
+    }
+
+    #[test]
+    fn two_episodes_of_the_same_show_become_one_log() {
+        let first = episode(Some("12345"), 1, "2026-11-10T12:00:00Z");
+        let second = episode(Some("12345"), 2, "2026-11-10T12:10:00Z");
+        let merged = merge_anime_episode(&first, &second).expect("same show, same day");
+        assert_eq!(merged["episodes"], 2);
+        assert_eq!(merged["time"], 34);
+        assert_eq!(merged["date"], "2026-11-10T12:10:00Z");
+        assert_eq!(merged["_detected"]["episodes"], json!([1, 2]));
+        assert_eq!(merged["_detected"]["file"], "ep 2.mkv");
+
+        let third = merge_anime_episode(&merged, &episode(Some("12345"), 3, "2026-11-10T12:20:00Z")).unwrap();
+        assert_eq!((third["episodes"].clone(), third["time"].clone()), (json!(3), json!(51)));
+        assert_eq!(third["_detected"]["episodes"], json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn different_shows_or_days_stay_apart() {
+        let first = episode(Some("12345"), 1, "2026-11-10T12:00:00Z");
+        assert!(merge_anime_episode(&first, &episode(Some("999"), 2, "2026-11-10T12:20:00Z")).is_none());
+        assert!(merge_anime_episode(&first, &episode(None, 2, "2026-11-10T12:20:00Z")).is_none());
+        assert!(merge_anime_episode(&first, &episode(Some("12345"), 2, "2026-11-13T12:00:00Z")).is_none());
+    }
+
+    #[test]
+    fn unresolved_titles_merge_only_within_a_season() {
+        let first = episode(None, 1, "2026-11-10T12:00:00Z");
+        assert!(merge_anime_episode(&first, &episode(None, 2, "2026-11-10T12:20:00Z")).is_some());
+        let mut other_season = episode(None, 2, "2026-11-10T12:20:00Z");
+        other_season["_detected"]["season"] = json!(2);
+        assert!(merge_anime_episode(&first, &other_season).is_none());
+    }
+
+    #[test]
+    fn an_episode_already_counted_adds_nothing() {
+        let first = episode(Some("12345"), 1, "2026-11-10T12:00:00Z");
+        let merged = merge_anime_episode(&first, &episode(Some("12345"), 1, "2026-11-10T12:30:00Z")).unwrap();
+        assert_eq!(merged, first);
+    }
+
+    #[test]
+    fn logs_without_time_stay_without_time() {
+        let mut first = episode(Some("12345"), 1, "2026-11-10T12:00:00Z");
+        let mut second = episode(Some("12345"), 2, "2026-11-10T12:20:00Z");
+        first.as_object_mut().unwrap().remove("time");
+        second.as_object_mut().unwrap().remove("time");
+        let merged = merge_anime_episode(&first, &second).unwrap();
+        assert!(merged.get("time").is_none());
     }
 }
