@@ -88,10 +88,11 @@ pub fn session_started(lang: &str) -> &'static str {
     }
 }
 
-pub fn session_ended(lang: &str) -> &'static str {
+/// The session went to the queue: until it is confirmed there, nothing is logged.
+pub fn session_awaiting_confirmation(lang: &str) -> &'static str {
     match lang {
-        "es" => "Sesión terminada",
-        _ => "Session finished",
+        "es" => "Sesión terminada — confírmala en la Cola",
+        _ => "Session finished — confirm it in the Queue",
     }
 }
 

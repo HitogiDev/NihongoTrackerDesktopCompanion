@@ -8,7 +8,9 @@
     "timer": "Cronómetro",
     "speed": "Caracteres por hora",
     "characters": "Caracteres",
+    "charactersDetail": "Caracteres de esta sesión: {{session}} · guardados de esta obra: {{total}}",
     "lines": "Líneas",
+    "linesDetail": "Líneas de esta sesión: {{session}} · guardadas de esta obra: {{total}}",
     "show": "Mostrar controles",
     "hide": "Ocultar controles",
     "websocket": "WebSocket: {{status}}",
@@ -187,5 +189,11 @@
     "saving": "Guardando...",
     "saveFailed": "No se pudo guardar el hook seleccionado."
   },
-  "deleteLine": "Borrar línea"
+  "deleteLine": "Borrar línea",
+  "sessionEnded": {
+    "pending": "Sesión guardada: {{minutes}} min, {{chars}} car. Confírmala en la Cola para registrarla.",
+    "logged": "Sesión registrada: {{minutes}} min, {{chars}} car.",
+    "openQueue": "Abrir la Cola",
+    "dismiss": "Cerrar"
+  }
 }

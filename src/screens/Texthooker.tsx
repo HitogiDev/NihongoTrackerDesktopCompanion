@@ -33,6 +33,7 @@ import {
   FileText,
   HelpCircle,
   Home,
+  Inbox,
   Link as LinkIcon,
   Monitor,
   Pause,
@@ -80,6 +81,13 @@ import type { LookupRequest } from '@nihongotracker/yomitan-content';
 const LOCAL_SESSION = 'local';
 
 // Same options and stacks as NihongoTracker/Frontend/src/screens/HookerScreen.tsx.
+/** `vn://ended`: where a detected session went once the game closed. */
+interface EndedSession {
+  minutes: number;
+  chars: number;
+  outcome: 'pending' | 'logged' | 'discarded';
+}
+
 const HOOKER_THEME_OPTIONS: Array<{ value: string; label?: string; labelKey?: string }> = [
   { value: '', labelKey: 'settings.useAppTheme' },
   { value: 'system', label: 'System' },
@@ -209,6 +217,7 @@ export default function TexthookerScreen() {
   const [totals, setTotals] = useState<HookerTotals | null>(null);
   const [undoStack, setUndoStack] = useState<TextLine[][]>([]);
   const [miningFeedback, setMiningFeedback] = useState<string | null>(null);
+  const [endedSession, setEndedSession] = useState<EndedSession | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState<'display' | 'behavior' | 'intelligence'>('display');
@@ -551,6 +560,23 @@ export default function TexthookerScreen() {
       void unlisten.then((fn) => fn());
     };
   }, [contentId, roomMode]);
+
+  // Closing the game ends the detected session and its counters drop to zero
+  // right away; without saying where it went, the session looks lost.
+  useEffect(() => {
+    const unlisten = listen<EndedSession & { contentId: string }>(events.vnEnded, (event) => {
+      if (event.payload.contentId !== contentId) return;
+      setEndedSession(event.payload.outcome === 'discarded' ? null : event.payload);
+      void reload();
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [contentId, reload]);
+
+  const hasAutoSession = Boolean(autoSession);
+  useEffect(() => { if (hasAutoSession) setEndedSession(null); }, [hasAutoSession]);
+  useEffect(() => { setEndedSession(null); }, [contentId]);
 
   // Rust starts the clock when a line arrives and autostart is on.
   useEffect(() => {
@@ -915,7 +941,7 @@ export default function TexthookerScreen() {
       content: (
         <>
           <Activity className="w-4 h-4 opacity-70" />
-          {numberWithCommas(readingSpeed(charsNumber, seconds))}/h
+          {numberWithCommas(readingSpeed(currentSessionChars, seconds))}/h
         </>
       ),
     });
@@ -923,11 +949,14 @@ export default function TexthookerScreen() {
   if (settings?.texthooker_show_characters) {
     topbarMetrics.push({
       key: 'characters',
-      title: t('topbar.characters'),
+      title: t('topbar.charactersDetail', {
+        session: numberWithCommas(currentSessionChars),
+        total: numberWithCommas(charsNumber),
+      }),
       content: (
         <>
           <Type className="w-4 h-4 opacity-70" />
-          {numberWithCommas(charsNumber)}
+          {numberWithCommas(currentSessionChars)}
         </>
       ),
     });
@@ -935,11 +964,14 @@ export default function TexthookerScreen() {
   if (settings?.texthooker_show_lines) {
     topbarMetrics.push({
       key: 'lines',
-      title: t('topbar.lines'),
+      title: t('topbar.linesDetail', {
+        session: numberWithCommas(currentSessionLines),
+        total: numberWithCommas(linesNumber),
+      }),
       content: (
         <>
           <FileText className="w-4 h-4 opacity-70" />
-          {numberWithCommas(linesNumber)}
+          {numberWithCommas(currentSessionLines)}
         </>
       ),
     });
@@ -1007,6 +1039,25 @@ export default function TexthookerScreen() {
   return (
     <div data-theme={effectiveHookerTheme} className="bg-base-300 min-h-screen th-root">
       {customCss.trim() && <style>{customCss}</style>}
+      {endedSession ? (
+        <div role="status" className="fixed bottom-3 left-3 z-50 alert alert-success w-auto max-w-md text-sm shadow-lg">
+          <Inbox className="w-4 h-4" />
+          <span>
+            {t(endedSession.outcome === 'pending' ? 'sessionEnded.pending' : 'sessionEnded.logged', {
+              minutes: endedSession.minutes,
+              chars: numberWithCommas(endedSession.chars),
+            })}
+          </span>
+          {endedSession.outcome === 'pending' ? (
+            <button type="button" className="btn btn-xs" onClick={() => { setEndedSession(null); void ipc.overlayOpenMain('/queue'); }}>
+              {t('sessionEnded.openQueue')}
+            </button>
+          ) : null}
+          <button type="button" className="btn btn-xs btn-ghost btn-square" aria-label={t('sessionEnded.dismiss')} onClick={() => setEndedSession(null)}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : null}
       {miningFeedback ? <button type="button" className="fixed bottom-3 right-3 z-50 alert alert-info w-auto max-w-sm text-sm" onClick={() => setMiningFeedback(null)}>{miningFeedback}</button> : null}
 
       {/* Top Bar */}
