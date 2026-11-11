@@ -233,6 +233,8 @@ export interface LogPayload {
   date?: string;
   _detected?: {
     episode?: number | null;
+    /** Every episode a merged queue row covers (`sync::merge_anime_episode`). */
+    episodes?: number[];
     season?: number | null;
     file?: string;
     player?: string;

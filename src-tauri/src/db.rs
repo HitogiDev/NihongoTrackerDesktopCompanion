@@ -711,6 +711,14 @@ impl Db {
         })
     }
 
+    /// Replace a waiting row's payload. `false` when the row is gone.
+    pub fn update_pending_payload(&self, id: &str, payload: &str) -> Result<bool> {
+        self.with(|c| {
+            c.execute("UPDATE pending_logs SET payload = ?2 WHERE id = ?1", params![id, payload])
+                .map(|changed| changed > 0)
+        })
+    }
+
     pub fn delete_pending(&self, id: &str) -> Result<()> {
         self.with(|c| {
             c.execute("DELETE FROM pending_logs WHERE id = ?1", params![id])

@@ -159,6 +159,7 @@ pub fn run() {
             texthooker::spawn(app.handle().clone(), hooker_rx);
             texthooker::spawn_clipboard_watcher(app.handle().clone());
             watcher::spawn(app.handle().clone());
+            sync::compact_anime_pending(app.handle());
             sync::spawn_flusher(app.handle().clone());
             connection::spawn(app.handle().clone());
             sync::spawn_presence_sync(app.handle().clone());

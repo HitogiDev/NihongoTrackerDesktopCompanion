@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isEditableLog, outboxLabel, splitOutbox } from './queue';
+import { episodeLabel, isEditableLog, outboxLabel, splitOutbox } from './queue';
 import type { OutboxItem } from './types';
 
 const item = (id: string, patch: Partial<OutboxItem> = {}): OutboxItem => ({
@@ -42,5 +42,14 @@ describe('outboxLabel', () => {
     expect(outboxLabel(item('a'))).toBe('a');
     expect(outboxLabel(item('a', { payload: { type: 'vn', description: 'AIR' } }))).toBe('AIR');
     expect(outboxLabel(item('a', { kind: 'texthooker_timer', payload: {} }))).toBe('texthooker_timer');
+  });
+});
+
+describe('episodeLabel', () => {
+  it('shows one episode, a run or a list', () => {
+    expect(episodeLabel(undefined, 2)).toBe(' (#2)');
+    expect(episodeLabel([2, 1], 1)).toBe(' (#1–2)');
+    expect(episodeLabel([1, 3], 1)).toBe(' (#1, 3)');
+    expect(episodeLabel(undefined, null)).toBe('');
   });
 });

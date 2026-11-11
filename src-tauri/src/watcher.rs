@@ -445,7 +445,7 @@ pub async fn commit_anime(
         );
         flush_later(app);
     } else {
-        sync::add_pending(app, &payload, "anime");
+        sync::add_anime_pending(app, &payload);
         notify(
             app,
             settings,

@@ -23,7 +23,7 @@ import { getMediaTypeClasses } from '../constants/mediaColors';
 import { logTypeLabel, relativeDate } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
 import { draftFromPayload, missing, toPayload, type LogDraft } from '../lib/logRules';
-import { isEditableLog, outboxLabel, splitOutbox } from '../lib/queue';
+import { episodeLabel, isEditableLog, outboxLabel, splitOutbox } from '../lib/queue';
 import type { LogPayload, PendingItem } from '../lib/types';
 
 /** What the editor is open on: a detected log to confirm, or one in the send queue. */
@@ -241,7 +241,8 @@ function PendingCard({
   // The server owns XP (the calculateXp middleware overwrites whatever a client
   // sends), so ask it for the estimate instead of guessing. Offline: no badge.
   const { data: xp } = useQuery({
-    queryKey: ['preview-xp', item.id],
+    // A merged row keeps its id but not its totals.
+    queryKey: ['preview-xp', item.id, payload.episodes, payload.time, payload.chars],
     queryFn: () => {
       const { _detected, ...body } = payload;
       void _detected;
@@ -269,7 +270,7 @@ function PendingCard({
             {payload.episodes ? (
               <span className={`badge badge-soft badge-sm ${type.bgColor} ${type.color}`}>
                 {t('common:episodesShort', { count: payload.episodes })}
-                {detected?.episode ? ` (#${detected.episode})` : ''}
+                {episodeLabel(detected?.episodes, detected?.episode)}
               </span>
             ) : null}
             {payload.time ? (
