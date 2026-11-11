@@ -520,14 +520,11 @@ async fn update_vn(
         }
         state.session_paused.store(false, std::sync::atomic::Ordering::Release);
         let stored = state.db.get_text_state(&vn_app.media_id);
-        let (lines, chars) = state.db.text_totals(&vn_app.media_id);
+        let resumed = resume_text_state(&stored, state.db.text_totals(&vn_app.media_id));
         let _ = state.db.save_text_state(&TextState {
-            content_id: vn_app.media_id.clone(),
-            timer_seconds: stored.timer_seconds,
-            baseline_chars: chars,
-            baseline_lines: lines,
             media_type: Some(vn_app.media_type.clone()),
             media_title: Some(vn_app.media_title.clone()),
+            ..resumed.clone()
         });
 
         snapshot.vn = Some(VnSession {
@@ -539,7 +536,7 @@ async fn update_vn(
             image: vn_app.image.clone(),
             is_adult: vn_app.is_adult,
             is_adult_image: vn_app.is_adult_image,
-            elapsed_secs: 0,
+            elapsed_secs: resumed.timer_seconds as u64,
             elapsed_carry_ms: 0,
             counting: false,
             paused_by_user: false,
@@ -619,13 +616,31 @@ async fn update_vn(
         if let Some(session) = snapshot.vn.as_ref() {
             let _ = state.db.save_text_state(&TextState {
                 content_id: content_id.clone(),
-                timer_seconds: baseline.timer_seconds.max(session.elapsed_secs as i64),
+                timer_seconds: session.elapsed_secs as i64,
                 baseline_chars: baseline.baseline_chars,
                 baseline_lines: baseline.baseline_lines,
                 media_type: Some(session.media_type.clone()),
                 media_title: Some(session.media_title.clone()),
             });
         }
+    }
+}
+
+/// Where a new session of a work starts from. Whatever the stored state has
+/// not logged yet — time and the lines past the baseline — carries over: a
+/// session that ended normally left both at zero (`finish_vn`), so anything
+/// still there was interrupted (the app closed, crashed or updated with the
+/// game open) or read on the manual timer before the game was detected.
+/// Resetting the baseline here used to drop those characters without a log.
+fn resume_text_state(stored: &TextState, (lines, chars): (i64, i64)) -> TextState {
+    TextState {
+        content_id: stored.content_id.clone(),
+        timer_seconds: stored.timer_seconds.max(0),
+        // Lines deleted since leave the baseline above the total.
+        baseline_chars: stored.baseline_chars.clamp(0, chars.max(0)),
+        baseline_lines: stored.baseline_lines.clamp(0, lines.max(0)),
+        media_type: stored.media_type.clone(),
+        media_title: stored.media_title.clone(),
     }
 }
 
@@ -641,6 +656,10 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
         let _ = state.hooker_tx.send(crate::state::HookerCommand::Disconnect);
     }
 
+    let loggable = minutes > 0 || (session.media_type != "game" && session.session_chars > 0);
+    let needs_confirmation = settings.vn_confirm_before_log || session.media_type == "game";
+    // The reader's counters drop to zero right after this; the event says
+    // where the session went so the reader can tell the user.
     let _ = app.emit(
         EVT_VN_ENDED,
         json!({
@@ -648,10 +667,11 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
             "title": session.media_title,
             "minutes": minutes,
             "chars": session.session_chars,
+            "outcome": if !loggable { "discarded" } else if needs_confirmation { "pending" } else { "logged" },
         }),
     );
 
-    if minutes == 0 && (session.media_type == "game" || session.session_chars == 0) {
+    if !loggable {
         return;
     }
 
@@ -682,9 +702,9 @@ async fn finish_vn(app: &AppHandle, snapshot: &mut TrackerSnapshot, settings: &S
         crate::i18n::session_summary(lang, minutes, session.session_chars)
     );
 
-    if settings.vn_confirm_before_log || session.media_type == "game" {
+    if needs_confirmation {
         sync::add_pending(app, &payload, if session.media_type == "game" { "game" } else { "vn" });
-        notify(app, settings, crate::i18n::session_ended(lang), &summary);
+        notify(app, settings, crate::i18n::session_awaiting_confirmation(lang), &summary);
     } else {
         sync::enqueue_log(app, &payload);
         if session.media_type != "game" {
@@ -844,6 +864,35 @@ fn notify(app: &AppHandle, settings: &Settings, title: &str, body: &str) {
 #[cfg(test)]
 mod observation_tests {
     use super::*;
+
+    fn text_state(timer: i64, chars: i64, lines: i64) -> TextState {
+        TextState {
+            content_id: "v1".into(),
+            timer_seconds: timer,
+            baseline_chars: chars,
+            baseline_lines: lines,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_session_that_ended_normally_starts_the_next_one_from_zero() {
+        let next = resume_text_state(&text_state(0, 10_751, 557), (557, 10_751));
+        assert_eq!((next.timer_seconds, next.baseline_chars, next.baseline_lines), (0, 10_751, 557));
+    }
+
+    #[test]
+    fn an_interrupted_session_keeps_its_unlogged_time_and_characters() {
+        // The app closed mid-session: 20 min and 1,750 characters past the baseline.
+        let next = resume_text_state(&text_state(1_200, 9_000, 400), (557, 10_751));
+        assert_eq!((next.timer_seconds, next.baseline_chars, next.baseline_lines), (1_200, 9_000, 400));
+    }
+
+    #[test]
+    fn a_baseline_above_the_stored_lines_is_clamped() {
+        let next = resume_text_state(&text_state(-5, 5_000, 300), (100, 2_000));
+        assert_eq!((next.timer_seconds, next.baseline_chars, next.baseline_lines), (0, 2_000, 100));
+    }
 
     #[test]
     fn active_window_summary_excludes_companion_windows_and_preserves_focus() {

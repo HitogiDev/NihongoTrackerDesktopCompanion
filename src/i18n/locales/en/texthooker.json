@@ -8,7 +8,9 @@
     "timer": "Timer",
     "speed": "Characters per hour",
     "characters": "Characters",
+    "charactersDetail": "Characters this session: {{session}} · stored for this work: {{total}}",
     "lines": "Lines",
+    "linesDetail": "Lines this session: {{session}} · stored for this work: {{total}}",
     "show": "Show controls",
     "hide": "Hide controls",
     "websocket": "WebSocket: {{status}}",
@@ -187,5 +189,11 @@
     "saving": "Saving...",
     "saveFailed": "Could not save the selected hook."
   },
-  "deleteLine": "Delete line"
+  "deleteLine": "Delete line",
+  "sessionEnded": {
+    "pending": "Session saved: {{minutes}} min, {{chars}} chars. Confirm it in the Queue to log it.",
+    "logged": "Session logged: {{minutes}} min, {{chars}} chars.",
+    "openQueue": "Open Queue",
+    "dismiss": "Dismiss"
+  }
 }
