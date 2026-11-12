@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Spike scratch: dictionaries and C++ build output, none of it belongs in git.
+/spike-data/
+/crates/*/target/
+/crates/nihongo-dict/build-win/
+/crates/nihongo-dict/build-linux/

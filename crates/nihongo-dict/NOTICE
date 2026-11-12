@@ -1,0 +1,79 @@
+NOTICE — nihongo-dict
+
+This crate embeds and links third-party work. The obligations below travel with
+any binary built from it, and with any service that ships it.
+
+────────────────────────────────────────────────────────────────────────────────
+hoshidicts — MIT
+https://github.com/Manhhao/hoshidicts (branch main-mit)
+Copyright (c) 2026 Manhhao
+
+Vendored under crates/nihongo-dict/vendor. The dictionary engine: importer,
+on-disk format, query, lookup and deconjugator.
+
+────────────────────────────────────────────────────────────────────────────────
+Deconjugator rules and algorithm — Apache License 2.0
+https://github.com/Sirush/Jiten
+
+hoshidicts' deconjugator is a port of Jiten's, and the rule set in
+vendor/src/deconjugator/deconjugation_rules.hpp is Jiten's
+Shared/resources/deconjugator.json.
+
+Apache-2.0 requires that this attribution and a copy of the licence travel with
+redistributions, and that modified files carry prominent notices of change. The
+rules file is modified downstream of Jiten: the single raw string literal is
+split into adjacent literals so MSVC will compile it (see
+patches/0001-msvc-split-string-literal.patch). The change is mechanical and
+alters no rule.
+
+A copy of the Apache License 2.0 must be shipped alongside this NOTICE:
+  https://www.apache.org/licenses/LICENSE-2.0
+
+────────────────────────────────────────────────────────────────────────────────
+Dictionary format — Yomitan
+https://github.com/yomidevs/yomitan (GPL-3.0)
+
+The `.zip` layout this crate imports, and the "structured content" glossary
+format it returns, are Yomitan's. No Yomitan code is used, copied or linked —
+only the data format is shared, and the importer is an independent
+implementation. This credit is given because the format is Yomitan's work, not
+because GPL-3.0 obligations attach.
+
+Anyone rendering structured content must write their own renderer. Yomitan's is
+GPL-3.0 and cannot be copied into an MIT codebase.
+
+────────────────────────────────────────────────────────────────────────────────
+Libraries linked by the engine
+
+  glaze              MIT          https://github.com/stephenberry/glaze
+  libdeflate         MIT          https://github.com/ebiggers/libdeflate
+  unordered_dense    MIT          https://github.com/martinus/unordered_dense
+  utfcpp             BSL-1.0      https://github.com/nemtrif/utfcpp
+  xxHash             BSD-2-Clause https://github.com/Cyan4973/xxHash
+  zstd               BSD-3-Clause / GPL-2.0 dual, used under BSD-3-Clause
+                                  https://github.com/facebook/zstd
+
+Each requires its copyright notice and licence text to be reproduced in
+distributions. Their LICENSE files live in vendor/external/<name>/.
+
+────────────────────────────────────────────────────────────────────────────────
+Dictionary data is NOT covered by any of the above
+
+The engine ships no dictionary. Whatever the user imports carries its own terms,
+and those terms bind whoever distributes it:
+
+  Jitendex          CC BY-SA 4.0   https://jitendex.org
+                    Derived from JMdict (EDRDG, CC BY-SA 4.0) with example
+                    sentences from Tatoeba (CC BY 2.0 FR). Attribution and
+                    ShareAlike apply. Redistributing Jitendex — including
+                    serving its content from an HTTP service — requires
+                    crediting Jitendex, JMdict/EDRDG and Tatoeba, and keeping
+                    the same licence on any derived dictionary data.
+
+  JMdict / JMnedict  CC BY-SA 4.0  https://www.edrdg.org/edrdg/licence.html
+  KANJIDIC2          CC BY-SA 4.0  Electronic Dictionary Research and
+                                   Development Group
+
+If the desktop app only imports what the user already downloaded, these are the
+user's obligations. If we ship or serve dictionary content ourselves, they
+become ours, and the attribution has to be visible in the product.

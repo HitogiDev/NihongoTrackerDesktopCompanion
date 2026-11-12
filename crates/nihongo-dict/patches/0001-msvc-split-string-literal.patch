@@ -1,0 +1,58 @@
+diff --git a/src/deconjugator/deconjugation_rules.hpp b/src/deconjugator/deconjugation_rules.hpp
+index b30c9e9..36a92c0 100644
+--- a/src/deconjugator/deconjugation_rules.hpp
++++ b/src/deconjugator/deconjugation_rules.hpp
+@@ -3,8 +3,7 @@
+ #include <string_view>
+ 
+ // Rules from https://github.com/Sirush/Jiten/blob/master/Shared/resources/deconjugator.json
+-static constexpr std::string_view deconjugation_rules = R"json(
+-[
++static constexpr std::string_view deconjugation_rules = R"json([
+   {
+     "type": "neverfinalrule",
+     "dec_end": [
+@@ -537,8 +536,8 @@ static constexpr std::string_view deconjugation_rules = R"json(
+     "con_end": ["したろ", "したろう"],
+     "dec_tag": ["vs-i", "vs-i"],
+     "con_tag": ["form-volition", "form-volition"],
+-    "detail": "contracted -te yarou (kansaiben)"
+-  },
++    "detail": "contracted -te yarou (kansaiben)")json"
++R"json(  },
+   {
+     "type": "stdrule",
+     "dec_end": ["い"],
+@@ -903,8 +902,8 @@ static constexpr std::string_view deconjugation_rules = R"json(
+     "type": "onlyfinalrule",
+     "dec_end": [""],
+     "con_end": ["ませんでした"],
+-    "dec_tag": ["stem-ren"],
+-    "con_tag": ["uninflectable"],
++    "dec_tag": ["stem-ren"],)json"
++R"json(    "con_tag": ["uninflectable"],
+     "detail": "past negative polite"
+   },
+   {
+@@ -1256,8 +1255,8 @@ static constexpr std::string_view deconjugation_rules = R"json(
+   {
+     "type": "stdrule",
+     "dec_end": [""],
+-    "con_end": ["は"],
+-    "dec_tag": ["stem-te"],
++    "con_end": ["は"],)json"
++R"json(    "dec_tag": ["stem-te"],
+     "con_tag": ["topic-condition"],
+     "detail": "topic/condition"
+   },
+@@ -1612,8 +1611,8 @@ static constexpr std::string_view deconjugation_rules = R"json(
+     ],
+     "con_tag": [
+       "adj-i",
+-      "adj-i", "adj-i",
+-      "adj-i", "adj-i"
++      "adj-i", "adj-i",)json"
++R"json(      "adj-i", "adj-i"
+     ],
+     "detail": "slang (irregular)"
+   },
