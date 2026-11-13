@@ -577,7 +577,7 @@ pub async fn discord_preview(state: State<'_, AppState>) -> CmdResult<Value> {
     let settings = state.settings_snapshot().await;
     let blacklist = state.db.discord_blacklist().unwrap_or_default();
     let snapshot = state.tracker.read().await.clone();
-    let decision = crate::discord::decide(&snapshot, &settings, &blacklist);
+    let decision = crate::discord::decide(&snapshot, &settings, &blacklist, chrono::Utc::now().timestamp());
     let connected = state
         .discord
         .read()

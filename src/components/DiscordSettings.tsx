@@ -225,6 +225,8 @@ function PresenceCard({ decision }: { decision?: DiscordDecision }) {
 
   const { presence, reason } = decision;
   const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - presence.startEpoch);
+  const total =
+    presence.endEpoch !== null ? Math.max(0, presence.endEpoch - presence.startEpoch) : null;
   const isUrl = presence.largeImage.startsWith('http');
 
   return (
@@ -244,9 +246,22 @@ function PresenceCard({ decision }: { decision?: DiscordDecision }) {
         <div className="min-w-0 flex-1 leading-tight">
           <p className="text-sm font-bold truncate">{presence.details}</p>
           <p className="text-sm truncate">{presence.state}</p>
-          <p className="text-sm text-base-content/60">
-            {t('preview.elapsed', { time: formatClock(elapsed) })}
-          </p>
+          {total !== null ? (
+            // With an end, Discord draws the episode's time bar instead.
+            <div className="flex items-center gap-2 text-xs text-base-content/60 tabular-nums">
+              <span>{formatClock(Math.min(elapsed, total))}</span>
+              <progress
+                className="progress progress-primary flex-1 h-1"
+                value={Math.min(elapsed, total)}
+                max={total}
+              />
+              <span>{formatClock(total)}</span>
+            </div>
+          ) : (
+            <p className="text-sm text-base-content/60">
+              {t('preview.elapsed', { time: formatClock(elapsed) })}
+            </p>
+          )}
         </div>
       </div>
       {presence.button ? (
