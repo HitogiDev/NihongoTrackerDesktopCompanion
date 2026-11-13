@@ -23,7 +23,8 @@
       "sentence": "Sentence",
       "media": "Media title",
       "empty": "Leave empty"
-    }
+    },
+    "retry": "Retry"
   },
   "social": {
     "title": "Friends",

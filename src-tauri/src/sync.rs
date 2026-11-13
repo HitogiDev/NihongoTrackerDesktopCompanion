@@ -37,8 +37,16 @@ pub fn spawn_presence_sync(app: AppHandle) {
 
 async fn anki_request(action: &str, params: Value) -> Result<Value, String> {
     let response = crate::api::local_http().post("http://127.0.0.1:8765").timeout(Duration::from_secs(5)).json(&json!({"action": action, "version": 6, "params": params}))
-        .send().await.map_err(|_| "errors.ankiUnavailable".to_string())?;
-    let body: Value = response.json().await.map_err(|_| "errors.ankiInvalidResponse".to_string())?;
+        .send().await.map_err(|error| {
+            log::warn!("AnkiConnect {action} failed: {error}");
+            // A timeout means something accepted the connection and never
+            // answered: Anki is busy, napping (macOS) or blocked by a dialog.
+            if error.is_timeout() { "errors.ankiTimeout" } else { "errors.ankiUnavailable" }.to_string()
+        })?;
+    let body: Value = response.json().await.map_err(|error| {
+        log::warn!("AnkiConnect {action} returned non-JSON: {error}");
+        "errors.ankiInvalidResponse".to_string()
+    })?;
     if let Some(error) = body.get("error").and_then(Value::as_str) { return Err(error.to_string()); }
     body.get("result").cloned().ok_or_else(|| "errors.ankiInvalidResponse".to_string())
 }

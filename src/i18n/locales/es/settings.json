@@ -23,7 +23,8 @@
       "sentence": "Frase",
       "media": "Título de la obra",
       "empty": "Dejar vacío"
-    }
+    },
+    "retry": "Reintentar"
   },
   "social": {
     "title": "Amistades",
