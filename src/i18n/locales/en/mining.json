@@ -22,6 +22,7 @@
     "deckMissing": "Choose an Anki deck and note type first.",
     "ankiModelMissing": "Choose an Anki deck and note type first.",
     "ankiUnavailable": "Could not connect to AnkiConnect. Open Anki Desktop and check the add-on.",
-    "ankiInvalidResponse": "AnkiConnect returned an invalid response."
+    "ankiInvalidResponse": "AnkiConnect returned an invalid response.",
+    "ankiTimeout": "AnkiConnect did not answer in time. Bring Anki to the front, close any open dialog in it and try again."
   }
 }

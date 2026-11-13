@@ -22,6 +22,7 @@
     "deckMissing": "Elige primero un mazo y tipo de nota de Anki.",
     "ankiModelMissing": "Elige primero un mazo y tipo de nota de Anki.",
     "ankiUnavailable": "No se pudo conectar con AnkiConnect. Abre Anki Desktop y comprueba el complemento.",
-    "ankiInvalidResponse": "AnkiConnect devolvió una respuesta no válida."
+    "ankiInvalidResponse": "AnkiConnect devolvió una respuesta no válida.",
+    "ankiTimeout": "AnkiConnect no respondió a tiempo. Trae Anki al frente, cierra cualquier diálogo abierto en él y vuelve a intentarlo."
   }
 }

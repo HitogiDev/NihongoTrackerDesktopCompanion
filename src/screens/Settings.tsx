@@ -23,6 +23,7 @@ import { MpvSetupSettings } from '../components/MpvSetup';
 import { Field, Toggle } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { ipc } from '../lib/ipc';
+import { miningError } from '../lib/mining';
 import {
   LANGUAGE_LABELS,
   SUPPORTED_LANGUAGES,
@@ -397,7 +398,16 @@ export default function SettingsScreen() {
             {!(ankiModels.data ?? []).includes(settings.anki_model) ? <option value={settings.anki_model}>{settings.anki_model}</option> : null}
           </select>}
         </Field>
-        {ankiModels.isError ? <p className="text-xs text-base-content/60">{t('anki.unavailable')}</p> : null}
+        {ankiModels.isError || ankiFields.isError ? <div className="flex items-start gap-3">
+          <div className="flex-1 space-y-1 text-xs">
+            {ankiModels.isError ? <p className="text-base-content/60">{t('anki.unavailable')}</p> : null}
+            <p className="text-error selectable">{miningError(ankiModels.error ?? ankiFields.error)}</p>
+          </div>
+          <Button size="sm" appearance="outline" loading={ankiModels.isFetching || ankiFields.isFetching} onClick={() => { void ankiModels.refetch(); void ankiFields.refetch(); }}>
+            <RefreshCw className="w-4 h-4" />
+            {t('anki.retry')}
+          </Button>
+        </div> : null}
         <div className="grid gap-2 lg:grid-cols-2">
           {(ankiFields.data ?? []).map((field) => <Field key={field} label={t('anki.field', { field })}>
             {(id) => <select id={id} className="select w-full" value={settings.anki_field_sources[field] ?? ''} onChange={(e) => void updateSettings({ anki_field_sources: { ...settings.anki_field_sources, [field]: e.target.value } })}>
