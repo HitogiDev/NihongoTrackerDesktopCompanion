@@ -92,6 +92,14 @@ pub struct Presence {
     /// app never pushes a ticking counter.
     #[serde(rename = "startEpoch")]
     pub start_epoch: i64,
+    /// When the episode would end at the current position, in epoch seconds.
+    /// Set only when the player reports a real position and duration; with
+    /// `start_epoch` backdated by the position, Discord draws a time bar.
+    #[serde(rename = "endEpoch")]
+    #[cfg_attr(test, ts(type = "number | null"))]
+    pub end_epoch: Option<i64>,
+    /// Published as a "Watching" activity, the only kind with a time bar.
+    pub watching: bool,
     pub button: Option<PresenceButton>,
     /// True when every identifying detail was stripped.
     pub generic: bool,
@@ -152,10 +160,14 @@ fn blacklisted<'a>(list: &'a [BlacklistEntry], key: &str) -> Option<&'a Blacklis
 
 /// The whole policy, as a pure function: same inputs, same answer, whether it
 /// is the watcher publishing or the settings screen previewing.
+///
+/// `now` (epoch seconds) is only used to place the video time bar, and is a
+/// parameter so the function stays pure.
 pub fn decide(
     snapshot: &TrackerSnapshot,
     settings: &Settings,
     blacklist: &[BlacklistEntry],
+    now: i64,
 ) -> Decision {
     if !settings.discord_rpc {
         return Decision::Off;
@@ -217,6 +229,8 @@ pub fn decide(
                         vn.media_title.clone()
                     },
                     start_epoch: epoch_of(&vn.started_at),
+                    end_epoch: None,
+                    watching: false,
                     button,
                     generic: hide,
                 },
@@ -247,6 +261,16 @@ pub fn decide(
         };
         let hide = reason != Reason::Full;
         let title = media.map(|m| m.title.clone()).unwrap_or_default();
+        // The real position, when the player gives one: the time bar is the
+        // episode, not the session. A position is not identifying, so it stays
+        // in the generic presence like the episode number does.
+        let (start_epoch, end_epoch) = match (anime.position_secs, anime.duration_secs) {
+            (Some(position), Some(duration)) if duration > 0.0 && position >= 0.0 => {
+                let start = now - position.min(duration).round() as i64;
+                (start, Some(start + duration.round() as i64))
+            }
+            _ => (epoch_of(&anime.started_at), None),
+        };
         return Decision::Show {
             presence: Presence {
                 details: if hide {
@@ -264,7 +288,9 @@ pub fn decide(
                 } else {
                     title
                 },
-                start_epoch: epoch_of(&anime.started_at),
+                start_epoch,
+                end_epoch,
+                watching: true,
                 button,
                 generic: hide,
             },
@@ -422,7 +448,7 @@ fn run(app: AppHandle, rx: Receiver<Command>, connected: Arc<AtomicBool>, app_id
         };
 
         // Nothing changed since the last successful publish.
-        if target == published {
+        if same_presence(target.as_ref(), published.as_ref()) {
             pending = None;
             report(&app, &connected, conn.client.is_some());
             continue;
@@ -468,6 +494,35 @@ fn run(app: AppHandle, rx: Receiver<Command>, connected: Arc<AtomicBool>, app_id
     }
 }
 
+/// How far a backdated video start may wander before it is worth an update.
+/// The position and the clock are sampled at slightly different moments, so
+/// the derived start jitters by a second either way during normal playback; a
+/// seek moves it by much more.
+const TIMESTAMP_SLACK: i64 = 3;
+
+/// Equal, except that a time bar that moved by a mere tick of jitter does not
+/// count as a change: otherwise every tick would spend the rate limit.
+fn same_presence(a: Option<&Presence>, b: Option<&Presence>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            let close = |x: i64, y: i64| (x - y).abs() <= TIMESTAMP_SLACK;
+            let timestamps = match (a.end_epoch, b.end_epoch) {
+                (Some(x), Some(y)) => close(a.start_epoch, b.start_epoch) && close(x, y),
+                (None, None) => a.start_epoch == b.start_epoch,
+                _ => false,
+            };
+            let rest = |p: &Presence| Presence {
+                start_epoch: 0,
+                end_epoch: None,
+                ..p.clone()
+            };
+            timestamps && rest(a) == rest(b)
+        }
+        _ => false,
+    }
+}
+
 fn report(app: &AppHandle, connected: &Arc<AtomicBool>, now: bool) {
     if connected.swap(now, Ordering::AcqRel) != now {
         let _ = app.emit(EVT_STATUS, serde_json::json!({ "connected": now }));
@@ -475,12 +530,19 @@ fn report(app: &AppHandle, connected: &Arc<AtomicBool>, now: bool) {
 }
 
 fn to_activity(presence: &Presence) -> discord_rich_presence::activity::Activity<'_> {
-    use discord_rich_presence::activity::{Activity, Assets, Button, Timestamps};
+    use discord_rich_presence::activity::{Activity, ActivityType, Assets, Button, Timestamps};
 
+    let mut timestamps = Timestamps::new().start(presence.start_epoch);
+    if let Some(end) = presence.end_epoch {
+        timestamps = timestamps.end(end);
+    }
     let mut activity = Activity::new()
         .details(presence.details.as_str())
         .state(presence.state.as_str())
-        .timestamps(Timestamps::new().start(presence.start_epoch));
+        .timestamps(timestamps);
+    if presence.watching {
+        activity = activity.activity_type(ActivityType::Watching);
+    }
 
     let mut assets = Assets::new();
     if !presence.large_image.is_empty() {
@@ -514,7 +576,8 @@ pub async fn update(app: &AppHandle, snapshot: &TrackerSnapshot, settings: &Sett
     } else {
         Vec::new()
     };
-    let command = match decide(snapshot, settings, &blacklist) {
+    let now = chrono::Utc::now().timestamp();
+    let command = match decide(snapshot, settings, &blacklist, now) {
         Decision::Show { presence, .. } => Command::Set(Box::new(presence)),
         _ => Command::Clear,
     };
@@ -570,6 +633,8 @@ mod tests {
     use crate::parser::ParsedAnime;
     use crate::playback::PlaybackSource;
     use crate::state::{AnimeSession, MediaMatch, VnSession};
+
+    const NOW: i64 = 1_786_565_000;
 
     fn settings() -> Settings {
         Settings {
@@ -655,7 +720,7 @@ mod tests {
     fn adult_vn_with_non_adult_cover_shows_title_and_image() {
         let mut session = vn(true);
         session.is_adult_image = Some(false);
-        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[]) else {
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[], NOW) else {
             panic!("expected a presence");
         };
         assert_eq!(reason, Reason::Full);
@@ -668,7 +733,7 @@ mod tests {
     fn adult_vn_cover_hides_title_and_image() {
         let mut session = vn(false);
         session.is_adult_image = Some(true);
-        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[]) else {
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(session), &settings(), &[], NOW) else {
             panic!("expected a presence");
         };
         assert_eq!(reason, Reason::AdultImage);
@@ -696,14 +761,14 @@ mod tests {
     fn off_by_default() {
         let mut s = settings();
         s.discord_rpc = false;
-        assert_eq!(decide(&snapshot_vn(vn(false)), &s, &[]), Decision::Off);
+        assert_eq!(decide(&snapshot_vn(vn(false)), &s, &[], NOW), Decision::Off);
         // And the default settings really do have it off.
         assert!(!Settings::default().discord_rpc);
     }
 
     #[test]
     fn a_reading_session_publishes_title_and_progress() {
-        let Decision::Show { presence, reason } = decide(&snapshot_vn(vn(false)), &settings(), &[])
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(vn(false)), &settings(), &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -727,7 +792,7 @@ mod tests {
         // wiping the presence, and the cover and blacklist still apply.
         let mut idle = vn(false);
         idle.counting = false;
-        let Decision::Show { presence, reason } = decide(&snapshot_vn(idle.clone()), &settings(), &[])
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(idle.clone()), &settings(), &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -738,7 +803,7 @@ mod tests {
         assert_eq!(presence.large_image, "https://img/cover.jpg");
         assert!(!presence.generic);
 
-        let blocked = decide(&snapshot_vn(idle), &settings(), &[entry("v18", "media")]);
+        let blocked = decide(&snapshot_vn(idle), &settings(), &[entry("v18", "media")], NOW);
         assert!(matches!(blocked, Decision::Blocked { .. }));
     }
 
@@ -746,7 +811,7 @@ mod tests {
     fn idling_never_leaks_an_adult_title() {
         let mut idle = vn(true);
         idle.counting = false;
-        let Decision::Show { presence, .. } = decide(&snapshot_vn(idle), &settings(), &[]) else {
+        let Decision::Show { presence, .. } = decide(&snapshot_vn(idle), &settings(), &[], NOW) else {
             panic!("expected a presence");
         };
         assert!(presence.generic);
@@ -756,7 +821,7 @@ mod tests {
 
     #[test]
     fn adult_media_never_leaks_its_title_or_cover() {
-        let Decision::Show { presence, reason } = decide(&snapshot_vn(vn(true)), &settings(), &[])
+        let Decision::Show { presence, reason } = decide(&snapshot_vn(vn(true)), &settings(), &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -772,7 +837,7 @@ mod tests {
     #[test]
     fn an_unresolved_episode_falls_back_to_generic() {
         let Decision::Show { presence, reason } =
-            decide(&snapshot_anime(anime(None)), &settings(), &[])
+            decide(&snapshot_anime(anime(None)), &settings(), &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -786,7 +851,7 @@ mod tests {
     #[test]
     fn adult_anime_is_stripped_too() {
         let Decision::Show { reason, presence } =
-            decide(&snapshot_anime(anime(Some(media(true)))), &settings(), &[])
+            decide(&snapshot_anime(anime(Some(media(true)))), &settings(), &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -799,7 +864,7 @@ mod tests {
         let mut s = settings();
         s.discord_generic_mode = true;
         let Decision::Show { presence, reason } =
-            decide(&snapshot_anime(anime(Some(media(false)))), &s, &[])
+            decide(&snapshot_anime(anime(Some(media(false)))), &s, &[], NOW)
         else {
             panic!("expected a presence");
         };
@@ -810,17 +875,18 @@ mod tests {
 
     #[test]
     fn the_blacklist_publishes_nothing_at_all() {
-        let by_media = decide(&snapshot_vn(vn(false)), &settings(), &[entry("v18", "media")]);
+        let by_media = decide(&snapshot_vn(vn(false)), &settings(), &[entry("v18", "media")], NOW);
         assert!(matches!(by_media, Decision::Blocked { .. }));
 
         let by_process = decide(
             &snapshot_vn(vn(false)),
             &settings(),
             &[entry("aokana.exe", "process")],
+            NOW,
         );
         assert!(matches!(by_process, Decision::Blocked { .. }));
 
-        let unrelated = decide(&snapshot_vn(vn(false)), &settings(), &[entry("v99", "media")]);
+        let unrelated = decide(&snapshot_vn(vn(false)), &settings(), &[entry("v99", "media")], NOW);
         assert!(matches!(unrelated, Decision::Show { .. }));
     }
 
@@ -832,22 +898,69 @@ mod tests {
         s.discord_show_idle = false;
         let mut paused = vn(false);
         paused.counting = false;
-        assert_eq!(decide(&snapshot_vn(paused), &s, &[]), Decision::Idle);
+        assert_eq!(decide(&snapshot_vn(paused), &s, &[], NOW), Decision::Idle);
 
         // A paused video always clears, whatever the setting.
         let mut stopped = anime(Some(media(false)));
         stopped.paused = true;
         assert_eq!(
-            decide(&snapshot_anime(stopped), &settings(), &[]),
+            decide(&snapshot_anime(stopped), &settings(), &[], NOW),
             Decision::Idle
         );
+    }
+
+    #[test]
+    fn a_known_position_draws_the_episode_time_bar() {
+        let mut playing = anime(Some(media(false)));
+        playing.position_secs = Some(330.4);
+        playing.duration_secs = Some(1440.0);
+        let Decision::Show { presence, .. } = decide(&snapshot_anime(playing), &settings(), &[], NOW)
+        else {
+            panic!("expected a presence");
+        };
+        assert!(presence.watching);
+        assert_eq!(presence.start_epoch, NOW - 330);
+        assert_eq!(presence.end_epoch, Some(NOW - 330 + 1440));
+        assert_eq!(presence.state, "Episode 3");
+
+        // Without a real position there is no bar, just the session clock.
+        let Decision::Show { presence, .. } =
+            decide(&snapshot_anime(anime(Some(media(false)))), &settings(), &[], NOW)
+        else {
+            panic!("expected a presence");
+        };
+        assert_eq!(presence.end_epoch, None);
+        assert_eq!(presence.start_epoch, 1786564800);
+    }
+
+    #[test]
+    fn time_bar_jitter_is_not_an_update_but_a_seek_is() {
+        let mut playing = anime(Some(media(false)));
+        playing.duration_secs = Some(1440.0);
+        let at = |now: i64, position: f64| {
+            let mut s = playing.clone();
+            s.position_secs = Some(position);
+            match decide(&snapshot_anime(s), &settings(), &[], now) {
+                Decision::Show { presence, .. } => presence,
+                _ => panic!("expected a presence"),
+            }
+        };
+        let first = at(NOW, 100.0);
+        // A tick later, sampled a little off.
+        assert!(same_presence(Some(&first), Some(&at(NOW + 2, 101.0))));
+        // A seek of a minute.
+        assert!(!same_presence(Some(&first), Some(&at(NOW + 2, 160.0))));
+        // Other fields still count.
+        let mut other = first.clone();
+        other.state = "Episode 4".into();
+        assert!(!same_presence(Some(&first), Some(&other)));
     }
 
     #[test]
     fn the_profile_button_can_be_turned_off() {
         let mut s = settings();
         s.discord_profile_button = false;
-        let Decision::Show { presence, .. } = decide(&snapshot_vn(vn(false)), &s, &[]) else {
+        let Decision::Show { presence, .. } = decide(&snapshot_vn(vn(false)), &s, &[], NOW) else {
             panic!("expected a presence");
         };
         assert!(presence.button.is_none());
@@ -855,7 +968,7 @@ mod tests {
         // And it is absent anyway when there is no username to point at.
         let mut anonymous = settings();
         anonymous.username = None;
-        let Decision::Show { presence, .. } = decide(&snapshot_vn(vn(false)), &anonymous, &[])
+        let Decision::Show { presence, .. } = decide(&snapshot_vn(vn(false)), &anonymous, &[], NOW)
         else {
             panic!("expected a presence");
         };

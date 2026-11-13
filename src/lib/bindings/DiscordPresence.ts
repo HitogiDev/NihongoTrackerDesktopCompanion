@@ -13,7 +13,17 @@ largeImage: string, largeText: string,
  * Session start, in epoch seconds. Discord counts the time itself — the
  * app never pushes a ticking counter.
  */
-startEpoch: number, button: DiscordPresenceButton | null, 
+startEpoch: number, 
+/**
+ * When the episode would end at the current position, in epoch seconds.
+ * Set only when the player reports a real position and duration; with
+ * `start_epoch` backdated by the position, Discord draws a time bar.
+ */
+endEpoch: number | null, 
+/**
+ * Published as a "Watching" activity, the only kind with a time bar.
+ */
+watching: boolean, button: DiscordPresenceButton | null, 
 /**
  * True when every identifying detail was stripped.
  */
