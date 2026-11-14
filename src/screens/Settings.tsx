@@ -75,6 +75,7 @@ export default function SettingsScreen() {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [dictionaryBusy, setDictionaryBusy] = useState(false);
   const [dictionaryError, setDictionaryError] = useState<string | null>(null);
+  const [dictionaryProgress, setDictionaryProgress] = useState<{ current: number; total: number; file: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'account' | 'tracking' | 'discord' | 'anki' | 'app'>('account');
 
   if (!settings) return null;
@@ -107,19 +108,31 @@ export default function SettingsScreen() {
   async function importDictionary() {
     setDictionaryError(null);
     const selected = await open({
-      multiple: false,
+      multiple: true,
       directory: false,
       filters: [{ name: t('dictionary.fileFilter'), extensions: ['zip'] }],
     });
-    if (typeof selected !== 'string') return;
+    const paths = selected === null ? [] : Array.isArray(selected) ? selected : [selected];
+    if (paths.length === 0) return;
     setDictionaryBusy(true);
+    const errors: string[] = [];
     try {
-      await ipc.dictionaryImport(selected);
-      await queryClient.invalidateQueries({ queryKey: ['dictionaries'] });
-    } catch (error) {
-      setDictionaryError(String(error));
+      // One at a time: each import unpacks and indexes a whole zip, and running
+      // them in parallel would just fight over the disk.
+      for (const [index, path] of paths.entries()) {
+        const file = path.split(/[\\/]/).pop() ?? path;
+        setDictionaryProgress({ current: index + 1, total: paths.length, file });
+        try {
+          await ipc.dictionaryImport(path);
+          await queryClient.invalidateQueries({ queryKey: ['dictionaries'] });
+        } catch (error) {
+          errors.push(paths.length > 1 ? `${file}: ${String(error)}` : String(error));
+        }
+      }
     } finally {
       setDictionaryBusy(false);
+      setDictionaryProgress(null);
+      setDictionaryError(errors.length > 0 ? errors.join('\n') : null);
     }
   }
 
@@ -433,7 +446,12 @@ export default function SettingsScreen() {
           <BookOpen className="w-4 h-4" />
           {t('dictionary.import')}
         </Button>
-        {dictionaryError ? <p className="text-sm text-error selectable">{dictionaryError}</p> : null}
+        {dictionaryProgress ? (
+          <p className="text-sm text-base-content/70 truncate">
+            {t('dictionary.progress', dictionaryProgress)}
+          </p>
+        ) : null}
+        {dictionaryError ? <p className="text-sm text-error selectable whitespace-pre-line">{dictionaryError}</p> : null}
         {(dictionaries.data ?? []).length > 0 ? (
           <ul className="space-y-1.5">
             {(dictionaries.data ?? []).map((dictionary) => (

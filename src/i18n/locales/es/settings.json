@@ -130,8 +130,9 @@
   },
   "dictionary": {
     "title": "Diccionarios offline",
-    "hint": "Importa un zip de diccionario de Yomitan. Se guarda en este equipo y las búsquedas funcionan sin conexión.",
-    "import": "Importar diccionario",
+    "hint": "Importa uno o varios zips de diccionario de Yomitan. Se guardan en este equipo y las búsquedas funcionan sin conexión.",
+    "import": "Importar diccionarios",
+    "progress": "Importando {{current}} de {{total}}: {{file}}",
     "entries": "entradas",
     "none": "Todavía no hay diccionarios importados.",
     "remove": "Eliminar diccionario",
