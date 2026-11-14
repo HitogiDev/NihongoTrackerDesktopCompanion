@@ -134,7 +134,8 @@
     "import": "Importar diccionario",
     "entries": "entradas",
     "none": "Todavía no hay diccionarios importados.",
-    "remove": "Eliminar diccionario"
+    "remove": "Eliminar diccionario",
+    "fileFilter": "Diccionario de Yomitan"
   },
   "filters": {
     "title": "Filtros de texto",

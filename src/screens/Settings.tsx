@@ -109,7 +109,7 @@ export default function SettingsScreen() {
     const selected = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: 'Yomitan dictionary', extensions: ['zip'] }],
+      filters: [{ name: t('dictionary.fileFilter'), extensions: ['zip'] }],
     });
     if (typeof selected !== 'string') return;
     setDictionaryBusy(true);

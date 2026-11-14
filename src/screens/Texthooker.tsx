@@ -1891,8 +1891,8 @@ export default function TexthookerScreen() {
               </h4>
 
               <Field
-                label="Pausa automática (segundos sin líneas)"
-                hint="0 la desactiva. No afecta a las sesiones que lleva la detección de novelas."
+                label={t('settings.autoPause')}
+                hint={t('settings.autoPauseHint')}
               >
                 <input
                   type="number"
@@ -1927,7 +1927,7 @@ export default function TexthookerScreen() {
 
               <div className="rounded-lg border border-base-content/10 bg-base-200/40 p-3">
                 <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70 mb-2">
-                  En ejecución
+                  {t('settings.runtime')}
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                   <label className="flex items-center justify-between surface px-3 py-2 cursor-pointer">
