@@ -10,6 +10,10 @@
     "app": "App"
   },
   "anki": {
+    "url": "AnkiConnect address",
+    "urlHint": "Same as Yomitan's \"AnkiConnect server address\". Change it only if you changed AnkiConnect's bind address or port.",
+    "apiKey": "AnkiConnect API key",
+    "apiKeyHint": "Only if you set an apiKey in AnkiConnect's config.",
     "title": "Anki sentence mining",
     "deck": "Anki deck",
     "noteType": "Note type",

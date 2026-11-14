@@ -63,7 +63,16 @@ vn_confirm_before_log: boolean,
 /**
  * Show the floating session window above other applications.
  */
-overlay_enabled: boolean, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, texthooker_ws_url: string, texthooker_autoconnect: boolean, 
+overlay_enabled: boolean, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
+/**
+ * AnkiConnect server address, same as Yomitan's "AnkiConnect server
+ * address": users who changed `webBindAddress`/`webBindPort` need it.
+ */
+anki_connect_url: string, 
+/**
+ * AnkiConnect's `apiKey`, if the user set one. Empty sends no key.
+ */
+anki_api_key: string, texthooker_ws_url: string, texthooker_autoconnect: boolean, 
 /**
  * Take lines from the clipboard as well. Replaces the browser-extension
  * paste path the web texthooker relies on.
