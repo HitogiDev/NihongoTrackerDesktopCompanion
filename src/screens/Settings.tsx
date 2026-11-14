@@ -65,8 +65,9 @@ export default function SettingsScreen() {
   const refreshConnection = useAppStore((s) => s.refreshConnection);
   const queryClient = useQueryClient();
   const dictionaries = useQuery({ queryKey: ['dictionaries'], queryFn: ipc.dictionaryList });
-  const ankiModels = useQuery({ queryKey: ['anki-models'], queryFn: ipc.ankiModels, retry: false });
-  const ankiFields = useQuery({ queryKey: ['anki-model-fields', settings?.anki_model], queryFn: () => ipc.ankiModelFields(settings?.anki_model ?? 'Basic'), retry: false });
+  const ankiTarget = [settings?.anki_connect_url, settings?.anki_api_key];
+  const ankiModels = useQuery({ queryKey: ['anki-models', ...ankiTarget], queryFn: ipc.ankiModels, retry: false });
+  const ankiFields = useQuery({ queryKey: ['anki-model-fields', settings?.anki_model, ...ankiTarget], queryFn: () => ipc.ankiModelFields(settings?.anki_model ?? 'Basic'), retry: false });
 
   const [newKey, setNewKey] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
@@ -389,6 +390,14 @@ export default function SettingsScreen() {
       {activeTab === 'anki' ? <>
       <SectionTitle>{t('anki.title')}</SectionTitle>
       <div className="surface p-4 space-y-3">
+        <div className="grid gap-2 lg:grid-cols-2">
+          <Field label={t('anki.url')} hint={t('anki.urlHint')}>
+            {(id) => <input id={id} className="input w-full" spellCheck={false} placeholder="http://127.0.0.1:8765" value={settings.anki_connect_url} onChange={(e) => void updateSettings({ anki_connect_url: e.target.value })} />}
+          </Field>
+          <Field label={t('anki.apiKey')} hint={t('anki.apiKeyHint')}>
+            {(id) => <input id={id} type="password" autoComplete="off" className="input w-full" value={settings.anki_api_key} onChange={(e) => void updateSettings({ anki_api_key: e.target.value })} />}
+          </Field>
+        </div>
         <Field label={t('anki.deck')}>
           {(id) => <input id={id} className="input w-full" value={settings.anki_deck} onChange={(e) => void updateSettings({ anki_deck: e.target.value })} />}
         </Field>

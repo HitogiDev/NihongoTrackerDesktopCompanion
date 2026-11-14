@@ -911,8 +911,9 @@ pub async fn anki_models(state: State<'_, AppState>) -> CmdResult<Value> {
 }
 
 #[tauri::command]
-pub async fn anki_model_fields(model: String) -> CmdResult<Value> {
-    sync::anki_model_fields(&model).await
+pub async fn anki_model_fields(state: State<'_, AppState>, model: String) -> CmdResult<Value> {
+    let settings = state.settings_snapshot().await;
+    sync::anki_model_fields(&settings, &model).await
 }
 
 #[tauri::command]

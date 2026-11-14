@@ -35,14 +35,37 @@ pub fn spawn_presence_sync(app: AppHandle) {
     });
 }
 
-async fn anki_request(action: &str, params: Value) -> Result<Value, String> {
-    let response = crate::api::local_http().post("http://127.0.0.1:8765").timeout(Duration::from_secs(5)).json(&json!({"action": action, "version": 6, "params": params}))
-        .send().await.map_err(|error| {
-            log::warn!("AnkiConnect {action} failed: {error}");
-            // A timeout means something accepted the connection and never
-            // answered: Anki is busy, napping (macOS) or blocked by a dialog.
-            if error.is_timeout() { "errors.ankiTimeout" } else { "errors.ankiUnavailable" }.to_string()
-        })?;
+/// The address to call, normalised the way Yomitan accepts it: a bare
+/// `host:port` gets `http://`, and an empty field falls back to the default.
+fn anki_url(settings: &crate::config::Settings) -> String {
+    let url = settings.anki_connect_url.trim().trim_end_matches('/');
+    if url.is_empty() { return "http://127.0.0.1:8765".into(); }
+    if url.contains("://") { url.to_string() } else { format!("http://{url}") }
+}
+
+async fn anki_send(url: &str, body: &Value) -> Result<reqwest::Response, reqwest::Error> {
+    crate::api::local_http().post(url).timeout(Duration::from_secs(5)).json(body).send().await
+}
+
+async fn anki_request(settings: &crate::config::Settings, action: &str, params: Value) -> Result<Value, String> {
+    let url = anki_url(settings);
+    let mut body = json!({"action": action, "version": 6, "params": params});
+    let key = settings.anki_api_key.trim();
+    if !key.is_empty() { body["key"] = json!(key); }
+    let mut result = anki_send(&url, &body).await;
+    // AnkiConnect bound to `localhost` may only listen on `::1`, which
+    // 127.0.0.1 never reaches; a browser resolves both, so retry the same
+    // way before giving up.
+    if matches!(&result, Err(error) if error.is_connect()) && url.contains("127.0.0.1") {
+        let fallback = url.replacen("127.0.0.1", "localhost", 1);
+        if let Ok(response) = anki_send(&fallback, &body).await { result = Ok(response); }
+    }
+    let response = result.map_err(|error| {
+        log::warn!("AnkiConnect {action} at {url} failed: {error:?}");
+        // A timeout means something accepted the connection and never
+        // answered: Anki is busy, napping (macOS) or blocked by a dialog.
+        if error.is_timeout() { "errors.ankiTimeout" } else { "errors.ankiUnavailable" }.to_string()
+    })?;
     let body: Value = response.json().await.map_err(|error| {
         log::warn!("AnkiConnect {action} returned non-JSON: {error}");
         "errors.ankiInvalidResponse".to_string()
@@ -51,11 +74,11 @@ async fn anki_request(action: &str, params: Value) -> Result<Value, String> {
     body.get("result").cloned().ok_or_else(|| "errors.ankiInvalidResponse".to_string())
 }
 
-pub async fn anki_models(_settings: &crate::config::Settings) -> Result<Value, String> {
-    anki_request("modelNames", json!({})).await
+pub async fn anki_models(settings: &crate::config::Settings) -> Result<Value, String> {
+    anki_request(settings, "modelNames", json!({})).await
 }
-pub async fn anki_model_fields(model: &str) -> Result<Value, String> {
-    anki_request("modelFieldNames", json!({"modelName": model})).await
+pub async fn anki_model_fields(settings: &crate::config::Settings, model: &str) -> Result<Value, String> {
+    anki_request(settings, "modelFieldNames", json!({"modelName": model})).await
 }
 
 fn escape_html(text: &str) -> String {
@@ -66,7 +89,7 @@ pub async fn add_dictionary_note(settings: &crate::config::Settings, word: &str,
     let model = settings.anki_model.trim();
     let deck = settings.anki_deck.trim();
     if model.is_empty() || deck.is_empty() { return Err("errors.ankiModelMissing".into()); }
-    let names = anki_request("modelFieldNames", json!({"modelName": model})).await?;
+    let names = anki_request(settings, "modelFieldNames", json!({"modelName": model})).await?;
     let names = names.as_array().ok_or_else(|| "errors.ankiInvalidResponse".to_string())?;
     let mut fields = serde_json::Map::new();
     for name in names.iter().filter_map(Value::as_str) {
@@ -82,7 +105,7 @@ pub async fn add_dictionary_note(settings: &crate::config::Settings, word: &str,
         fields.insert(name.to_string(), json!(escape_html(value)));
     }
     let note = json!({"deckName": deck, "modelName": model, "fields": fields, "options": {"allowDuplicate": false}, "tags": ["NihongoTracker"]});
-    anki_request("addNote", json!({"note": note})).await?.as_i64().ok_or_else(|| "errors.ankiInvalidResponse".to_string())
+    anki_request(settings, "addNote", json!({"note": note})).await?.as_i64().ok_or_else(|| "errors.ankiInvalidResponse".to_string())
 }
 
 /// Export a locally mined sentence to the Anki desktop app through AnkiConnect.
@@ -99,7 +122,7 @@ pub async fn export_mined_to_anki(app: &AppHandle, id: &str) -> Result<i64, Stri
     if deck.is_empty() {
         return Err("errors.deckMissing".into());
     }
-    let names = anki_request("modelFieldNames", json!({"modelName": settings.anki_model})).await?;
+    let names = anki_request(&settings, "modelFieldNames", json!({"modelName": settings.anki_model})).await?;
     let available = names.as_array().ok_or_else(|| "errors.ankiInvalidResponse".to_string())?;
     let mut fields = serde_json::Map::new();
     for field in available.iter().filter_map(Value::as_str) {
@@ -123,7 +146,7 @@ pub async fn export_mined_to_anki(app: &AppHandle, id: &str) -> Result<i64, Stri
             }]);
         }
     }
-    let note_id = anki_request("addNote", json!({ "note": note })).await?.as_i64()
+    let note_id = anki_request(&settings, "addNote", json!({ "note": note })).await?.as_i64()
         .ok_or_else(|| "errors.ankiInvalidResponse".to_string())?;
     state.db.mark_mined_exported(id, note_id).map_err(|e| e.to_string())?;
     let _ = app.emit(crate::mining::EVT_MINED, json!({ "id": id }));
@@ -498,5 +521,22 @@ mod merge_tests {
         second.as_object_mut().unwrap().remove("time");
         let merged = merge_anime_episode(&first, &second).unwrap();
         assert!(merged.get("time").is_none());
+    }
+}
+
+#[cfg(test)]
+mod anki_url_tests {
+    use super::anki_url;
+
+    fn with(url: &str) -> String {
+        anki_url(&crate::config::Settings { anki_connect_url: url.into(), ..Default::default() })
+    }
+
+    #[test]
+    fn normalises_the_address_like_yomitan() {
+        assert_eq!(with(""), "http://127.0.0.1:8765");
+        assert_eq!(with("  http://127.0.0.1:8765/ "), "http://127.0.0.1:8765");
+        assert_eq!(with("192.168.1.20:8765"), "http://192.168.1.20:8765");
+        assert_eq!(with("https://anki.local:9000"), "https://anki.local:9000");
     }
 }

@@ -75,6 +75,7 @@ fn d_anki_deck() -> String {
     "Default".into()
 }
 fn d_anki_model() -> String { "Basic".into() }
+fn d_anki_connect_url() -> String { "http://127.0.0.1:8765".into() }
 fn d_anki_field_sources() -> std::collections::BTreeMap<String, String> {
     [("Front".into(), "word".into()), ("Back".into(), "meaning".into())].into()
 }
@@ -145,6 +146,13 @@ pub struct Settings {
     pub anki_model: String,
     #[serde(default = "d_anki_field_sources")]
     pub anki_field_sources: std::collections::BTreeMap<String, String>,
+    /// AnkiConnect server address, same as Yomitan's "AnkiConnect server
+    /// address": users who changed `webBindAddress`/`webBindPort` need it.
+    #[serde(default = "d_anki_connect_url")]
+    pub anki_connect_url: String,
+    /// AnkiConnect's `apiKey`, if the user set one. Empty sends no key.
+    #[serde(default)]
+    pub anki_api_key: String,
 
     // ── Texthooker ─────────────────────────────────────────────────────
     #[serde(default = "d_ws")]
@@ -294,6 +302,8 @@ impl Default for Settings {
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),
+            anki_connect_url: d_anki_connect_url(),
+            anki_api_key: String::new(),
             texthooker_ws_url: d_ws(),
             texthooker_autoconnect: true,
             texthooker_clipboard: false,

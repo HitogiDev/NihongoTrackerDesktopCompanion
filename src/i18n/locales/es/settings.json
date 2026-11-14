@@ -10,6 +10,10 @@
     "app": "App"
   },
   "anki": {
+    "url": "Dirección de AnkiConnect",
+    "urlHint": "La misma que \"AnkiConnect server address\" en Yomitan. Cámbiala solo si cambiaste la dirección o el puerto de AnkiConnect.",
+    "apiKey": "Clave de API de AnkiConnect",
+    "apiKeyHint": "Solo si pusiste un apiKey en la configuración de AnkiConnect.",
     "title": "Minería de frases para Anki",
     "deck": "Mazo de Anki",
     "noteType": "Tipo de nota",
