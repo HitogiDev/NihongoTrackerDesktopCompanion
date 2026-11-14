@@ -130,8 +130,9 @@
   },
   "dictionary": {
     "title": "Offline dictionaries",
-    "hint": "Import a Yomitan dictionary zip. It stays on this computer and lookups work without an internet connection.",
-    "import": "Import dictionary",
+    "hint": "Import one or more Yomitan dictionary zips. They stay on this computer and lookups work without an internet connection.",
+    "import": "Import dictionaries",
+    "progress": "Importing {{current}} of {{total}}: {{file}}",
     "entries": "entries",
     "none": "No dictionaries imported yet.",
     "remove": "Remove dictionary",
