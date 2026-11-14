@@ -57,7 +57,9 @@
       "global": "Ajuste global ({{state}})",
       "on": "Activado",
       "off": "Desactivado"
-    }
+    },
+    "programFilter": "Programas",
+    "hookerFilter": "Programas y scripts del hooker"
   },
   "processes": {
     "title": "Elegir proceso",

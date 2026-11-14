@@ -134,7 +134,8 @@
     "import": "Import dictionary",
     "entries": "entries",
     "none": "No dictionaries imported yet.",
-    "remove": "Remove dictionary"
+    "remove": "Remove dictionary",
+    "fileFilter": "Yomitan dictionary"
   },
   "filters": {
     "title": "Text filters",

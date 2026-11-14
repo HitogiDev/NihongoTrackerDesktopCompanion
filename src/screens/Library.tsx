@@ -280,7 +280,7 @@ function VnAppModal({
   const os = useAppStore((s) => s.tracker?.capabilities.os);
   const nativeHookAvailable = useAppStore((s) => s.tracker?.capabilities.native_hook ?? false);
   const globalChineseFilter = useAppStore((s) => s.settings?.texthooker_filter_chinese ?? false);
-  const programFilters = os === 'windows' ? [{ name: 'Programs', extensions: ['exe'] }] : undefined;
+  const programFilters = os === 'windows' ? [{ name: t('modal.programFilter'), extensions: ['exe'] }] : undefined;
   const [draft, setDraft] = useState<VnApp>(EMPTY);
   const [picking, setPicking] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -365,7 +365,7 @@ function VnAppModal({
             {(id) => <div className="flex gap-2"><input id={id} className="input min-w-0 flex-1 font-mono text-sm" value={draft.launch_path ?? ''} onChange={(e) => setDraft({ ...draft, launch_path: e.target.value || null })} placeholder="C:\\Games\\game.exe" /><Button type="button" appearance="outline" aria-label={t('modal.choose')} onClick={async () => { const path = await openFile({ multiple: false, directory: false, filters: programFilters }); if (typeof path === 'string') setDraft({ ...draft, launch_path: path }); }}><FolderOpen className="h-4 w-4" /></Button></div>}
           </Field>
           <Field label={t('modal.hookerPath')} hint={t('modal.hookerPathHint')}>
-            {(id) => <div className="flex gap-2"><input id={id} className="input min-w-0 flex-1 font-mono text-sm" value={draft.hooker_path ?? ''} onChange={(e) => setDraft({ ...draft, hooker_path: e.target.value || null })} placeholder="C:\\Tools\\Textractor.exe" /><Button type="button" appearance="outline" aria-label={t('modal.choose')} onClick={async () => { const path = await openFile({ multiple: false, directory: false, filters: [{ name: 'Hooker programs and scripts', extensions: ['exe', 'bat', 'cmd'] }] }); if (typeof path === 'string') setDraft({ ...draft, hooker_path: path }); }}><FolderOpen className="h-4 w-4" /></Button></div>}
+            {(id) => <div className="flex gap-2"><input id={id} className="input min-w-0 flex-1 font-mono text-sm" value={draft.hooker_path ?? ''} onChange={(e) => setDraft({ ...draft, hooker_path: e.target.value || null })} placeholder="C:\\Tools\\Textractor.exe" /><Button type="button" appearance="outline" aria-label={t('modal.choose')} onClick={async () => { const path = await openFile({ multiple: false, directory: false, filters: [{ name: t('modal.hookerFilter'), extensions: ['exe', 'bat', 'cmd'] }] }); if (typeof path === 'string') setDraft({ ...draft, hooker_path: path }); }}><FolderOpen className="h-4 w-4" /></Button></div>}
           </Field>
 
           {nativeHookAvailable && (draft.media_type === 'game' || draft.media_type === 'vn') ? (
