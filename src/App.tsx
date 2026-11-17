@@ -7,7 +7,7 @@ import { useAppStore } from './store/useAppStore';
 import { events, ipc } from './lib/ipc';
 
 // Every window loads this same bundle, so each screen is its own chunk: the
-// session overlay should not parse the 2,500-line texthooker to show a timer.
+// session overlay should not parse the whole texthooker to show a timer.
 const LogCelebrationHost = lazy(() => import('./components/LogCelebrationHost'));
 const QuickLogModal = lazy(() => import('./components/QuickLogModal').then((m) => ({ default: m.QuickLogModal })));
 const Dashboard = lazy(() => import('./screens/Dashboard'));
@@ -101,10 +101,14 @@ export default function App() {
   }
 
   if (windowLabel === 'settings') {
-    return <div className="h-screen overflow-y-auto bg-base-100 text-base-content"><SettingsScreen /></div>;
+    return <div className="h-screen overflow-y-auto bg-base-100 text-base-content">
+      <Suspense fallback={<PageLoader />}><SettingsScreen /></Suspense>
+    </div>;
   }
 
-  if (windowLabel === 'texthooker') return <TexthookerScreen />;
+  if (windowLabel === 'texthooker') {
+    return <Suspense fallback={<div className="min-h-screen bg-base-300"><PageLoader /></div>}><TexthookerScreen /></Suspense>;
+  }
 
   const configured = Boolean(settings.api_key && settings.api_key.trim());
   // The reader takes the whole window, like the web app's chrome-less route.
@@ -114,7 +118,8 @@ export default function App() {
     <div className="app-shell flex h-screen overflow-hidden bg-base-100 text-base-content">
       {configured && !isReader ? <Sidebar /> : null}
       <main className="min-w-0 flex-1 overflow-y-auto bg-base-100">
-        <Suspense fallback={null}>
+        {/* A screen's chunk can take a moment the first time: show that. */}
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {!configured ? (
             <>
