@@ -93,3 +93,11 @@ notify-rust = "4"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.25"
 core-foundation = "0.10"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+# No `panic = "abort"`: a panic today stays inside its thread or task (the
+# Discord thread, a poisoned `expect("db mutex poisoned")`) instead of closing
+# the app.
