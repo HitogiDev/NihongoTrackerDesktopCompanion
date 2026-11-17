@@ -16,7 +16,9 @@ import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
 import type { MediaMatch } from './bindings/MediaMatch';
 import type { MangaContinue } from './bindings/MangaContinue';
+import type { MangaLibrary } from './bindings/MangaLibrary';
 import type { MangaSeries } from './bindings/MangaSeries';
+import type { MangaSeriesDetail } from './bindings/MangaSeriesDetail';
 import type { MangaSource } from './bindings/MangaSource';
 import type { MangaVolume } from './bindings/MangaVolume';
 import type { MokuroBlock } from './bindings/MokuroBlock';
@@ -56,7 +58,9 @@ export type {
   HookerStatus,
   MediaMatch,
   MangaContinue,
+  MangaLibrary,
   MangaSeries,
+  MangaSeriesDetail,
   MangaSource,
   MangaVolume,
   MokuroBlock,

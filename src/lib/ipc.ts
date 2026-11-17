@@ -15,6 +15,8 @@ import type {
   LogPayload,
   MediaHit,
   MediaMatch,
+  MangaLibrary,
+  MangaSeriesDetail,
   MangaSource,
   ScanSummary,
   MinedSentence,
@@ -228,6 +230,13 @@ export const ipc = {
   mangaRemoveSource: (id: string) => invoke<void>('manga_remove_source', { id }),
   /** `force` for the user's button; without it a scan from the last minute is enough. */
   mangaRescan: (force = false) => invoke<ScanSummary>('manga_rescan', { force }),
+  mangaLibrary: () => invoke<MangaLibrary>('manga_library'),
+  mangaSeriesDetail: (seriesId: string) => invoke<MangaSeriesDetail | null>('manga_series_detail', { seriesId }),
+  /** `mediaId: null` unlinks. */
+  mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
+    invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
+  /** Opens (or focuses) the reader window on a volume. */
+  mangaOpenReader: (volumeId: string, page?: number) => invoke<void>('manga_open_reader', { volumeId, page }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

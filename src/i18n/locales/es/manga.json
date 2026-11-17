@@ -1,0 +1,106 @@
+{
+  "title": "Manga",
+  "subtitle": "Lee manga en japonés, con el texto de mokuro y consultas al diccionario.",
+  "search": "Buscar series",
+  "loadFailed": "No se pudo cargar la biblioteca de manga",
+  "tabs": {
+    "label": "De dónde sale el manga",
+    "all": "Todo",
+    "local": "Local",
+    "webdav": "WebDAV",
+    "extensions": "Extensiones",
+    "soon": "Pronto",
+    "soonHint": "Llegará en una próxima versión"
+  },
+  "actions": {
+    "addFolder": "Añadir carpeta",
+    "folders": "Carpetas",
+    "rescan": "Volver a escanear",
+    "readVolume": "Leer {{volume}}",
+    "continueAt": "Seguir con {{volume}} · p. {{page}}"
+  },
+  "shelf": {
+    "title": "Seguir leyendo",
+    "upNext": "Siguiente",
+    "page": "p. {{page}} / {{count}}",
+    "open": "{{title}} — {{volume}}"
+  },
+  "grid": {
+    "title": "Series",
+    "volumes_one": "{{count}} tomo",
+    "volumes_other": "{{count}} tomos",
+    "finished_one": "{{count}} leído",
+    "finished_other": "{{count}} leídos",
+    "text": "OCR",
+    "textHint": "Tiene texto para consultar al pasar el ratón",
+    "progress": "{{percent}} % leído",
+    "noMatches": "Ninguna serie coincide con el filtro",
+    "clear": "Quitar filtro",
+    "nothingFound": "Aún no hay manga en tus carpetas",
+    "nothingFoundBody": "Las carpetas de imágenes y los archivos CBZ y ZIP son tomos, y la carpeta donde están es la serie. Añade archivos y vuelve a escanear."
+  },
+  "detail": {
+    "back": "Volver a la biblioteca",
+    "loadFailed": "No se pudo cargar esta serie",
+    "gone": "Esta serie ya no está en la biblioteca",
+    "goneBody": "Su carpeta se quitó o se movió. Vuelve a escanear o añade la carpeta otra vez.",
+    "volumes": "Tomos",
+    "pages_one": "{{count}} página",
+    "pages_other": "{{count}} páginas",
+    "hasText": "Con texto",
+    "percentRead": "{{percent}} % leído",
+    "textMokuro": "Texto de mokuro",
+    "textOcr": "Texto de OCR",
+    "noText": "Sin texto",
+    "finished": "Leído",
+    "link": "Vincular con NihongoTracker",
+    "linkHint": "Al vincularla, NihongoTracker sabe qué manga estás leyendo.",
+    "unlink": "Desvincular"
+  },
+  "folders": {
+    "title": "Carpetas de la biblioteca",
+    "body": "Se buscan series en cada carpeta de esta lista. Cada subcarpeta con tomos es una serie.",
+    "pick": "Elige una carpeta de manga",
+    "none": "Todavía no hay carpetas.",
+    "series_one": "{{count}} serie",
+    "series_other": "{{count}} series",
+    "remove": "Quitar {{name}} de la biblioteca",
+    "removeHint": "Quitar una carpeta solo la olvida aquí: no se borra ningún archivo."
+  },
+  "empty": {
+    "title": "Tu estantería de manga está vacía",
+    "body": "Añade manga de tu ordenador para leerlo con consultas al pasar el ratón. Tu progreso se queda en este ordenador.",
+    "local": {
+      "title": "Una carpeta de este ordenador",
+      "body": "Carpetas de imágenes, tomos en CBZ o ZIP y los archivos .mokuro que les dan texto."
+    },
+    "webdav": {
+      "title": "Un servidor WebDAV",
+      "body": "Tu propio servidor con tomos y sus archivos .mokuro, leídos bajo demanda."
+    },
+    "extensions": {
+      "title": "Extensiones",
+      "body": "Fuentes en línea a través de un servidor Suwayomi local, solo si decides instalarlo."
+    },
+    "tip": "Consejo: pon cada serie en su propia carpeta. Un archivo Vol 1.mokuro junto a Vol 1.cbz o a una carpeta Vol 1 le da texto a ese tomo."
+  },
+  "errors": {
+    "notAFolder": "Eso no es una carpeta que la app pueda leer.",
+    "alreadyAdded": "Esa carpeta, o una que la contiene, ya está en la biblioteca."
+  },
+  "toast": {
+    "added_one": "Se encontró {{count}} serie",
+    "added_other": "Se encontraron {{count}} series",
+    "addedEmpty": "Carpeta añadida, pero todavía no tiene manga",
+    "addFailed": "No se pudo añadir la carpeta: {{message}}",
+    "rescanned_one": "Biblioteca al día: {{count}} serie",
+    "rescanned_other": "Biblioteca al día: {{count}} series",
+    "rescanFailed": "No se pudo escanear: {{message}}",
+    "offline": "No disponible ahora mismo: {{names}}",
+    "removed": "{{name}} se quitó de la biblioteca",
+    "removeFailed": "No se pudo quitar la carpeta: {{message}}",
+    "linked": "{{title}} vinculada con NihongoTracker",
+    "linkFailed": "No se pudo vincular: {{message}}",
+    "openFailed": "No se pudo abrir el lector: {{message}}"
+  }
+}

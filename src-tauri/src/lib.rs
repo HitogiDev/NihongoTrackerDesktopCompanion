@@ -353,6 +353,9 @@ pub fn run() {
             commands::manga_add_local_root,
             commands::manga_remove_source,
             commands::manga_rescan,
+            commands::manga_library,
+            commands::manga_series_detail,
+            commands::manga_link_series,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

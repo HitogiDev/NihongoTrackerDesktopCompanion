@@ -14,6 +14,8 @@ const QuickLogModal = lazy(() => import('./components/QuickLogModal').then((m) =
 const Dashboard = lazy(() => import('./screens/Dashboard'));
 const Queue = lazy(() => import('./screens/Queue'));
 const LibraryScreen = lazy(() => import('./screens/Library'));
+const MangaScreen = lazy(() => import('./screens/Manga'));
+const MangaSeriesScreen = lazy(() => import('./screens/manga/SeriesDetail'));
 const MiningScreen = lazy(() => import('./screens/Mining'));
 const TexthookerScreen = lazy(() => import('./screens/Texthooker'));
 const SettingsScreen = lazy(() => import('./screens/Settings'));
@@ -138,6 +140,8 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/queue" element={<Queue />} />
               <Route path="/library" element={<LibraryScreen />} />
+              <Route path="/manga" element={<MangaScreen />} />
+              <Route path="/manga/:seriesId" element={<MangaSeriesScreen />} />
               <Route path="/mining" element={<MiningScreen />} />
               <Route path="/ranking" element={<RankingScreen />} />
               <Route path="/social" element={<SocialScreen />} />

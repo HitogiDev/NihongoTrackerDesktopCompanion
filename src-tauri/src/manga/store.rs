@@ -103,6 +103,22 @@ pub struct MangaContinue {
     pub updated_at: String,
 }
 
+/// The Manga screen in one call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct MangaLibrary {
+    pub sources: Vec<MangaSource>,
+    pub series: Vec<MangaSeries>,
+    pub continue_reading: Vec<MangaContinue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct MangaSeriesDetail {
+    pub series: MangaSeries,
+    pub volumes: Vec<MangaVolume>,
+}
+
 /// A series as a scan found it, with all of its volumes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeriesRecord {

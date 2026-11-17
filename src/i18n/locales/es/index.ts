@@ -15,6 +15,7 @@ import social from './social.json';
 import mining from './mining.json';
 import overlay from './overlay.json';
 import readingOverlay from './readingOverlay.json';
+import manga from './manga.json';
 
 export default {
   celebration,
@@ -24,6 +25,7 @@ export default {
   mining,
   overlay,
   readingOverlay,
+  manga,
   common,
   nav,
   dashboard,

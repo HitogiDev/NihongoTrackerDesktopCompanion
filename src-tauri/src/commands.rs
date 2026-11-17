@@ -1548,3 +1548,42 @@ pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
 pub async fn manga_rescan(app: AppHandle, force: Option<bool>) -> CmdResult<crate::manga::library::ScanSummary> {
     crate::manga::library::rescan(&app, force.unwrap_or(false)).await
 }
+
+/// The Manga screen: roots, series and the "continue reading" shelf.
+#[tauri::command]
+pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::store::MangaLibrary> {
+    Ok(crate::manga::store::MangaLibrary {
+        sources: state.db.manga_sources().map_err(err)?,
+        series: state.db.manga_series_list().map_err(err)?,
+        continue_reading: state.db.manga_continue_reading(12).map_err(err)?,
+    })
+}
+
+#[tauri::command]
+pub fn manga_series_detail(state: State<'_, AppState>, series_id: String) -> CmdResult<Option<crate::manga::store::MangaSeriesDetail>> {
+    let Some(series) = state.db.manga_series(&series_id).map_err(err)? else { return Ok(None) };
+    let volumes = state.db.manga_volumes(&series_id).map_err(err)?;
+    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes }))
+}
+
+/// Links a series to its NihongoTracker media (or unlinks it with `None`).
+/// `is_adult` travels with the link, as it does for VNs, so Discord never has
+/// to ask.
+#[tauri::command]
+pub fn manga_link_series(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    series_id: String,
+    media_id: Option<String>,
+    media_title: Option<String>,
+    is_adult: Option<bool>,
+) -> CmdResult<()> {
+    let media_id = media_id.filter(|id| !id.trim().is_empty());
+    let media_title = media_title.filter(|_| media_id.is_some());
+    let is_adult = media_id.is_some() && is_adult.unwrap_or(false);
+    if !state.db.link_manga_series(&series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
+        return Err("Unknown series".into());
+    }
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}

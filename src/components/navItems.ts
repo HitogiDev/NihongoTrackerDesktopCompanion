@@ -1,4 +1,4 @@
-import { Activity, BookmarkPlus, Inbox, Library, Trophy, UsersRound, type LucideIcon } from 'lucide-react';
+import { Activity, BookImage, BookmarkPlus, Inbox, Library, Trophy, UsersRound, type LucideIcon } from 'lucide-react';
 
 export type NavItem = { to: string; labelKey: string; icon: LucideIcon; shortcut: string; end?: boolean; badge?: 'pending' };
 
@@ -7,6 +7,8 @@ export const TRACKER_NAV: NavItem[] = [
   { to: '/', labelKey: 'activity', icon: Activity, shortcut: '1', end: true },
   { to: '/queue', labelKey: 'pending', icon: Inbox, shortcut: '2', badge: 'pending' },
   { to: '/library', labelKey: 'library', icon: Library, shortcut: '3' },
+  // 7, not 4: the shortcuts people already use keep their sections.
+  { to: '/manga', labelKey: 'manga', icon: BookImage, shortcut: '7' },
   { to: '/mining', labelKey: 'mining', icon: BookmarkPlus, shortcut: '4' },
 ];
 
