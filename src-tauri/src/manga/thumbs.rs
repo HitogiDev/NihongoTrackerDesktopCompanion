@@ -18,7 +18,7 @@ const QUALITY: u8 = 82;
 
 /// Decoding limits: no real page is this large, and a crafted header could
 /// otherwise ask for gigabytes.
-fn limits() -> Limits {
+pub(crate) fn limits() -> Limits {
     let mut limits = Limits::default();
     limits.max_image_width = Some(16_384);
     limits.max_image_height = Some(16_384);

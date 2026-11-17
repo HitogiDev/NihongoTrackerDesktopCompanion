@@ -18,6 +18,13 @@
 //! goes through `sync` like every other: to Pendientes when the user wants to
 //! confirm it (`manga_confirm_before_log`) or the series is not linked to
 //! NihongoTracker yet, to the outbox otherwise.
+//!
+//! The blocks of a page that counts become `text_lines` (`content_id` = the
+//! linked media, or `manga:<series id>`), with ids made from where they are
+//! (`manga:<volume>:<page>:<block>`) so the same block is always the same
+//! line: mining one, or looking a word up in it, finds its sentence and its
+//! work. They are not `texthooker::ingest`ed (that follows the hooker's
+//! timer) and never pushed to the texthooker API: they are stored as synced.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -283,15 +290,68 @@ pub struct Credited {
     pub chars: i64,
 }
 
-/// Records `pages` of the open volume as read. Pages read before add nothing.
+/// Where the lines of a series go in `text_lines`.
+pub fn content_id(media_id: Option<&str>, series_id: &str) -> String {
+    match media_id.filter(|id| !id.trim().is_empty()) {
+        Some(id) => id.to_string(),
+        None => format!("manga:{series_id}"),
+    }
+}
+
+/// The line id of a block: the same block is always the same line.
+pub fn line_id(volume_id: &str, page: i64, block: usize) -> String {
+    format!("manga:{volume_id}:{page}:{block}")
+}
+
+/// `(volume, page, block)` of a manga line id, or `None` for any other line.
+pub fn parse_line_id(id: &str) -> Option<(&str, i64, usize)> {
+    let mut parts = id.strip_prefix("manga:")?.split(':');
+    let (volume, page, block) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some() || !super::protocol::is_opaque_id(volume) {
+        return None;
+    }
+    Some((volume, page.parse().ok()?, block.parse().ok()?))
+}
+
+/// The block as a line of text, if it has Japanese in it.
+fn block_line(volume_id: &str, page: i64, index: usize, block: &super::mokuro::MokuroBlock, content_id: &str) -> Option<crate::db::TextLine> {
+    let text = block.lines.concat();
+    let chars = crate::texthooker::count_japanese(&text);
+    (chars > 0).then(|| crate::db::TextLine {
+        id: line_id(volume_id, page, index),
+        content_id: content_id.to_string(),
+        text: text.trim().to_string(),
+        chars,
+        created_at: crate::db::now_iso(),
+        // Local context only: the texthooker API never sees manga pages.
+        synced: true,
+    })
+}
+
+/// Stores the blocks of a page as lines. Ones already stored stay as they are.
+pub fn insert_page_lines(db: &Db, volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) {
+    let Some(text) = text else { return };
+    for (index, block) in text.blocks.iter().enumerate() {
+        if let Some(line) = block_line(volume_id, page, index, block, content_id) {
+            if let Err(error) = db.insert_line(&line) {
+                log::warn!("manga line {} not stored: {error}", line.id);
+            }
+        }
+    }
+}
+
+/// Records `pages` of the open volume as read, and their blocks as lines.
+/// Pages read before add nothing.
 pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
     let mut credited = Credited::default();
+    let content = content_id(open.media_id.as_deref(), &open.series_id);
     for &page in pages {
         let chars = page_chars(open.page_text(page));
         match db.mark_manga_page_read(&open.volume_id, page, chars) {
             Ok(true) => {
                 credited.pages += 1;
                 credited.chars += chars;
+                insert_page_lines(db, &open.volume_id, page, open.page_text(page), &content);
             }
             Ok(false) => {}
             Err(error) => log::warn!("manga page {}/{page} not recorded: {error}", open.volume_id),
@@ -409,6 +469,98 @@ pub fn log_later(app: &AppHandle, session: MangaSession) {
         let settings = app.state::<AppState>().settings_snapshot().await;
         log_session(&app, &session, &settings);
     });
+}
+
+// ── mining ─────────────────────────────────────────────────────────────
+
+/// The block a line id names, with what it takes to store and title it.
+struct BlockRef {
+    line: crate::db::TextLine,
+    title: String,
+    bbox: [f64; 4],
+    text_size: (f64, f64),
+    location: super::store::VolumeLocation,
+    page: i64,
+}
+
+/// Finds a block by line id, using the open volume's text when it is that
+/// volume and reading it from disk otherwise. Blocking: call it off the
+/// async runtime.
+fn find_block(app: &AppHandle, volume_id: &str, page: i64, block: usize) -> Result<BlockRef, String> {
+    let state = app.state::<AppState>();
+    let db = &state.db;
+    let reader = super::reader::volume(db, volume_id).map_err(|e| e.to_string())?.ok_or("errors.lineNotFound")?;
+    let location = db.manga_volume_location(volume_id).map_err(|e| e.to_string())?.ok_or("errors.lineNotFound")?;
+    let cached = {
+        let tracking = state.manga.tracking.lock().unwrap();
+        tracking.open.as_ref().filter(|open| open.volume_id == volume_id).map(|open| open.text.clone())
+    };
+    let text = match cached {
+        Some(text) => text,
+        None => Arc::new(super::mokuro::volume_text(db, volume_id)?),
+    };
+    let page_text = usize::try_from(page).ok().and_then(|index| text.get(index)).and_then(Option::as_ref).ok_or("errors.lineNotFound")?;
+    let found = page_text.blocks.get(block).ok_or("errors.lineNotFound")?;
+    let content = content_id(reader.series.media_id.as_deref(), &reader.series.id);
+    let line = block_line(volume_id, page, block, found, &content).ok_or("errors.noJapanese")?;
+    let title = reader.series.media_title.clone().filter(|title| !title.trim().is_empty()).unwrap_or(reader.series.title.clone());
+    Ok(BlockRef { line, title, bbox: found.bbox, text_size: (page_text.img_width, page_text.img_height), location, page })
+}
+
+/// The stored line for a manga line id, storing it first if its page has
+/// not been read yet: a word can be looked up before the page counts.
+/// Blocking. `None` for a line id that is not a manga block.
+pub fn ensure_line(app: &AppHandle, line_id: &str) -> Option<Result<(crate::db::TextLine, String), String>> {
+    let (volume_id, page, block) = parse_line_id(line_id)?;
+    Some(find_block(app, volume_id, page, block).and_then(|found| {
+        let db = &app.state::<AppState>().db;
+        db.insert_line(&found.line).map_err(|e| e.to_string())?;
+        let line = db.line_by_id(&found.line.id).map_err(|e| e.to_string())?.ok_or("errors.lineNotFound")?;
+        Ok((line, found.title))
+    }))
+}
+
+/// Mines a block: its sentence goes to the mined list like a texthooker
+/// line, and the panel around it becomes the card's picture
+/// (`app_data_dir/mined/<id>.png`, through `set_mined_screenshot`). A page
+/// that cannot be cropped still mines the sentence. Blocking.
+pub fn mine_block(app: &AppHandle, volume_id: &str, page: i64, block: usize) -> Result<crate::db::MinedSentence, String> {
+    let found = find_block(app, volume_id, page, block)?;
+    let state = app.state::<AppState>();
+    let db = &state.db;
+    db.insert_line(&found.line).map_err(|e| e.to_string())?;
+    let line = db.line_by_id(&found.line.id).map_err(|e| e.to_string())?.ok_or("errors.lineNotFound")?;
+    let sentence = db.mine_line(&line, Some(&found.title)).map_err(|e| e.to_string())?;
+    let _ = app.emit(crate::mining::EVT_MINED, &sentence);
+    if sentence.screenshot_path.is_some() {
+        return Ok(sentence);
+    }
+    let picture = usize::try_from(found.page)
+        .ok()
+        .and_then(|index| super::protocol::page_bytes(&found.location, index))
+        .ok_or_else(|| "the page could not be read".to_string())
+        .and_then(|bytes| super::crop::crop_png(&bytes, found.bbox, found.text_size));
+    let saved = picture.and_then(|png| {
+        let folder = app.path().app_data_dir().map_err(|e| e.to_string())?.join("mined");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let path = folder.join(format!("{}.png", sentence.id));
+        std::fs::write(&path, png).map_err(|e| e.to_string())?;
+        if let Err(error) = db.set_mined_screenshot(&sentence.id, &path.to_string_lossy()) {
+            let _ = std::fs::remove_file(&path);
+            return Err(error.to_string());
+        }
+        Ok(())
+    });
+    match saved {
+        Ok(()) => {
+            let _ = app.emit(crate::mining::EVT_MINED, json!({ "id": sentence.id }));
+            Ok(db.mined_by_id(&sentence.id).map_err(|e| e.to_string())?.unwrap_or(sentence))
+        }
+        Err(error) => {
+            log::warn!("manga crop for {volume_id}/{page}/{block} failed: {error}");
+            Ok(sentence)
+        }
+    }
 }
 
 pub fn dwell_threshold(settings: &Settings) -> Duration {
@@ -736,6 +888,48 @@ pub(crate) mod tests {
     fn a_session_with_nothing_read_is_not_logged() {
         assert!(log_payload(&session(0, 0, 29, None), "d").is_none());
         assert!(log_payload(&session(0, 0, 30, None), "d").is_some(), "half a minute rounds up");
+    }
+
+    #[test]
+    fn a_page_that_counts_stores_its_blocks_as_lines_once() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![Some(page(&["よつばと!", "ABC", "とーちゃん"]))]);
+        tracking.open.as_mut().unwrap().show(&[0]);
+        for _ in 0..3 {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        }
+        let lines = db.lines_for("manga:s1", 10).unwrap();
+        let ids: Vec<&str> = lines.iter().map(|line| line.id.as_str()).collect();
+        assert_eq!(ids, ["manga:v1:0:0", "manga:v1:0:2"], "a block without Japanese is not a line");
+        assert!(lines.iter().all(|line| line.synced), "never pushed to the texthooker API");
+        assert_eq!(lines[0].chars, 4);
+        // Shown again: no new page, no new lines.
+        tracking.open.as_mut().unwrap().show(&[]);
+        tracking.open.as_mut().unwrap().show(&[0]);
+        for _ in 0..3 {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        }
+        assert_eq!(db.lines_for("manga:s1", 10).unwrap().len(), 2);
+        assert_eq!(tracking.session.as_ref().unwrap().pages_read, 1);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn lines_go_to_the_linked_media_or_to_the_series() {
+        assert_eq!(content_id(Some("30104"), "s1"), "30104");
+        assert_eq!(content_id(None, "s1"), "manga:s1");
+        assert_eq!(content_id(Some(" "), "s1"), "manga:s1");
+    }
+
+    #[test]
+    fn line_ids_name_their_block_and_nothing_else() {
+        let id = line_id("0b5c7d0e-0000-4000-8000-000000000001", 12, 3);
+        assert_eq!(parse_line_id(&id), Some(("0b5c7d0e-0000-4000-8000-000000000001", 12, 3)));
+        assert_eq!(parse_line_id("3f2a-uuid-of-a-hooker-line"), None);
+        assert_eq!(parse_line_id("manga:../etc:1:2"), None);
+        assert_eq!(parse_line_id("manga:v1:1:2:3"), None);
+        assert_eq!(parse_line_id("manga:v1:x:2"), None);
     }
 
     #[test]

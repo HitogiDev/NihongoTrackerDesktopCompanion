@@ -21,7 +21,7 @@
     "fit": "Fit",
     "background": "Background",
     "textLayer": "Text",
-    "shortcuts": "← → turn pages · Space / Shift+Space · Home / End · F full screen · T text · Shift or Alt over text: dictionary · Ctrl+C copies a block"
+    "shortcuts": "← → turn pages · Space / Shift+Space · Home / End · F full screen · T text · Shift or Alt over text: dictionary · Ctrl+C copies a block · Ctrl+M mines it"
   },
   "layout": {
     "single": "Single",
@@ -49,7 +49,9 @@
     "always": "Always",
     "hidden": "Hidden",
     "toggle": "Text: {{mode}}",
-    "copied": "Block copied"
+    "copied": "Block copied",
+    "copy": "Copy",
+    "mine": "Mine"
   },
   "end": {
     "title": "End of {{volume}}",
@@ -68,5 +70,11 @@
     "chars": "{{count, number}} chars",
     "endedPending": "Session of {{title}} finished: confirm it in Pending",
     "endedLogged": "Session of {{title}} logged"
+  },
+  "mine": {
+    "done": "Mined, with the panel as its picture",
+    "noPicture": "Mined, without a picture: the page could not be cropped",
+    "failed": "Could not mine the block: {{message}}",
+    "hoverFirst": "Point at a text block to mine it"
   }
 }

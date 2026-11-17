@@ -376,6 +376,40 @@ textarea,
   outline: 2px solid color-mix(in oklch, var(--color-primary) 60%, transparent);
   outline-offset: 0.3em;
 }
+/* Copy / mine, over the block the pointer is on. A child of the block, so
+   moving onto it keeps the block hovered; the padding bridges the gap. */
+.manga-text-layer .manga-block-actions {
+  position: absolute;
+  right: -0.3em;
+  bottom: 100%;
+  padding-bottom: 0.55rem;
+  z-index: 1;
+  writing-mode: horizontal-tb;
+  font-family: var(--font-sans, inherit);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+.manga-text-layer .manga-block[data-actions='below'] > .manga-block-actions {
+  bottom: auto;
+  padding-bottom: 0;
+  top: 100%;
+  padding-top: 0.55rem;
+}
+.manga-text-layer .manga-block:hover > .manga-block-actions,
+.manga-text-layer .manga-block-actions[data-busy] {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .manga-text-layer .manga-block-actions {
+    transition: opacity 120ms ease-out;
+  }
+}
 .manga-text-layer .manga-block ::selection {
   color: #141414;
   background-color: color-mix(in oklch, var(--color-primary) 35%, transparent);

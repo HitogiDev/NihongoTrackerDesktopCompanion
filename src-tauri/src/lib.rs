@@ -377,6 +377,7 @@ pub fn run() {
             commands::manga_session_open,
             commands::manga_session_pages,
             commands::manga_session_state,
+            commands::manga_mine_block,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

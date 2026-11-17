@@ -256,6 +256,9 @@ export const ipc = {
   /** The pages on screen now; none past the last page. */
   mangaSessionPages: (volumeId: string, pages: number[]) => invoke<void>('manga_session_pages', { volumeId, pages }),
   mangaSessionState: () => invoke<MangaSession | null>('manga_session_state'),
+  /** Mines a text block, with the panel around it as the card's picture. */
+  mangaMineBlock: (volumeId: string, page: number, block: number) =>
+    invoke<MinedSentence>('manga_mine_block', { volumeId, page, block }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

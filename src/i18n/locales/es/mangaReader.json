@@ -21,7 +21,7 @@
     "fit": "Ajuste",
     "background": "Fondo",
     "textLayer": "Texto",
-    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa · T texto · Mayús o Alt sobre el texto: diccionario · Ctrl+C copia un bloque"
+    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa · T texto · Mayús o Alt sobre el texto: diccionario · Ctrl+C copia un bloque · Ctrl+M lo mina"
   },
   "layout": {
     "single": "Una",
@@ -49,7 +49,9 @@
     "always": "Siempre",
     "hidden": "Oculto",
     "toggle": "Texto: {{mode}}",
-    "copied": "Bloque copiado"
+    "copied": "Bloque copiado",
+    "copy": "Copiar",
+    "mine": "Minar"
   },
   "end": {
     "title": "Fin de {{volume}}",
@@ -68,5 +70,11 @@
     "chars": "{{count, number}} car.",
     "endedPending": "Sesión de {{title}} terminada: confírmala en Pendientes",
     "endedLogged": "Sesión de {{title}} registrada"
+  },
+  "mine": {
+    "done": "Minado, con la viñeta como imagen",
+    "noPicture": "Minado sin imagen: no se pudo recortar la página",
+    "failed": "No se pudo minar el bloque: {{message}}",
+    "hoverFirst": "Pon el ratón sobre un bloque de texto para minarlo"
   }
 }

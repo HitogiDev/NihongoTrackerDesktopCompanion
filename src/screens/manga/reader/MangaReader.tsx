@@ -17,7 +17,7 @@ import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, sprea
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
 import { BACKGROUND_CLASS } from './styles';
-import { TextLayer } from './TextLayer';
+import { TextLayer, type HoveredBlock } from './TextLayer';
 import { useAutoHide } from './useAutoHide';
 import { useMangaSession } from '../useMangaSession';
 import { SessionIndicator } from './SessionIndicator';
@@ -118,7 +118,7 @@ function Reader({ target }: { target: ReaderTarget }) {
 }
 
 function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: number }) {
-  const { t } = useTranslation('mangaReader');
+  const { t, i18n } = useTranslation(['mangaReader', 'mining']);
   const { series, volume, next: nextVolume } = data;
   const count = Number(volume.page_count);
   const viewport = useViewport();
@@ -145,8 +145,52 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const popupDelay = useAppStore((s) => Math.max(0, Math.min(2000, s.settings?.dictionary_popup_delay_ms ?? 75)));
   const theme = useAppStore((s) => s.settings?.theme);
   const dictionary = useDictionaryHover(popupDelay);
-  const hoveredBlock = useRef<{ text: string; element: HTMLElement } | null>(null);
+  const hoveredBlock = useRef<HoveredBlock | null>(null);
   const copyingBlock = useRef<string | null>(null);
+  /** Selects a block's lines for the `copy` handler below to write. */
+  const selectForCopy = useCallback((block: HoveredBlock) => {
+    const lines = block.element.querySelectorAll('.manga-line');
+    const range = document.createRange();
+    if (lines.length > 0) {
+      range.setStartBefore(lines[0]);
+      range.setEndAfter(lines[lines.length - 1]);
+    } else {
+      range.selectNodeContents(block.element);
+    }
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    copyingBlock.current = block.text;
+  }, []);
+  const copyBlock = useCallback((block: HoveredBlock) => {
+    selectForCopy(block);
+    // Runs the `copy` handler now, with the block's text.
+    if (!document.execCommand('copy')) copyingBlock.current = null;
+  }, [selectForCopy]);
+
+  // ── mining ─────────────────────────────────────────────────────────
+  // Rust stores the block as a line, mines it and crops the panel around it
+  // from the page (`manga::session::mine_block`).
+  const [mining, setMining] = useState<string | null>(null);
+  const contentId = series.media_id || `manga:${series.id}`;
+  const lineContext = useCallback(
+    (page: number) => (block: number) => ({ lineId: `manga:${volume.id}:${page}:${block}`, contentId }),
+    [contentId, volume.id],
+  );
+  const mineBlock = useCallback(async (block: HoveredBlock) => {
+    const key = `${block.page}:${block.block}`;
+    if (mining === key) return;
+    setMining(key);
+    try {
+      const sentence = await ipc.mangaMineBlock(volume.id, block.page, block.block);
+      if (sentence.screenshot_path) toast.success(t('mine.done'));
+      else toast.warning(t('mine.noPicture'));
+    } catch (error) {
+      const code = String(error);
+      toast.error(i18n.exists(`mining:${code}`) ? t(`mining:${code}`) : t('mine.failed', { message: code }));
+    } finally {
+      setMining(null);
+    }
+  }, [i18n, mining, t, volume.id]);
   useEffect(() => {
     const onCopy = (event: ClipboardEvent) => {
       const text = copyingBlock.current;
@@ -301,11 +345,14 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       // is selected for the copy (no clipboard permission needed in any
       // webview) and the `copy` handler below writes its lines joined.
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && hoveredBlock.current) {
-        const range = document.createRange();
-        range.selectNodeContents(hoveredBlock.current.element);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
-        copyingBlock.current = hoveredBlock.current.text;
+        selectForCopy(hoveredBlock.current);
+        return;
+      }
+      // Ctrl+M mines the block under the pointer, as its button does.
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        if (hoveredBlock.current) void mineBlock(hoveredBlock.current);
+        else toast.info(t('mine.hoverFirst'));
         return;
       }
       const action = keyAction(event, prefs.direction, prefs.layout);
@@ -331,7 +378,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [count, dictionary, fullscreen, goNext, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical]);
+  }, [count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
@@ -366,11 +413,16 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     ? (index: number, size: Size) => (
       <TextLayer
         page={text[index]}
+        pageIndex={index}
         size={size}
         mode={prefs.text_layer}
+        lineContext={lineContext(index)}
         onPointer={dictionary.openDictionaryAt}
         onLeave={dictionary.cancelDictionaryHover}
         onHoverBlock={(value) => { hoveredBlock.current = value; }}
+        onCopy={copyBlock}
+        onMine={(block) => void mineBlock(block)}
+        mining={mining}
       />
     )
     : undefined;

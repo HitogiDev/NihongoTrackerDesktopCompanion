@@ -5,6 +5,7 @@
 //! resolves them against the database (see `protocol`).
 
 pub mod archive;
+pub mod crop;
 pub mod library;
 pub mod mokuro;
 pub mod protocol;

@@ -942,8 +942,19 @@ pub async fn anki_model_fields(state: State<'_, AppState>, model: String) -> Cmd
 }
 
 #[tauri::command]
-pub async fn mine_dictionary_entry(state: State<'_, AppState>, word: String, reading: String, meaning: String, sentence: String, line_id: Option<String>, content_id: Option<String>) -> CmdResult<i64> {
+pub async fn mine_dictionary_entry(app: AppHandle, state: State<'_, AppState>, word: String, reading: String, meaning: String, sentence: String, line_id: Option<String>, content_id: Option<String>) -> CmdResult<i64> {
     let settings = state.settings_snapshot().await;
+    // A manga block is a line once its page is read; looked up before that,
+    // it becomes one now, so the card still has its sentence and its work.
+    if let Some(id) = line_id.clone().filter(|id| crate::manga::session::parse_line_id(id).is_some()) {
+        let found = tauri::async_runtime::spawn_blocking(move || crate::manga::session::ensure_line(&app, &id))
+            .await
+            .map_err(err)?;
+        if let Some(found) = found {
+            let (line, title) = found?;
+            return sync::add_dictionary_note(&settings, &word, &reading, &meaning, &line.text, &title).await;
+        }
+    }
     if let Some(line_id) = line_id {
         let (sentence, title) = dictionary_line_context(&state.db, &line_id, content_id.as_deref())?;
         return sync::add_dictionary_note(&settings, &word, &reading, &meaning, &sentence, &title).await;
@@ -1649,6 +1660,15 @@ pub async fn manga_session_open(app: AppHandle, state: State<'_, AppState>, volu
     }
     crate::manga::session::open_volume(&app, loaded);
     Ok(())
+}
+
+/// Mines a block of the reader's text, with the panel around it as its
+/// picture (see `manga::session::mine_block`).
+#[tauri::command]
+pub async fn manga_mine_block(app: AppHandle, volume_id: String, page: i64, block: usize) -> CmdResult<MinedSentence> {
+    tauri::async_runtime::spawn_blocking(move || crate::manga::session::mine_block(&app, &volume_id, page, block))
+        .await
+        .map_err(err)?
 }
 
 /// The reading session, for a window that opens after it started.
