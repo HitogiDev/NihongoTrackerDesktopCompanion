@@ -1627,6 +1627,37 @@ pub fn manga_save_reader_prefs(
     Ok(prefs)
 }
 
+/// The reader shows this volume now: Rust starts counting its pages. Loads
+/// its text off the async runtime, like `manga_volume_text`.
+#[tauri::command]
+pub async fn manga_session_open(state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
+    let db = state.db.clone();
+    let id = volume_id.clone();
+    let loaded = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let Some(volume) = crate::manga::reader::volume(&db, &id).map_err(|e| e.to_string())? else {
+            return Err("Unknown volume".into());
+        };
+        let text = crate::manga::mokuro::volume_text(&db, &id).unwrap_or_default();
+        Ok(crate::manga::session::OpenVolume::new(&volume, text))
+    })
+    .await
+    .map_err(err)??;
+    let mut tracking = state.manga.tracking.lock().unwrap();
+    if tracking.open.as_ref().is_none_or(|open| open.volume_id != volume_id) {
+        tracking.open = Some(loaded);
+    }
+    Ok(())
+}
+
+/// The pages the reader has on screen (two in a spread, none past the end).
+#[tauri::command]
+pub fn manga_session_pages(state: State<'_, AppState>, volume_id: String, pages: Vec<i64>) {
+    let mut tracking = state.manga.tracking.lock().unwrap();
+    if let Some(open) = tracking.open.as_mut().filter(|open| open.volume_id == volume_id) {
+        open.show(&pages);
+    }
+}
+
 /// The text of every page of a volume (`null` where there is none), for the
 /// reader's text layer.
 #[tauri::command]

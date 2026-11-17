@@ -63,7 +63,11 @@ vn_confirm_before_log: boolean,
 /**
  * Show the floating session window above other applications.
  */
-overlay_enabled: boolean, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
+overlay_enabled: boolean, 
+/**
+ * Seconds a page must stay on screen before it counts as read.
+ */
+manga_page_dwell_secs: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
 /**
  * AnkiConnect server address, same as Yomitan's "AnkiConnect server
  * address": users who changed `webBindAddress`/`webBindPort` need it.

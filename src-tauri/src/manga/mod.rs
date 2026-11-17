@@ -9,6 +9,7 @@ pub mod library;
 pub mod mokuro;
 pub mod protocol;
 pub mod reader;
+pub mod session;
 pub mod store;
 pub mod thumbs;
 
@@ -25,6 +26,9 @@ pub struct Runtime {
     pub last_scan: Mutex<Option<Instant>>,
     /// The volume the reader window shows, or is about to.
     pub reader: Mutex<Option<reader::ReaderTarget>>,
+    /// What is being read and counted (see `session`). Never held across an
+    /// `.await`.
+    pub tracking: Mutex<session::Tracking>,
 }
 
 /// Extensions the webview can show as a page.

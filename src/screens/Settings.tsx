@@ -10,6 +10,7 @@ import { AppSection } from './settings/AppSection';
 import { BackupSection } from './settings/BackupSection';
 import { DictionariesSection } from './settings/DictionariesSection';
 import { DiscordSection } from './settings/DiscordSection';
+import { MangaSection } from './settings/MangaSection';
 import { NovelsSection } from './settings/NovelsSection';
 import { ReadingOverlaySection } from './settings/ReadingOverlaySection';
 import { SettingsSearch } from './settings/SettingsSearch';
@@ -125,6 +126,7 @@ export default function SettingsScreen() {
           {section === 'account' ? <AccountSection settings={settings} /> : null}
           {section === 'anime' ? <AnimeSection settings={settings} /> : null}
           {section === 'novels' ? <NovelsSection settings={settings} /> : null}
+          {section === 'manga' ? <MangaSection settings={settings} /> : null}
           {section === 'readingOverlay' ? <ReadingOverlaySection /> : null}
           {section === 'dictionaries' ? <DictionariesSection /> : null}
           {section === 'anki' ? <AnkiSection settings={settings} /> : null}

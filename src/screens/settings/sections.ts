@@ -1,5 +1,6 @@
 import {
   BookA,
+  BookImage,
   BookOpenText,
   DatabaseBackup,
   Layers,
@@ -16,6 +17,7 @@ export const SECTION_IDS = [
   'account',
   'anime',
   'novels',
+  'manga',
   'readingOverlay',
   'dictionaries',
   'anki',
@@ -31,6 +33,7 @@ export const SECTION_ICONS: Record<SectionId, LucideIcon> = {
   account: UserRound,
   anime: MonitorPlay,
   novels: BookOpenText,
+  manga: BookImage,
   readingOverlay: PanelTop,
   dictionaries: BookA,
   anki: Layers,
@@ -76,6 +79,8 @@ export const SEARCH_INDEX: { section: SectionId; label: string; hint?: string }[
   { section: 'novels', label: 'settings:filters.chinese', hint: 'settings:filters.chineseHint' },
   { section: 'novels', label: 'settings:filters.regex', hint: 'settings:filters.regexHint' },
   { section: 'novels', label: 'settings:filters.words', hint: 'settings:filters.wordsHint' },
+
+  { section: 'manga', label: 'settings:manga.dwell', hint: 'settings:manga.dwellHint' },
 
   { section: 'readingOverlay', label: 'readingOverlay:openSettings', hint: 'readingOverlay:settingsHint' },
 

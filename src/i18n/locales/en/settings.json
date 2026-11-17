@@ -214,6 +214,7 @@
     "account": "Account",
     "anime": "Anime",
     "novels": "Visual novels and games",
+    "manga": "Manga reader",
     "readingOverlay": "Reading overlay",
     "dictionaries": "Dictionaries",
     "anki": "Anki",
@@ -227,5 +228,9 @@
     "label": "Search settings",
     "placeholder": "Search settings…",
     "empty": "No setting matches."
+  },
+  "manga": {
+    "dwell": "A page counts after {{count}} s on screen",
+    "dwellHint": "Each page counts once, with its characters if it has text. Both pages of a spread count."
   }
 }

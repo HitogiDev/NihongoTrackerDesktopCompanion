@@ -214,6 +214,7 @@
     "account": "Cuenta",
     "anime": "Anime",
     "novels": "Novelas visuales y juegos",
+    "manga": "Lector de manga",
     "readingOverlay": "Overlay de lectura",
     "dictionaries": "Diccionarios",
     "anki": "Anki",
@@ -227,5 +228,9 @@
     "label": "Buscar en los ajustes",
     "placeholder": "Buscar ajustes…",
     "empty": "Ningún ajuste coincide."
+  },
+  "manga": {
+    "dwell": "Una página cuenta tras {{count}} s en pantalla",
+    "dwellHint": "Cada página cuenta una sola vez, con sus caracteres si tiene texto. En doble página cuentan las dos."
   }
 }

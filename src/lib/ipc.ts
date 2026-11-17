@@ -250,6 +250,10 @@ export const ipc = {
     invoke<ReaderPrefs>('manga_save_reader_prefs', { seriesId, prefs }),
   /** The text of every page (`null` where there is none), for the text layer. */
   mangaVolumeText: (volumeId: string) => invoke<(MokuroPage | null)[]>('manga_volume_text', { volumeId }),
+  /** The reader shows this volume: Rust starts counting it (see `manga::session`). */
+  mangaSessionOpen: (volumeId: string) => invoke<void>('manga_session_open', { volumeId }),
+  /** The pages on screen now; none past the last page. */
+  mangaSessionPages: (volumeId: string, pages: number[]) => invoke<void>('manga_session_pages', { volumeId, pages }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

@@ -559,6 +559,32 @@ impl Db {
         })
     }
 
+    // ── reading ────────────────────────────────────────────────────────
+
+    /// Records that a page was read, with the characters it had. `true` only
+    /// the first time: a page counts once, however often it is shown again.
+    pub fn mark_manga_page_read(&self, volume_id: &str, page: i64, chars: i64) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO manga_page_read (volume_id, page, chars, read_at) VALUES (?1, ?2, ?3, ?4)",
+                params![volume_id, page, chars.max(0), now_iso()],
+            )
+            .map(|changed| changed > 0)
+        })
+    }
+
+    /// Pages of a volume already counted, and their characters.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn manga_read_totals(&self, volume_id: &str) -> Result<(i64, i64)> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(chars), 0) FROM manga_page_read WHERE volume_id = ?1",
+                params![volume_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+        })
+    }
+
     #[allow(dead_code)]
     pub fn set_manga_page_text(&self, volume_id: &str, page: i64, blocks_json: &str, engine: &str) -> Result<()> {
         self.with(|c| {
@@ -671,6 +697,18 @@ pub(crate) mod tests {
         let shelf = db.manga_continue_reading(10).unwrap();
         let ids: Vec<_> = shelf.iter().map(|item| (item.volume_id.as_str(), item.page, item.up_next)).collect();
         assert_eq!(ids, [("a2", 0, true), ("b1", 4, false)]);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_page_counts_once() {
+        let (db, path) = temp_db();
+        assert!(db.mark_manga_page_read("v1", 3, 120).unwrap());
+        assert!(!db.mark_manga_page_read("v1", 3, 999).unwrap(), "shown again: not read again");
+        assert!(db.mark_manga_page_read("v1", 4, 0).unwrap());
+        assert!(db.mark_manga_page_read("v2", 3, 10).unwrap(), "another volume's page 3");
+        assert_eq!(db.manga_read_totals("v1").unwrap(), (2, 120));
         drop(db);
         let _ = std::fs::remove_file(path);
     }

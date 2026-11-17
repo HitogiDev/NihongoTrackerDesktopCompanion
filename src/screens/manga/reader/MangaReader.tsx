@@ -206,6 +206,24 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
   }, [save]);
 
+  // ── counting ───────────────────────────────────────────────────────
+  // Rust times the pages and counts them (`manga::session`); the reader only
+  // says which ones are on screen.
+  const [tracked, setTracked] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setTracked(false);
+    void ipc.mangaSessionOpen(volume.id).then(() => { if (alive) setTracked(true); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [volume.id]);
+  const onScreen = atEnd ? '' : (vertical ? [page] : spread).join(',');
+  useEffect(() => {
+    // Only once Rust has the volume: the pages of another one are ignored.
+    if (!tracked) return;
+    const pages = onScreen ? onScreen.split(',').map(Number) : [];
+    void ipc.mangaSessionPages(volume.id, pages).catch(() => undefined);
+  }, [tracked, onScreen, volume.id]);
+
   // ── window ─────────────────────────────────────────────────────────
   useEffect(() => {
     const title = `${series.title} · ${volume.title}`;

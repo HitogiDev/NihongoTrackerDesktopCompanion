@@ -15,6 +15,9 @@ fn d_episode_minutes() -> u32 {
 fn d_afk() -> u64 {
     120
 }
+fn d_manga_dwell() -> u64 {
+    3
+}
 /// What mpv's own sample `mpv.conf` suggests, and what most people already have.
 /// On Windows `playback::normalize_ipc_path` maps it to the real named pipe.
 fn d_mpv_ipc() -> String {
@@ -140,6 +143,11 @@ pub struct Settings {
     /// Show the floating session window above other applications.
     #[serde(default)]
     pub overlay_enabled: bool,
+
+    // ── Manga reader ───────────────────────────────────────────────────
+    /// Seconds a page must stay on screen before it counts as read.
+    #[serde(default = "d_manga_dwell")]
+    pub manga_page_dwell_secs: u64,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -299,6 +307,7 @@ impl Default for Settings {
             vn_open_texthooker: true,
             vn_confirm_before_log: true,
             overlay_enabled: false,
+            manga_page_dwell_secs: d_manga_dwell(),
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),
