@@ -62,12 +62,29 @@
     "title": "Latest logs",
     "openWeb": "Open on the web"
   },
-  "reviewPending": "Review {{count}} pending log",
-  "reviewPending_other": "Review {{count}} pending logs",
   "subtitlePartial": "Detection is limited on this system. Settings → Advanced lists what works.",
   "toast": {
     "synced": "Synced with NihongoTracker.",
     "syncOffline": "Still no connection. Your logs stay queued and will be sent later.",
     "syncFailed": "Could not sync: {{message}}"
-  }
+  },
+  "pendingNotice": "{{count}} log is waiting for your confirmation.",
+  "pendingNotice_other": "{{count}} logs are waiting for your confirmation.",
+  "today": {
+    "title": "Today",
+    "scope": "on this computer",
+    "time": "Time",
+    "chars": "Characters",
+    "episodes": "Episodes",
+    "streak": "Streak",
+    "streakCounted": "Today already counts",
+    "streakPending": "Nothing logged today yet",
+    "webHint": "Logs made on the website or the phone are not counted here."
+  },
+  "community": {
+    "title": "Community",
+    "show": "Show",
+    "hide": "Hide"
+  },
+  "pendingReview": "Review"
 }
