@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MokuroBlock } from '../../../lib/types';
-import { blockBox, blockFontSize, blockText } from './textLayer';
+import { blockBox, blockFontSize, blockText } from './blockGeometry';
 
 const block = (patch: Partial<MokuroBlock>): MokuroBlock => ({ box: [100, 100, 200, 400], vertical: true, font_size: 40, lines: ['あいうえお', 'かき'], lines_coords: [], ...patch });
 

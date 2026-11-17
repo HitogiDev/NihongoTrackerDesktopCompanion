@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { MokuroPage, TextLayerMode } from '../../../lib/types';
 import type { Size } from './layout';
-import { blockBox, blockFontSize, blockText } from './textLayer';
+import { blockBox, blockFontSize, blockText } from './blockGeometry';
 
 /**
  * mokuro's text over the page: one box per block, scaled from the image's
