@@ -345,3 +345,43 @@ textarea,
   from { opacity: 0; transform: scale(0.96) translateY(6px); }
   to { opacity: 1; transform: none; }
 }
+
+/* The text layer (TextLayer.tsx): real text in mokuro's boxes. Transparent
+   until hovered in "hover" mode, always shown in "always". */
+.manga-text-layer .manga-block {
+  position: absolute;
+  font-family: var(--font-jp);
+  line-height: 1.15;
+  white-space: nowrap;
+  color: transparent;
+  border-radius: 0.2em;
+  user-select: text;
+  cursor: text;
+}
+.manga-text-layer .manga-block-vertical {
+  writing-mode: vertical-rl;
+}
+.manga-text-layer .manga-line {
+  display: block;
+}
+.manga-text-layer[data-mode='hover'] .manga-block:hover,
+.manga-text-layer[data-mode='always'] .manga-block {
+  color: #141414;
+  background-color: rgb(255 255 255 / 0.96);
+  /* Room around the glyphs, not an elevation. */
+  box-shadow: 0 0 0 0.3em rgb(255 255 255 / 0.96);
+}
+/* Where the pointer is: the block that a lookup or Ctrl+C would use. */
+.manga-text-layer:not([data-mode='hidden']) .manga-block:hover {
+  outline: 2px solid color-mix(in oklch, var(--color-primary) 60%, transparent);
+  outline-offset: 0.3em;
+}
+.manga-text-layer .manga-block ::selection {
+  color: #141414;
+  background-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .manga-text-layer .manga-block {
+    transition: color 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;
+  }
+}

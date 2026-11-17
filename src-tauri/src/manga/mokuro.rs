@@ -120,8 +120,35 @@ pub fn match_pages(volume: &MokuroVolume, page_names: &[String]) -> Vec<Option<M
     matched
 }
 
+/// The text of each page of a volume, for the reader: its `.mokuro` when it
+/// has one, matched to its pages, and the stored OCR text for the pages that
+/// file does not cover. `None` for a page with no text at all.
+pub fn volume_text(db: &crate::db::Db, volume_id: &str) -> Result<Vec<Option<MokuroPage>>, String> {
+    let Some(location) = db.manga_volume_location(volume_id).map_err(|e| e.to_string())? else {
+        return Err("Unknown volume".into());
+    };
+    let mut pages = match location.mokuro_path.as_deref() {
+        Some(path) => match load(Path::new(path)) {
+            Ok(volume) => match_pages(&volume, &location.pages),
+            Err(error) => {
+                log::warn!("unreadable .mokuro for {volume_id}: {error}");
+                vec![None; location.pages.len()]
+            }
+        },
+        None => vec![None; location.pages.len()],
+    };
+    for (page, json, _engine) in db.manga_page_text(volume_id).map_err(|e| e.to_string())? {
+        if let Some(slot) = usize::try_from(page).ok().and_then(|page| pages.get_mut(page)) {
+            if slot.is_none() {
+                *slot = serde_json::from_str::<MokuroPage>(&json).ok();
+            }
+        }
+    }
+    Ok(pages)
+}
+
 /// The text of a page, as the reader reads it: each block's lines joined.
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn page_text(page: &MokuroPage) -> Vec<String> {
     page.blocks.iter().map(|block| block.lines.concat()).filter(|text| !text.is_empty()).collect()
 }
@@ -204,6 +231,35 @@ mod tests {
         // Renamed entirely, same count: the order is all there is.
         let names = vec!["a.png".to_string(), "b.png".to_string()];
         assert_eq!(match_pages(&volume, &names)[0].as_ref().unwrap().img_path, "第1巻/002.jpg");
+    }
+
+    #[test]
+    fn a_volume_takes_its_mokuro_text_and_the_ocr_cache_fills_the_gaps() {
+        use crate::manga::store::tests::{series, temp_db, volume};
+        use crate::manga::store::{VolumeRecord, SOURCE_LOCAL};
+        let (db, path) = temp_db();
+        let mokuro = std::env::temp_dir().join(format!("ntdc-{}.mokuro", uuid::Uuid::new_v4()));
+        std::fs::write(&mokuro, MINIMAL).unwrap();
+        let record = VolumeRecord {
+            pages: vec!["001.jpg".into(), "002.jpg".into(), "003.jpg".into()],
+            mokuro_path: Some(mokuro.to_string_lossy().into_owned()),
+            ..volume("v1", 1, 0)
+        };
+        db.add_manga_source("src", SOURCE_LOCAL, "M", "/m").unwrap();
+        db.apply_manga_scan("src", SOURCE_LOCAL, &[series("s", "S", vec![record])]).unwrap();
+        let ocr = MokuroPage { img_width: 10.0, img_height: 10.0, blocks: vec![MokuroBlock { lines: vec!["三".into()], ..Default::default() }], ..Default::default() };
+        db.set_manga_page_text("v1", 2, &serde_json::to_string(&ocr).unwrap(), "builtin").unwrap();
+        // The OCR cache never replaces mokuro's text.
+        db.set_manga_page_text("v1", 1, &serde_json::to_string(&ocr).unwrap(), "builtin").unwrap();
+
+        let text = volume_text(&db, "v1").unwrap();
+        assert!(text[0].as_ref().unwrap().blocks.is_empty());
+        assert_eq!(page_text(text[1].as_ref().unwrap()), ["こんにちは世界"]);
+        assert_eq!(page_text(text[2].as_ref().unwrap()), ["三"]);
+        assert!(volume_text(&db, "nope").is_err());
+        drop(db);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(mokuro);
     }
 
     #[test]

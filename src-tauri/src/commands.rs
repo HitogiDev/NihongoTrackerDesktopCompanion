@@ -1626,3 +1626,13 @@ pub fn manga_save_reader_prefs(
     crate::manga::reader::save_prefs(&state.db, &series_id, &prefs).map_err(err)?;
     Ok(prefs)
 }
+
+/// The text of every page of a volume (`null` where there is none), for the
+/// reader's text layer.
+#[tauri::command]
+pub async fn manga_volume_text(state: State<'_, AppState>, volume_id: String) -> CmdResult<Vec<Option<crate::manga::mokuro::MokuroPage>>> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::manga::mokuro::volume_text(&db, &volume_id))
+        .await
+        .map_err(err)?
+}

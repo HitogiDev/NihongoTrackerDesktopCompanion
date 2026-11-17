@@ -18,6 +18,7 @@ import type {
   MangaLibrary,
   MangaSeriesDetail,
   MangaSource,
+  MokuroPage,
   ReaderPrefs,
   ReaderTarget,
   ReaderVolume,
@@ -247,6 +248,8 @@ export const ipc = {
     invoke<void>('manga_save_progress', { volumeId, page, finished }),
   mangaSaveReaderPrefs: (seriesId: string, prefs: ReaderPrefs) =>
     invoke<ReaderPrefs>('manga_save_reader_prefs', { seriesId, prefs }),
+  /** The text of every page (`null` where there is none), for the text layer. */
+  mangaVolumeText: (volumeId: string) => invoke<(MokuroPage | null)[]>('manga_volume_text', { volumeId }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

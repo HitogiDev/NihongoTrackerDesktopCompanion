@@ -366,6 +366,7 @@ pub fn run() {
             commands::manga_reader_volume,
             commands::manga_save_progress,
             commands::manga_save_reader_prefs,
+            commands::manga_volume_text,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

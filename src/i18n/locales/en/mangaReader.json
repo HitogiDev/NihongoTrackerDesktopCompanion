@@ -21,7 +21,7 @@
     "fit": "Fit",
     "background": "Background",
     "textLayer": "Text",
-    "shortcuts": "← → turn pages · Space / Shift+Space · Home / End · F full screen"
+    "shortcuts": "← → turn pages · Space / Shift+Space · Home / End · F full screen · T text · Shift or Alt over text: dictionary · Ctrl+C copies a block"
   },
   "layout": {
     "single": "Single",
@@ -47,7 +47,9 @@
   "text": {
     "hover": "On hover",
     "always": "Always",
-    "hidden": "Hidden"
+    "hidden": "Hidden",
+    "toggle": "Text: {{mode}}",
+    "copied": "Block copied"
   },
   "end": {
     "title": "End of {{volume}}",

@@ -3,16 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
-import { BookX } from 'lucide-react';
+import { BookX, EyeOff, ScanText, Type } from 'lucide-react';
+import { DictionaryPopup } from '../../../components/DictionaryPopup';
+import { useDictionaryHover } from '../../../hooks/useDictionaryHover';
+import { useAppStore } from '../../../store/useAppStore';
+import { toast } from '../../../store/useToastStore';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
-import type { ReaderPrefs, ReaderTarget, ReaderVolume } from '../../../lib/types';
+import type { MokuroPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, spreadOf, type Size } from './layout';
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
 import { BACKGROUND_CLASS } from './styles';
+import { TextLayer } from './TextLayer';
 import { useAutoHide } from './useAutoHide';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 
@@ -22,6 +27,8 @@ const SAVE_DELAY_MS = 600;
 const WHEEL_GAP_MS = 280;
 /** Wider than this (width / height) is a two-page scan that stands alone. */
 const WIDE_RATIO = 1.15;
+const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'always', always: 'hidden', hidden: 'hover' };
+const TEXT_MODE_ICON = { hover: ScanText, always: Type, hidden: EyeOff } as const;
 
 function useViewport(): Size {
   const [size, setSize] = useState<Size>({ width: window.innerWidth, height: window.innerHeight });
@@ -117,16 +124,50 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [natural, setNatural] = useState<Record<number, Size>>({});
   const vertical = prefs.layout === 'vertical';
 
-  const sizeOf = useCallback((index: number) => natural[index] ?? DEFAULT_PAGE, [natural]);
+  // ── text ───────────────────────────────────────────────────────────
+  const hasText = volume.ocr_state !== 'none';
+  const textQuery = useQuery({
+    queryKey: ['manga', 'text', volume.id],
+    queryFn: () => ipc.mangaVolumeText(volume.id),
+    enabled: hasText,
+    staleTime: Infinity,
+  });
+  const text: (MokuroPage | null)[] = textQuery.data ?? [];
+  const popupDelay = useAppStore((s) => Math.max(0, Math.min(2000, s.settings?.dictionary_popup_delay_ms ?? 75)));
+  const theme = useAppStore((s) => s.settings?.theme);
+  const dictionary = useDictionaryHover(popupDelay);
+  const hoveredBlock = useRef<{ text: string; element: HTMLElement } | null>(null);
+  const copyingBlock = useRef<string | null>(null);
+  useEffect(() => {
+    const onCopy = (event: ClipboardEvent) => {
+      const text = copyingBlock.current;
+      if (text === null) return;
+      copyingBlock.current = null;
+      event.preventDefault();
+      event.clipboardData?.setData('text/plain', text);
+      window.getSelection()?.removeAllRanges();
+      toast.success(t('text.copied'));
+    };
+    document.addEventListener('copy', onCopy);
+    return () => document.removeEventListener('copy', onCopy);
+  }, [t]);
+
+  // A page's size is known from its text before its image arrives.
+  const sizeOf = useCallback((index: number): Size => {
+    const known = natural[index];
+    if (known) return known;
+    const page = text[index];
+    return page && page.img_width > 0 && page.img_height > 0 ? { width: page.img_width, height: page.img_height } : DEFAULT_PAGE;
+  }, [natural, text]);
   const rememberSize = useCallback((index: number, size: Size) => {
     setNatural((known) => (known[index]?.width === size.width && known[index]?.height === size.height ? known : { ...known, [index]: size }));
   }, []);
   const spreads = useMemo(
     () => buildSpreads(count, prefs.layout, prefs.cover_alone, (index) => {
-      const size = natural[index];
-      return Boolean(size && size.width > size.height * WIDE_RATIO);
+      const size = sizeOf(index);
+      return size.width > size.height * WIDE_RATIO;
     }),
-    [count, prefs.layout, prefs.cover_alone, natural],
+    [count, prefs.layout, prefs.cover_alone, sizeOf],
   );
   const spreadIndex = spreadOf(spreads, page);
   const spread = spreads[spreadIndex] ?? [0];
@@ -227,6 +268,17 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     const onKey = (event: KeyboardEvent) => {
       const element = event.target as HTMLElement | null;
       if (element?.closest('input, textarea, select, [role="dialog"] button')) return;
+      // Ctrl+C with nothing selected copies the block under the pointer: it
+      // is selected for the copy (no clipboard permission needed in any
+      // webview) and the `copy` handler below writes its lines joined.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && hoveredBlock.current) {
+        const range = document.createRange();
+        range.selectNodeContents(hoveredBlock.current.element);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        copyingBlock.current = hoveredBlock.current.text;
+        return;
+      }
       const action = keyAction(event, prefs.direction, prefs.layout);
       if (!action) return;
       event.preventDefault();
@@ -240,19 +292,23 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         case 'stepDown': strip.current?.scrollBy(0.15); break;
         case 'stepUp': strip.current?.scrollBy(-0.15); break;
         case 'fullscreen': void toggleFullscreen(); break;
+        case 'text': if (hasText) updatePrefs({ text_layer: NEXT_TEXT_MODE[prefs.text_layer] }); break;
         case 'escape':
-          if (settingsOpen) setSettingsOpen(false);
+          if (dictionary.dictionaryRequest) dictionary.closeDictionary();
+          else if (settingsOpen) setSettingsOpen(false);
           else if (fullscreen) void toggleFullscreen();
           break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [count, fullscreen, goNext, goPrevious, goSpread, prefs.direction, prefs.layout, seek, settingsOpen, spreads.length, toggleFullscreen, vertical]);
+  }, [count, dictionary, fullscreen, goNext, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
     if (vertical || prefs.fit !== 'height' || Math.abs(event.deltaY) < 4) return;
+    // The dictionary and the settings scroll on their own.
+    if ((event.target as HTMLElement).closest('[role="dialog"], [data-reader-chrome]')) return;
     const now = performance.now();
     if (now - lastWheel.current < WHEEL_GAP_MS) return;
     lastWheel.current = now;
@@ -277,6 +333,20 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
 
+  const overlay = hasText
+    ? (index: number, size: Size) => (
+      <TextLayer
+        page={text[index]}
+        size={size}
+        mode={prefs.text_layer}
+        onPointer={dictionary.openDictionaryAt}
+        onLeave={dictionary.cancelDictionaryHover}
+        onHoverBlock={(value) => { hoveredBlock.current = value; }}
+      />
+    )
+    : undefined;
+  const TextModeIcon = TEXT_MODE_ICON[prefs.text_layer];
+
   const pageLabel = spread.length > 1 && !vertical
     ? t('spreadOf', { first: spread[0] + 1, last: spread[spread.length - 1] + 1, count })
     : t('pageOf', { page: page + 1, count });
@@ -298,6 +368,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           sizeOf={sizeOf}
           onNaturalSize={rememberSize}
           onPage={setPage}
+          overlay={overlay}
         />
       ) : (
         <PagedView
@@ -308,6 +379,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           viewport={viewport}
           sizeOf={sizeOf}
           onNaturalSize={rememberSize}
+          overlay={overlay}
         />
       )}
 
@@ -321,6 +393,18 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
         onHover={(hovering) => chrome.pin('top', hovering)}
+        extra={hasText ? (
+          <Button
+            appearance="ghost"
+            size="sm"
+            shape="square"
+            aria-label={t('text.toggle', { mode: t(`text.${prefs.text_layer}`) })}
+            title={`${t('text.toggle', { mode: t(`text.${prefs.text_layer}`) })} (T)`}
+            onClick={() => updatePrefs({ text_layer: NEXT_TEXT_MODE[prefs.text_layer] })}
+          >
+            <TextModeIcon className="h-4 w-4" />
+          </Button>
+        ) : null}
       />
       {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={volume.ocr_state !== 'none'} /> : null}
       <BottomBar
@@ -334,6 +418,19 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onSeek={seek}
         onHover={(hovering) => chrome.pin('bottom', hovering)}
       />
+      {dictionary.dictionaryRequest ? (
+        <DictionaryPopup
+          initial={dictionary.dictionaryRequest}
+          miningContext={dictionary.dictionaryContext}
+          entries={dictionary.dictionaryEntries}
+          loading={dictionary.dictionaryLoading}
+          anchor={dictionary.dictionaryAnchor}
+          vertical={dictionary.dictionaryVertical}
+          theme={theme}
+          onLookup={dictionary.lookupDictionary}
+          onClose={dictionary.closeDictionary}
+        />
+      ) : null}
       {atEnd ? (
         <EndCard
           volumeTitle={volume.title}

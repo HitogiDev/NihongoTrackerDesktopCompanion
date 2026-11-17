@@ -24,7 +24,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useManualTimer } from './texthooker/useManualTimer';
 import { useHookerLines } from './texthooker/useHookerLines';
 import { useRoom } from './texthooker/useRoom';
-import { useDictionaryHover } from './texthooker/useDictionaryHover';
+import { useDictionaryHover } from '../hooks/useDictionaryHover';
 import { LineList } from './texthooker/LineList';
 import { TopBar } from './texthooker/TopBar';
 import { TimerEditModal, TimerResetModal } from './texthooker/TimerEditModal';

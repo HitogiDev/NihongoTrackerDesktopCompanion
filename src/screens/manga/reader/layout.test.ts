@@ -42,6 +42,7 @@ describe('navigation', () => {
     expect(keyAction(key(' '), 'rtl', 'double')).toBe('next');
     expect(keyAction(key(' ', true), 'rtl', 'double')).toBe('previous');
     expect(keyAction(key('End'), 'rtl', 'vertical')).toBe('last');
+    expect(keyAction(key('t'), 'rtl', 'double')).toBe('text');
     expect(keyAction(key('ArrowDown'), 'rtl', 'vertical')).toBe('stepDown');
     expect(keyAction(key(' ', true), 'rtl', 'vertical')).toBe('screenUp');
     expect(keyAction(key('ArrowLeft'), 'rtl', 'vertical')).toBeNull();

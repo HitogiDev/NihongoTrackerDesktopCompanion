@@ -21,7 +21,7 @@
     "fit": "Ajuste",
     "background": "Fondo",
     "textLayer": "Texto",
-    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa"
+    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa · T texto · Mayús o Alt sobre el texto: diccionario · Ctrl+C copia un bloque"
   },
   "layout": {
     "single": "Una",
@@ -47,7 +47,9 @@
   "text": {
     "hover": "Al pasar",
     "always": "Siempre",
-    "hidden": "Oculto"
+    "hidden": "Oculto",
+    "toggle": "Texto: {{mode}}",
+    "copied": "Bloque copiado"
   },
   "end": {
     "title": "Fin de {{volume}}",

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { LookupRequest } from '@nihongotracker/yomitan-content';
-import { ipc } from '../../lib/ipc';
-import { textHitAtPoint } from '../../lib/textHit';
-import type { DictionaryEntry, TextLine } from '../../lib/types';
+import { ipc } from '../lib/ipc';
+import { textHitAtPoint } from '../lib/textHit';
+import type { DictionaryEntry, TextLine } from '../lib/types';
 
-/** Shift/Alt hover lookups over the reader lines, and the popup they open. */
+/**
+ * Shift/Alt hover lookups over text, and the popup they open. Shared by the
+ * texthooker (its lines) and the manga reader (its text blocks).
+ */
 export function useDictionaryHover(dictionaryPopupDelay: number) {
   const [dictionaryRequest, setDictionaryRequest] = useState<LookupRequest | null>(null);
   const [dictionaryAnchor, setDictionaryAnchor] = useState<DOMRect | null>(null);
@@ -54,10 +57,9 @@ export function useDictionaryHover(dictionaryPopupDelay: number) {
     }, dictionaryPopupDelay);
   }, [dictionaryPopupDelay]);
 
-  const openDictionaryAtPointer = useCallback((event: ReactMouseEvent<HTMLElement>, line: TextLine) => {
+  /** Any element whose text content is `text`; `context` lets the popup mine it. */
+  const openDictionaryAt = useCallback((event: ReactMouseEvent<HTMLElement>, text: string, context?: { lineId: string; contentId: string }) => {
     const element = event.currentTarget;
-    const text = line.text;
-    const context = { lineId: line.id, contentId: line.content_id };
     dictionaryPointerRef.current = { element, text, x: event.clientX, y: event.clientY, context };
     if (!event.shiftKey && !event.altKey) {
       if (dictionaryHoverTimerRef.current !== null) {
@@ -69,6 +71,12 @@ export function useDictionaryHover(dictionaryPopupDelay: number) {
     }
     scheduleDictionaryLookup(element, text, event.clientX, event.clientY, context);
   }, [scheduleDictionaryLookup]);
+
+  const openDictionaryAtPointer = useCallback(
+    (event: ReactMouseEvent<HTMLElement>, line: TextLine) =>
+      openDictionaryAt(event, line.text, { lineId: line.id, contentId: line.content_id }),
+    [openDictionaryAt],
+  );
 
   const cancelDictionaryHover = useCallback(() => {
     if (dictionaryHoverTimerRef.current !== null) {
@@ -110,6 +118,7 @@ export function useDictionaryHover(dictionaryPopupDelay: number) {
     dictionaryAnchor,
     dictionaryVertical,
     lookupDictionary,
+    openDictionaryAt,
     openDictionaryAtPointer,
     cancelDictionaryHover,
     closeDictionary,

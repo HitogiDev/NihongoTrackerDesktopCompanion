@@ -45,6 +45,8 @@ export function onScreen(spread: number[], direction: ReadingDirection): number[
 
 export type ReaderAction =
   | 'next' | 'previous' | 'first' | 'last' | 'fullscreen' | 'escape'
+  /** Cycle the text layer: on hover, always, hidden. */
+  | 'text'
   /** The strip: a screen down or up, or a short step. */
   | 'screenDown' | 'screenUp' | 'stepDown' | 'stepUp';
 
@@ -69,6 +71,8 @@ export function keyAction(event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlK
     case 'End': return 'last';
     case 'f':
     case 'F': return 'fullscreen';
+    case 't':
+    case 'T': return 'text';
     case 'Escape': return 'escape';
     default: return null;
   }
