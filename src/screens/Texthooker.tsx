@@ -13,7 +13,6 @@ import {
   Activity,
   BarChart2,
   Brain,
-  Clock,
   Copy,
   HelpCircle,
   Inbox,
@@ -42,6 +41,7 @@ import { useRoom } from './texthooker/useRoom';
 import { useDictionaryHover } from './texthooker/useDictionaryHover';
 import { LineList } from './texthooker/LineList';
 import { TopBar } from './texthooker/TopBar';
+import { TimerEditModal, TimerResetModal } from './texthooker/TimerEditModal';
 import {
   FONT_FAMILY_OPTIONS,
   HOOKER_THEME_OPTIONS,
@@ -146,8 +146,6 @@ export default function TexthookerScreen() {
   const [expandedIntelligenceId, setExpandedIntelligenceId] = useState<string | null>(null);
   const [isTimerEditOpen, setIsTimerEditOpen] = useState(false);
   const [isResetTimerConfirmOpen, setIsResetTimerConfirmOpen] = useState(false);
-  const [savingTimer, setSavingTimer] = useState(false);
-  const [timerError, setTimerError] = useState(false);
   const [clearTarget, setClearTarget] = useState<string | null>(null);
   const [clearingLines, setClearingLines] = useState(false);
   const [clearError, setClearError] = useState(false);
@@ -165,9 +163,6 @@ export default function TexthookerScreen() {
   const [isLogging, setIsLogging] = useState(false);
   const [logComment, setLogComment] = useState('');
   const [isLogAnimating, setIsLogAnimating] = useState(false);
-  const [timerEditHours, setTimerEditHours] = useState(0);
-  const [timerEditMinutes, setTimerEditMinutes] = useState(0);
-  const [timerEditSeconds, setTimerEditSeconds] = useState(0);
 
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -351,42 +346,28 @@ export default function TexthookerScreen() {
     });
   }, [autoSession, anchorTimer, setIsTimerActive, lastActivityRef, secondsRef]);
 
-  const handleOpenTimerEdit = useCallback(() => {
-    const seconds = clock.current();
-    setTimerEditHours(Math.floor(seconds / 3600));
-    setTimerEditMinutes(Math.floor((seconds % 3600) / 60));
-    setTimerEditSeconds(seconds % 60);
-    setTimerError(false);
-    setIsTimerEditOpen(true);
-  }, [clock]);
+  const handleOpenTimerEdit = useCallback(() => setIsTimerEditOpen(true), []);
+  const closeTimerEdit = useCallback(() => setIsTimerEditOpen(false), []);
+  const closeResetTimer = useCallback(() => setIsResetTimerConfirmOpen(false), []);
 
-  const handleSaveTimerEdit = useCallback(async () => {
-    const total = timerEditHours * 3600 + timerEditMinutes * 60 + timerEditSeconds;
-    setSavingTimer(true); setTimerError(false);
-    try {
-      await ipc.hookerSetTimer(contentId, total, true);
-      if (contentIdRef.current !== contentId) return;
-      setSeconds(total);
-      lastActivityRef.current = Date.now();
-      setIsTimerEditOpen(false);
-    } catch { setTimerError(true); }
-    finally { setSavingTimer(false); }
-  }, [timerEditHours, timerEditMinutes, timerEditSeconds, contentId, setSeconds, lastActivityRef]);
+  const handleSaveTimerEdit = useCallback(async (total: number) => {
+    await ipc.hookerSetTimer(contentId, total, true);
+    if (contentIdRef.current !== contentId) return;
+    setSeconds(total);
+    lastActivityRef.current = Date.now();
+    setIsTimerEditOpen(false);
+  }, [contentId, contentIdRef, setSeconds, lastActivityRef]);
 
   const handleResetTimer = useCallback(async () => {
-    setSavingTimer(true); setTimerError(false);
-    try {
-      if (hasAutoSession) await ipc.setSessionPaused(true);
-      await ipc.hookerSetTimer(contentId, 0, true);
-      if (contentIdRef.current !== contentId) return;
-      setSeconds(0);
-      setIsTimerActive(false);
-      setIsResetTimerConfirmOpen(false);
-    } catch { setTimerError(true); }
-    finally { setSavingTimer(false); }
-  }, [contentId, hasAutoSession, setSeconds, setIsTimerActive]);
+    if (hasAutoSession) await ipc.setSessionPaused(true);
+    await ipc.hookerSetTimer(contentId, 0, true);
+    if (contentIdRef.current !== contentId) return;
+    setSeconds(0);
+    setIsTimerActive(false);
+    setIsResetTimerConfirmOpen(false);
+  }, [contentId, contentIdRef, hasAutoSession, setSeconds, setIsTimerActive]);
 
-  useEffect(() => { setIsTimerEditOpen(false); setIsResetTimerConfirmOpen(false); setTimerError(false); }, [contentId]);
+  useEffect(() => { setIsTimerEditOpen(false); setIsResetTimerConfirmOpen(false); }, [contentId]);
 
   // ── lines ───────────────────────────────────────────────────────────
 
@@ -566,7 +547,7 @@ export default function TexthookerScreen() {
         onChangeInputSource={(source) => void changeInputSource(source)}
         onOpenHookPicker={openHookPicker}
         onToggleTimer={toggleTimer}
-        onResetTimer={() => { setTimerError(false); setIsResetTimerConfirmOpen(true); }}
+        onResetTimer={() => setIsResetTimerConfirmOpen(true)}
         onEditTimer={handleOpenTimerEdit}
         onDeleteLast={handleDeleteLast}
         onUndo={() => void handleUndo()}
@@ -575,107 +556,18 @@ export default function TexthookerScreen() {
         onOpenSessions={() => setIsSessionPickerOpen(true)}
       />
 
-      {/* Timer Edit Modal */}
-      <dialog
-        className={`modal modal-bottom sm:modal-middle ${isTimerEditOpen ? 'modal-open' : ''}`}
-      >
-        <div className="modal-box max-w-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-lg flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              {t('timer.title')}
-            </h3>
-            <button
-              onClick={() => setIsTimerEditOpen(false)}
-              className="btn btn-ghost btn-sm btn-circle"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      <TimerEditModal
+        open={isTimerEditOpen}
+        clock={clock}
+        onClose={closeTimerEdit}
+        onSave={handleSaveTimerEdit}
+      />
 
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <Field label={t('timer.hours')}>
-              <input
-                type="number"
-                min="0"
-                max="99"
-                value={timerEditHours}
-                onChange={(e) => setTimerEditHours(Math.max(0, parseInt(e.target.value) || 0))}
-                className="input w-20 text-center font-mono text-lg"
-              />
-            </Field>
-            <span className="text-2xl font-bold mt-6">:</span>
-            <Field label={t('timer.minutes')}>
-              <input
-                type="number"
-                min="0"
-                max="59"
-                value={timerEditMinutes}
-                onChange={(e) =>
-                  setTimerEditMinutes(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))
-                }
-                className="input w-20 text-center font-mono text-lg"
-              />
-            </Field>
-            <span className="text-2xl font-bold mt-6">:</span>
-            <Field label={t('timer.seconds')}>
-              <input
-                type="number"
-                min="0"
-                max="59"
-                value={timerEditSeconds}
-                onChange={(e) =>
-                  setTimerEditSeconds(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))
-                }
-                className="input w-20 text-center font-mono text-lg"
-              />
-            </Field>
-          </div>
-
-          <div className="modal-action">
-            <button onClick={() => setIsTimerEditOpen(false)} className="btn btn-ghost">
-              {t('common:cancel')}
-            </button>
-            <button disabled={savingTimer} onClick={() => void handleSaveTimerEdit()} className="btn btn-primary">
-              {t('common:save')}
-            </button>
-          </div>
-          {timerError && <p role="alert" className="mt-3 text-sm text-error">{t('timer.saveFailed')}</p>}
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button onClick={() => setIsTimerEditOpen(false)}>close</button>
-        </form>
-      </dialog>
-
-      {/* Reset Timer Confirmation Modal */}
-      <dialog
-        className={`modal modal-bottom sm:modal-middle ${
-          isResetTimerConfirmOpen ? 'modal-open' : ''
-        }`}
-      >
-        <div className="modal-box max-w-sm">
-          <h3 className="font-bold text-lg mb-2">{t('timer.resetConfirm')}</h3>
-          <p className="text-base-content/70 mb-5">
-            {t('timer.resetBody')}
-          </p>
-          <div className="modal-action">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setIsResetTimerConfirmOpen(false)}
-            >
-              {t('common:cancel')}
-            </button>
-            <button type="button" disabled={savingTimer} className="btn btn-error" onClick={() => void handleResetTimer()}>
-              {t('timer.resetAction')}
-            </button>
-          </div>
-          {timerError && <p role="alert" className="mt-3 text-sm text-error">{t('timer.saveFailed')}</p>}
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button onClick={() => setIsResetTimerConfirmOpen(false)}>close</button>
-        </form>
-      </dialog>
+      <TimerResetModal
+        open={isResetTimerConfirmOpen}
+        onClose={closeResetTimer}
+        onReset={handleResetTimer}
+      />
 
       {/* Stats Modal */}
       <dialog className={`modal modal-bottom sm:modal-middle ${isStatsOpen ? 'modal-open' : ''}`}>
