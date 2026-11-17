@@ -89,5 +89,20 @@
     "show": "Show",
     "hide": "Hide"
   },
-  "pendingReview": "Review"
+  "pendingReview": "Review",
+  "manga": {
+    "badge": "Manga reader",
+    "counting": "Counting time",
+    "paused": "Paused",
+    "pausedIdle": "No activity for {{duration}}.",
+    "pausedUnfocused": "The reader is not in the foreground.",
+    "time": "Time",
+    "pages": "Pages",
+    "characters": "Characters",
+    "pageOf": "Page {{page}} of {{count}}",
+    "volumeProgress": "Progress in the volume",
+    "unlinked": "Not linked: the log will wait in Pending.",
+    "link": "Link",
+    "open": "Back to the reader"
+  }
 }

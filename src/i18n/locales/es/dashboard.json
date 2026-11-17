@@ -89,5 +89,20 @@
     "show": "Mostrar",
     "hide": "Ocultar"
   },
-  "pendingReview": "Revisar"
+  "pendingReview": "Revisar",
+  "manga": {
+    "badge": "Lector de manga",
+    "counting": "Contando tiempo",
+    "paused": "En pausa",
+    "pausedIdle": "Sin actividad desde hace {{duration}}.",
+    "pausedUnfocused": "El lector no está en primer plano.",
+    "time": "Tiempo",
+    "pages": "Páginas",
+    "characters": "Caracteres",
+    "pageOf": "Página {{page}} de {{count}}",
+    "volumeProgress": "Progreso en el tomo",
+    "unlinked": "Sin vincular: el log esperará en Pendientes.",
+    "link": "Vincular",
+    "open": "Volver al lector"
+  }
 }
