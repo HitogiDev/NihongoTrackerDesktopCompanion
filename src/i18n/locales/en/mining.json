@@ -13,7 +13,7 @@
   "screenshotAlt": "Screenshot of the source window",
   "sendToAnki": "Send to Anki",
   "delete": "Delete saved sentence",
-  "empty": "No saved sentences yet. Save a line from the texthooker or use the shortcut.",
+  "empty": "Save a line from the texthooker or use the shortcut.",
   "errors": {
     "lineNotFound": "That texthooker line is no longer available.",
     "noJapanese": "This line has no Japanese text.",
@@ -24,5 +24,12 @@
     "ankiUnavailable": "Could not connect to AnkiConnect. Open Anki Desktop and check the add-on.",
     "ankiInvalidResponse": "AnkiConnect returned an invalid response.",
     "ankiTimeout": "AnkiConnect did not answer in time. Bring Anki to the front, close any open dialog in it and try again."
-  }
+  },
+  "toast": {
+    "saved": "Sentence saved.",
+    "exported": "Sent to Anki.",
+    "deleted": "Saved sentence deleted."
+  },
+  "loadFailed": "Saved sentences could not be loaded.",
+  "emptyTitle": "No saved sentences"
 }

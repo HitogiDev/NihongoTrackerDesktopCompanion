@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Award, BookOpen, Film, Flame, Globe2, UsersRound } from 'lucide-react';
-import { EmptyState } from './ui/Empty';
+import { EmptyState, ErrorState, ListSkeleton } from './ui/Empty';
 import { Spinner } from './ui/Spinner';
 import { numberWithCommas, relativeDate } from '../lib/format';
 import { ipc } from '../lib/ipc';
@@ -120,11 +120,10 @@ export function SocialActivityFeed({ compact = false }: { compact?: boolean }) {
       {online === false ? (
         <div className="surface-muted"><EmptyState icon={Globe2} title={t('offline')} /></div>
       ) : feed.isPending ? (
-        <div className="surface-muted flex min-h-40 items-center justify-center"><Spinner /></div>
+        <ListSkeleton rows={compact ? 3 : 5} className="h-16" />
       ) : feed.isError ? (
-        <div role="alert" className="alert alert-error">
-          <span>{t('loadError')}</span>
-          <button type="button" className="btn btn-sm" onClick={() => void feed.refetch()}>{t('retry')}</button>
+        <div className="surface-muted">
+          <ErrorState compact title={t('loadError')} error={feed.error} retrying={feed.isFetching} onRetry={() => void feed.refetch()} />
         </div>
       ) : activities.length === 0 ? (
         <div className="surface-muted"><EmptyState icon={UsersRound} title={t(`empty.${scope}`)} description={scope === 'following' ? t('followingHint') : undefined} /></div>

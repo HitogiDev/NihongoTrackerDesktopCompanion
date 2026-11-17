@@ -97,6 +97,41 @@ describe('settings events', () => {
   });
 });
 
+describe('tracker events', () => {
+  beforeEach(async () => {
+    await useAppStore.getState().bootstrap();
+  });
+
+  const snapshot = (patch: Record<string, unknown> = {}) => ({
+    pending_count: 0,
+    queued_count: 0,
+    capabilities: { focus: true, idle: true, media_session: false },
+    game_hook: { attached: false, pid: null },
+    vn: { title: 'Test', elapsed_seconds: 10 },
+    ...patch,
+  });
+
+  it('keeps the reference of the parts that did not change', () => {
+    emit(events.tracker, snapshot());
+    const before = useAppStore.getState().tracker!;
+    emit(events.tracker, snapshot({ vn: { title: 'Test', elapsed_seconds: 11 } }));
+    const after = useAppStore.getState().tracker!;
+
+    expect(after).not.toBe(before);
+    expect(after.vn).not.toBe(before.vn);
+    expect(after.vn).toEqual({ title: 'Test', elapsed_seconds: 11 });
+    expect(after.capabilities).toBe(before.capabilities);
+    expect(after.game_hook).toBe(before.game_hook);
+  });
+
+  it('keeps the whole snapshot when nothing changed', () => {
+    emit(events.tracker, snapshot());
+    const before = useAppStore.getState().tracker;
+    emit(events.tracker, snapshot());
+    expect(useAppStore.getState().tracker).toBe(before);
+  });
+});
+
 describe('updateSettings', () => {
   beforeEach(async () => {
     await useAppStore.getState().bootstrap();

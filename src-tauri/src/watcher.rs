@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::json;
@@ -11,7 +12,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::Settings;
-use crate::db::TextState;
+use crate::db::{TextState, VnApp};
 use crate::parser;
 use crate::platform;
 use crate::players;
@@ -27,7 +28,8 @@ pub const EVT_VN_ENDED: &str = "vn://ended";
 
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut sys = System::new();
+        let mut processes = ProcessWatch::new();
+        let mut last_emitted: Option<TrackerSnapshot> = None;
         let mut persist_countdown: u64 = 0;
         let mut last_tick = Instant::now();
         loop {
@@ -41,7 +43,7 @@ pub fn spawn(app: AppHandle) {
             let elapsed = credited_elapsed(now.duration_since(last_tick), interval);
             last_tick = now;
 
-            tick(&app, &mut sys, &settings, elapsed, &mut persist_countdown).await;
+            tick(&app, &mut processes, &mut last_emitted, &settings, elapsed, &mut persist_countdown).await;
             tokio::time::sleep(Duration::from_millis(interval)).await;
         }
     });
@@ -62,7 +64,9 @@ struct Observed {
     foreground_title: Option<String>,
     idle_seconds: u64,
     foreground_pid: Option<u32>,
-    running: HashMap<String, Vec<ObservedProcess>>,
+    /// Shared with [`ProcessWatch`], which only rebuilds it when the process
+    /// list changed.
+    running: Arc<HashMap<String, Vec<ObservedProcess>>>,
     /// Players on the desktop's media bus (MPRIS on Linux), for when their
     /// window titles cannot be read.
     media: Vec<platform::MediaPlayer>,
@@ -82,29 +86,109 @@ impl Observed {
     }
 }
 
-fn observe(sys: &mut System) -> Observed {
+/// How often every process on the machine is scanned. The poll interval is
+/// configurable, so this is measured in time, not in ticks.
+const FULL_REFRESH_EVERY: Duration = Duration::from_secs(5);
+
+fn process_refresh_kind() -> ProcessRefreshKind {
     let refresh = ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet);
     // Outside Windows the command line names Wine / Proton games (see
     // `platform::process_key`).
     #[cfg(not(windows))]
     let refresh = refresh.with_cmd(UpdateKind::OnlyIfNotSet);
-    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh);
+    refresh
+}
 
-    let mut running: HashMap<String, Vec<ObservedProcess>> = HashMap::new();
-    for (pid, process) in sys.processes() {
-        running.entry(platform::process_key(process)).or_default().push(ObservedProcess {
-            pid: pid.as_u32(),
-            image_path: process.exe().map(PathBuf::from),
-        });
+/// The process list the detector matches against. Scanning every process is
+/// the expensive part of a tick and the list barely changes, so the full scan
+/// runs every [`FULL_REFRESH_EVERY`]; in between only the processes that can
+/// change what is detected right now are refreshed (see `observe`).
+struct ProcessWatch {
+    sys: System,
+    last_full: Option<Instant>,
+    running: Arc<HashMap<String, Vec<ObservedProcess>>>,
+}
+
+impl ProcessWatch {
+    fn new() -> Self {
+        Self { sys: System::new(), last_full: None, running: Arc::default() }
     }
 
+    fn knows(&self, pid: u32) -> bool {
+        self.sys.process(Pid::from_u32(pid)).is_some()
+    }
+
+    /// Full scan on the first call and every [`FULL_REFRESH_EVERY`]; otherwise
+    /// only `watched`, so a process that starts or exits among them is seen on
+    /// this same tick (dead ones are dropped: `remove_dead = true` only touches
+    /// the pids that were asked for).
+    fn refresh(&mut self, now: Instant, watched: &[u32]) {
+        let full = self
+            .last_full
+            .is_none_or(|last| now.saturating_duration_since(last) >= FULL_REFRESH_EVERY);
+        let changed = if full {
+            self.sys.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh_kind());
+            self.last_full = Some(now);
+            true
+        } else {
+            let mut pids: Vec<Pid> = watched.iter().copied().map(Pid::from_u32).collect();
+            pids.sort_unstable();
+            pids.dedup();
+            if pids.is_empty() {
+                false
+            } else {
+                let known = |sys: &System| pids.iter().map(|pid| sys.process(*pid).is_some()).collect::<Vec<_>>();
+                let before = known(&self.sys);
+                self.sys.refresh_processes_specifics(ProcessesToUpdate::Some(&pids), true, process_refresh_kind());
+                before != known(&self.sys)
+            }
+        };
+        if changed {
+            let mut running: HashMap<String, Vec<ObservedProcess>> = HashMap::new();
+            for (pid, process) in self.sys.processes() {
+                running.entry(platform::process_key(process)).or_default().push(ObservedProcess {
+                    pid: pid.as_u32(),
+                    image_path: process.exe().map(PathBuf::from),
+                });
+            }
+            self.running = Arc::new(running);
+        }
+    }
+}
+
+fn is_fushi(process_key: &str) -> bool {
+    process_key.trim_end_matches(".exe") == crate::fushi::PROCESS
+}
+
+/// `session_pids`: the processes of the sessions in progress, whose exit must
+/// end them on this tick.
+fn observe(processes: &mut ProcessWatch, now: Instant, session_pids: &[u32]) -> Observed {
+    let windows = platform::visible_windows();
+    let fg = platform::foreground_window();
+
+    // Between full scans: the focused process, the sessions' own, any window
+    // whose process is new (a game or a player that just opened) and Fushi,
+    // which is detected by its process rather than by a window title.
+    let mut watched: Vec<u32> = session_pids.to_vec();
+    watched.extend(fg.as_ref().map(|w| w.pid));
+    watched.extend(windows.iter().map(|w| w.pid).filter(|pid| !processes.knows(*pid)));
+    watched.extend(
+        processes
+            .running
+            .iter()
+            .filter(|(key, _)| is_fushi(key))
+            .flat_map(|(_, found)| found.iter().map(|process| process.pid)),
+    );
+    processes.refresh(now, &watched);
+
+    let sys = &processes.sys;
     let name_of = |pid: u32| -> String {
         sys.process(Pid::from_u32(pid))
             .map(platform::process_key)
             .unwrap_or_default()
     };
 
-    let windows = platform::visible_windows()
+    let windows = windows
         .into_iter()
         .map(|mut w| {
             w.process = name_of(w.pid);
@@ -112,29 +196,30 @@ fn observe(sys: &mut System) -> Observed {
         })
         .collect();
 
-    let fg = platform::foreground_window();
     Observed {
         windows,
         foreground_process: fg.as_ref().map(|w| name_of(w.pid)),
         foreground_pid: fg.as_ref().map(|w| w.pid),
         foreground_title: fg.map(|w| w.title),
         idle_seconds: platform::idle_seconds(),
-        running,
+        running: processes.running.clone(),
         media: platform::media_players(),
     }
 }
 
 async fn tick(
     app: &AppHandle,
-    sys: &mut System,
+    processes: &mut ProcessWatch,
+    last_emitted: &mut Option<TrackerSnapshot>,
     settings: &Settings,
     elapsed: Duration,
     persist_countdown: &mut u64,
 ) {
-    let observed = observe(sys);
     let state = app.state::<AppState>();
 
     let mut snapshot = state.tracker.read().await.clone();
+    let session_pids: Vec<u32> = snapshot.vn.iter().map(|session| session.pid).collect();
+    let observed = observe(processes, Instant::now(), &session_pids);
     apply_vn_timer_edit(&state, &mut snapshot);
     snapshot.capabilities = platform::capabilities();
     snapshot.platform_supported = snapshot.capabilities.window_titles
@@ -144,6 +229,9 @@ async fn tick(
     (snapshot.active_process, snapshot.active_window) = observed.active_window_summary();
     snapshot.idle_seconds = observed.idle_seconds;
 
+    // Read once per tick; the list only changes when the library is edited.
+    let vn_apps = state.db.vn_apps_cached().unwrap_or_else(|_| Arc::from(Vec::new()));
+
     if settings.detect_players {
         update_anime(app, &mut snapshot, &observed, settings, elapsed).await;
     } else {
@@ -151,27 +239,57 @@ async fn tick(
     }
 
     if settings.detect_visual_novels || settings.detect_games {
-        update_vn(app, &mut snapshot, &observed, settings, elapsed, persist_countdown).await;
+        update_vn(app, &mut snapshot, &observed, &vn_apps, settings, elapsed, persist_countdown).await;
     } else if snapshot.vn.is_some() {
         finish_vn(app, &mut snapshot, settings).await;
     }
 
-    crate::reading_overlay::sync_session(app, &snapshot, settings);
-    update_native_game_hook(app, &mut snapshot, &observed);
+    crate::reading_overlay::sync_session(app, &snapshot, &vn_apps, settings);
+    update_native_game_hook(app, &mut snapshot, &observed, &vn_apps);
     crate::reading_overlay::sync_hook(app, &snapshot.game_hook);
 
     snapshot.queued_count = state.db.queued_count();
-    snapshot.pending_count = state.db.list_pending().map(|p| p.len() as i64).unwrap_or(0);
+    snapshot.pending_count = state.db.pending_count();
 
     let mut current = state.tracker.write().await;
     apply_vn_timer_edit(&state, &mut snapshot);
     *current = snapshot.clone();
     drop(current);
-    let _ = app.emit(EVT_TRACKER, &snapshot);
-    crate::native_bridge::publish_status(app, &snapshot.game_hook).await;
+    // New windows ask for the state with `get_tracker_state` when they open,
+    // so an unchanged snapshot needs no event.
+    if should_emit(last_emitted.as_ref(), &snapshot) {
+        let _ = app.emit(EVT_TRACKER, &snapshot);
+    }
+    // A reader that connects gets the current status on its own (see
+    // `native_bridge::serve`); the broadcast is only for changes.
+    if last_emitted.as_ref().is_none_or(|last| last.game_hook != snapshot.game_hook) {
+        crate::native_bridge::publish_status(app, &snapshot.game_hook).await;
+    }
     // Hands the presence to its own thread, which owns the rate limit and the
-    // socket; nothing here can block on Discord.
+    // socket and drops a presence equal to the one published; nothing here can
+    // block on Discord. Called every tick: a blacklist edit must still apply.
     crate::discord::update(app, &snapshot, settings).await;
+    *last_emitted = Some(snapshot);
+}
+
+/// Whether the UI, last sent `prev`, needs `next`. The idle time only shows on
+/// the VN card, so without a VN session it changing alone is not news; neither
+/// is the sub-second remainder of a timer, which is never serialized.
+fn should_emit(prev: Option<&TrackerSnapshot>, next: &TrackerSnapshot) -> bool {
+    fn visible(snapshot: &TrackerSnapshot) -> TrackerSnapshot {
+        let mut snapshot = snapshot.clone();
+        if snapshot.vn.is_none() {
+            snapshot.idle_seconds = 0;
+        }
+        if let Some(anime) = snapshot.anime.as_mut() {
+            anime.elapsed_carry_ms = 0;
+        }
+        if let Some(vn) = snapshot.vn.as_mut() {
+            vn.elapsed_carry_ms = 0;
+        }
+        snapshot
+    }
+    prev.is_none_or(|prev| visible(prev) != visible(next))
 }
 
 fn apply_vn_timer_edit(state: &AppState, snapshot: &mut TrackerSnapshot) {
@@ -183,17 +301,19 @@ fn apply_vn_timer_edit(state: &AppState, snapshot: &mut TrackerSnapshot) {
     let _ = state.db.save_text_state(&stored);
 }
 
-fn update_native_game_hook(app: &AppHandle, snapshot: &mut TrackerSnapshot, observed: &Observed) {
+fn update_native_game_hook(
+    app: &AppHandle,
+    snapshot: &mut TrackerSnapshot,
+    observed: &Observed,
+    vn_apps: &[VnApp],
+) {
     let state = app.state::<AppState>();
     let target = snapshot.vn.as_ref().and_then(|session| {
         if session.media_type != "game" && session.media_type != "vn" {
             return None;
         }
-        let entry = state
-            .db
-            .list_vn_apps()
-            .ok()?
-            .into_iter()
+        let entry = vn_apps
+            .iter()
             .find(|entry| entry.enabled && entry.native_hook_enabled && entry.exe == session.exe)?;
         let processes = observed.running.get(&entry.exe)?;
         let process = processes
@@ -202,10 +322,10 @@ fn update_native_game_hook(app: &AppHandle, snapshot: &mut TrackerSnapshot, obse
             .or_else(|| processes.first())?;
         Some(crate::native_hook::GameHookTarget {
             content_id: session.content_id.clone(),
-            exe: entry.exe,
+            exe: entry.exe.clone(),
             pid: process.pid,
             image_path: process.image_path.clone(),
-            selected_hook_code: entry.native_hook_code,
+            selected_hook_code: entry.native_hook_code.clone(),
         })
     });
     state.game_hook.reconcile(app, target);
@@ -227,7 +347,7 @@ async fn update_anime(
     let fushi = observed
         .running
         .keys()
-        .any(|key| key.trim_end_matches(".exe") == crate::fushi::PROCESS)
+        .any(|key| is_fushi(key))
         .then(crate::fushi::now_playing)
         .flatten()
         .filter(|media| !media.paused || snapshot.anime.as_ref().is_some_and(|s| s.player == "Fushi"));
@@ -475,12 +595,12 @@ async fn update_vn(
     app: &AppHandle,
     snapshot: &mut TrackerSnapshot,
     observed: &Observed,
+    apps: &[VnApp],
     settings: &Settings,
     elapsed: Duration,
     persist_countdown: &mut u64,
 ) {
     let state = app.state::<AppState>();
-    let apps = state.db.list_vn_apps().unwrap_or_default();
 
     let eligible = apps
         .iter()
@@ -916,7 +1036,7 @@ mod observation_tests {
             foreground_title: Some("Settings".into()),
             idle_seconds: 0,
             foreground_pid: Some(own_pid),
-            running: HashMap::new(),
+            running: Arc::default(),
             media: Vec::new(),
         };
         assert_eq!(observed.active_window_summary(), (None, None));
@@ -931,6 +1051,39 @@ mod observation_tests {
         observed.foreground_process = None;
         observed.foreground_title = None;
         assert_eq!(observed.active_window_summary(), (None, None));
+    }
+
+    #[test]
+    fn the_state_is_emitted_only_when_something_visible_changed() {
+        let idle = TrackerSnapshot { enabled: true, idle_seconds: 3, ..Default::default() };
+        assert!(should_emit(None, &idle), "the first tick always goes out");
+        assert!(!should_emit(Some(&idle), &idle.clone()));
+
+        // Idle time alone is news only on the VN card.
+        let later = TrackerSnapshot { idle_seconds: 4, ..idle.clone() };
+        assert!(!should_emit(Some(&idle), &later));
+
+        let vn: VnSession = serde_json::from_value(json!({
+            "exe": "game.exe", "content_id": "v1", "media_title": "VN", "media_type": "vn",
+            "elapsed_secs": 10, "counting": true, "started_at": "launch",
+            "session_chars": 0, "session_lines": 0
+        })).unwrap();
+        let reading = TrackerSnapshot { vn: Some(vn.clone()), ..idle.clone() };
+        assert!(should_emit(Some(&idle), &reading), "a session started");
+        let reading_idle = TrackerSnapshot { idle_seconds: 30, ..reading.clone() };
+        assert!(should_emit(Some(&reading), &reading_idle), "the VN card shows idle time");
+
+        // A sub-second remainder is not serialized; a whole second is.
+        let mut carry = reading.clone();
+        carry.vn.as_mut().unwrap().elapsed_carry_ms = 500;
+        assert!(!should_emit(Some(&reading), &carry));
+        let mut second = reading.clone();
+        second.vn.as_mut().unwrap().elapsed_secs = 11;
+        assert!(should_emit(Some(&reading), &second));
+
+        let counts = TrackerSnapshot { pending_count: 1, ..idle.clone() };
+        assert!(should_emit(Some(&idle), &counts));
+        assert!(should_emit(Some(&reading), &idle), "a session ended");
     }
 
     #[test]
@@ -964,11 +1117,50 @@ mod observation_tests {
     #[test]
     fn observation_includes_the_running_executable_path() {
         let expected = std::env::current_exe().unwrap();
-        let mut system = System::new();
-        let observed = observe(&mut system);
+        let mut processes = ProcessWatch::new();
+        let observed = observe(&mut processes, Instant::now(), &[]);
         let process = observed.running.values().flatten()
             .find(|process| process.pid == std::process::id())
             .expect("The current process must be observed");
         assert_eq!(process.image_path.as_ref(), Some(&expected));
+    }
+
+    /// Not a test: the long-lived child process of the one below.
+    #[test]
+    #[ignore]
+    fn child_process_that_stays_alive() {
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
+    #[test]
+    fn a_process_started_between_full_scans_is_seen_on_the_next_tick() {
+        let start = Instant::now();
+        let mut processes = ProcessWatch::new();
+        processes.refresh(start, &[]);
+
+        // This same test binary, running only the ignored sleeper above.
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "watcher::observation_tests::child_process_that_stays_alive"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let visible = |processes: &ProcessWatch| {
+            processes.running.values().flatten().any(|process| process.pid == pid)
+        };
+
+        // Not due for a full scan, and nobody asked about the pid: unchanged.
+        processes.refresh(start + Duration::from_secs(1), &[]);
+        assert!(!visible(&processes));
+
+        // Its window appeared: the pid is refreshed on its own.
+        processes.refresh(start + Duration::from_secs(2), &[pid]);
+        assert!(visible(&processes), "a new pid is picked up without a full scan");
+
+        child.kill().unwrap();
+        child.wait().unwrap();
+        processes.refresh(start + Duration::from_secs(3), &[pid]);
+        assert!(!visible(&processes), "an exited session process is dropped on the same tick");
     }
 }

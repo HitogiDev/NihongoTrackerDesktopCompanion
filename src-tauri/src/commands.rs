@@ -558,6 +558,31 @@ pub async fn streak_status(app: AppHandle) -> CmdResult<Option<crate::streak::St
     crate::streak::refresh(&app, allowed_age).await.map_err(err)
 }
 
+/// Today's totals from the logs this computer queued or sent. The day is the
+/// account's (`streak.rs`), so the streak answer is asked for through the
+/// shared budget; offline, the last known timezone (or UTC) is used.
+#[tauri::command]
+pub async fn today_summary(app: AppHandle) -> CmdResult<crate::streak::TodaySummary> {
+    let allowed_age = crate::streak::budget(&app).await;
+    let fresh = crate::streak::refresh(&app, allowed_age).await.ok().flatten();
+    let state = app.state::<AppState>();
+    let status = match fresh {
+        Some(status) => Some(status),
+        None => state.streak.read().await.status.clone(),
+    };
+    let tz = crate::streak::parse_tz(status.as_ref().map_or("UTC", |s| s.timezone.as_str()));
+    let now = chrono::Utc::now();
+    // Two days back covers every timezone's "today"; older rows cannot match.
+    let since = (now - chrono::Duration::hours(48)).to_rfc3339();
+    let rows = state.db.outbox_logs_since(&since).map_err(err)?;
+    let mut summary = crate::streak::summarize_today(&rows, now, tz);
+    if let Some(status) = status {
+        summary.streak = Some(status.current_streak);
+        summary.streak_today = status.last_day_key.as_deref() == Some(summary.day.as_str());
+    }
+    Ok(summary)
+}
+
 #[tauri::command]
 pub async fn user_stats(state: State<'_, AppState>) -> CmdResult<Value> {
     let settings = state.settings_snapshot().await;

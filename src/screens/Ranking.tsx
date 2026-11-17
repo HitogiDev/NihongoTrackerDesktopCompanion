@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { CloudOff, Crown, Globe2, Handshake, Trophy, UserRoundCheck } from 'lucide-react';
-import { EmptyState } from '../components/ui/Empty';
+import { EmptyState, ErrorState, ListSkeleton } from '../components/ui/Empty';
 import DropdownSelect from '../components/ui/DropdownSelect';
 import { Spinner } from '../components/ui/Spinner';
 import { numberWithCommas } from '../lib/format';
@@ -86,18 +86,21 @@ function UserName({ row, onOpen }: { row: RankingRow; onOpen: () => void }) {
 }
 
 function PodiumUser({ row, place, value, unit, onOpen }: { row: RankingRow; place: 1 | 2 | 3; value: number; unit: string; onOpen: () => void }) {
+  const { t } = useTranslation('ranking');
+  const { t: tCommon } = useTranslation('common');
   const badge = { 1: 'bg-warning text-warning-content', 2: 'bg-base-content text-base-100', 3: 'bg-accent text-accent-content' }[place];
   return <div className="flex min-w-0 flex-col items-center gap-1 text-center">
     <div className="relative mb-2">{place === 1 ? <Crown className="absolute -top-6 left-1/2 h-6 w-6 -translate-x-1/2 text-warning" /> : null}<Avatar row={row} podium first={place === 1} onOpen={onOpen} /></div>
-    <span className={`badge badge-sm font-bold ${badge}`}>{['1st', '2nd', '3rd'][place - 1]}</span>
+    <span className={`badge badge-sm font-bold ${badge}`}>{t(`place.${place}`)}</span>
     <UserName row={row} onOpen={onOpen} />
-    <span className="text-sm text-base-content/70">Lv.{row.stats?.userLevel ?? 1}</span>
+    <span className="text-sm text-base-content/70">{tCommon('levelShort', { level: row.stats?.userLevel ?? 1 })}</span>
     <span className={`text-lg font-bold tabular-nums ${place === 1 ? 'text-warning' : ''}`}>{numberWithCommas(value)}</span>
     <span className="text-xs text-base-content/60">{unit}</span>
   </div>;
 }
 
 export default function RankingScreen() {
+  const { t: tCommon } = useTranslation('common');
   const { t } = useTranslation('ranking');
   const online = useAppStore((s) => s.online);
   const username = useAppStore((s) => s.settings?.username);
@@ -112,11 +115,11 @@ export default function RankingScreen() {
   const [limit, setLimit] = useState(25);
   const byMedium = mode === 'medium';
   const filter = metric === 'chars' ? 'userChars' : metric === 'hours' ? scope.replace('Xp', 'Hours') : scope;
-  const unit = byMedium ? mediumMetric === 'time' ? t('units.hours') : t(`metrics.${mediumMetric}`) : metric === 'hours' ? t('units.hours') : metric === 'chars' ? t('metrics.chars') : 'XP';
+  const unit = byMedium ? mediumMetric === 'time' ? t('units.hours') : t(`metrics.${mediumMetric}`) : metric === 'hours' ? t('units.hours') : metric === 'chars' ? t('metrics.chars') : t('metrics.xp');
   const label = byMedium ? `${t(`medium.${mediumType}`)} · ${t(`metrics.${mediumMetric}`)}` : `${t(`scope.${scope}`)} · ${t(`metrics.${metric}`)}`;
   const getValue = (row: RankingRow) => byMedium ? mediumMetric === 'time' ? row.hours ?? 0 : row[mediumMetric] ?? 0 : row.stats?.[filter] ?? 0;
 
-  const { data, isFetching, isError } = useQuery({
+  const { data, isFetching, isError, isLoading, error, refetch } = useQuery({
     queryKey: ['ranking', audience, mode, scope, metric, mediumType, mediumMetric, timeFilter, limit],
     queryFn: () => ipc.ranking({ filter, timeFilter, limit, audience, mediumType: byMedium ? mediumType : undefined, mediumMetric: byMedium ? mediumMetric : undefined }),
     enabled: online === true,
@@ -135,9 +138,9 @@ export default function RankingScreen() {
       <DropdownSelect className="select select-sm w-auto" aria-label={t('time.label')} value={timeFilter} onChange={(event) => { setTimeFilter(event.target.value as typeof timeFilter); setLimit(25); }}>{periods.map((value) => <option key={value} value={value}>{t(`time.${value}`)}</option>)}</DropdownSelect>
       {byMedium ? <div className="flex gap-2"><DropdownSelect className="select select-sm w-auto" aria-label={t('medium.label')} value={mediumType} onChange={(event) => { const next = event.target.value as typeof mediumType; setMediumType(next); setMediumMetric(mediumMetrics[next][0]); setLimit(25); }}>{media.map((value) => <option key={value} value={value}>{t(`medium.${value}`)}</option>)}</DropdownSelect><DropdownSelect className="select select-sm w-auto" aria-label={t('metrics.label')} value={mediumMetric} onChange={(event) => { setMediumMetric(event.target.value as MediumMetric); setLimit(25); }}>{mediumMetrics[mediumType].map((value) => <option key={value} value={value}>{t(`metrics.${value}`)}</option>)}</DropdownSelect></div> : <div className="flex gap-2"><DropdownSelect className="select select-sm w-auto" aria-label={t('scope.label')} value={scope} onChange={(event) => { const next = event.target.value as typeof scope; setScope(next); if (next === 'listeningXp' && metric === 'chars') setMetric('xp'); setLimit(25); }}>{scopes.map((value) => <option key={value} value={value}>{t(`scope.${value}`)}</option>)}</DropdownSelect><DropdownSelect className="select select-sm w-auto" aria-label={t('metrics.label')} value={metric} onChange={(event) => { setMetric(event.target.value as Metric); setLimit(25); }}>{(['xp', 'hours', ...(scope === 'listeningXp' ? [] : ['chars'])] as Metric[]).map((value) => <option key={value} value={value}>{t(`metrics.${value}`)}</option>)}</DropdownSelect></div>}
     </div>
-    {online === false ? <div className="surface"><EmptyState icon={CloudOff} title={t('offline')} /></div> : isError ? <div className="surface"><EmptyState icon={CloudOff} title={t('loadFailed')} /></div> : rows.length === 0 && !isFetching ? <div className="surface"><EmptyState icon={Trophy} title={audience === 'all' ? t('empty') : t('audience.empty')} /></div> : <div className="card surface overflow-hidden"><div className="card-body p-0">
+    {online === false ? <div className="surface"><EmptyState icon={CloudOff} title={t('offline')} /></div> : isLoading ? <ListSkeleton rows={6} className="h-14" /> : isError ? <div className="surface"><ErrorState title={t('loadFailed')} error={error} retrying={isFetching} onRetry={() => void refetch()} /></div> : rows.length === 0 && !isFetching ? <div className="surface"><EmptyState icon={Trophy} title={audience === 'all' ? t('empty') : t('audience.empty')} /></div> : <div className="card surface overflow-hidden"><div className="card-body p-0">
       {rows.length >= 3 ? <div className="bg-primary/15 px-3 pb-7 pt-10 sm:px-8"><div className="mx-auto grid max-w-2xl grid-cols-3 items-end gap-2 sm:gap-4">{([1, 0, 2] as const).map((index) => <PodiumUser key={rows[index].username} row={rows[index]} place={(index + 1) as 1 | 2 | 3} value={getValue(rows[index])} unit={unit} onOpen={() => openProfile(rows[index])} />)}</div></div> : null}
-      <div className="overflow-x-auto"><table className="table w-full"><thead><tr><th className="w-14 text-center">{t('table.rank')}</th><th>{t('table.user')}</th><th className="hidden text-center sm:table-cell">{t('table.level')}</th><th className="text-right">{t('columnHeader', { filter: label, unit })}</th></tr></thead><tbody>{rows.map((row, index) => { if (rows.length >= 3 && index < 3) return null; const isMe = row.username === username; return <tr key={row.username} className={isMe ? 'bg-primary/10' : ''}><td className="text-center font-bold text-base-content/70 tabular-nums">{index + 1}</td><td><div className="flex min-w-0 items-center gap-2 sm:gap-3"><Avatar row={row} onOpen={() => openProfile(row)} /><UserName row={row} onOpen={() => openProfile(row)} /></div></td><td className="hidden text-center sm:table-cell"><span className="badge badge-outline">Lv.{row.stats?.userLevel ?? 1}</span></td><td className="text-right"><div className="font-bold tabular-nums">{numberWithCommas(getValue(row))}</div><div className="text-xs text-base-content/60">{unit}</div></td></tr>; })}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="table w-full"><thead><tr><th className="w-14 text-center">{t('table.rank')}</th><th>{t('table.user')}</th><th className="hidden text-center sm:table-cell">{t('table.level')}</th><th className="text-right">{t('columnHeader', { filter: label, unit })}</th></tr></thead><tbody>{rows.map((row, index) => { if (rows.length >= 3 && index < 3) return null; const isMe = row.username === username; return <tr key={row.username} className={isMe ? 'bg-primary/10' : ''}><td className="text-center font-bold text-base-content/70 tabular-nums">{index + 1}</td><td><div className="flex min-w-0 items-center gap-2 sm:gap-3"><Avatar row={row} onOpen={() => openProfile(row)} /><UserName row={row} onOpen={() => openProfile(row)} /></div></td><td className="hidden text-center sm:table-cell"><span className="badge badge-outline">{tCommon('levelShort', { level: row.stats?.userLevel ?? 1 })}</span></td><td className="text-right"><div className="font-bold tabular-nums">{numberWithCommas(getValue(row))}</div><div className="text-xs text-base-content/60">{unit}</div></td></tr>; })}</tbody></table></div>
       {rows.length >= limit ? <div className="border-t border-base-300 p-5 text-center"><button type="button" className="btn btn-primary btn-sm" onClick={() => setLimit((value) => value + 25)}>{t('loadMore')}</button></div> : null}
     </div></div>}
     {isFetching ? <div className="mt-3 flex justify-center"><Spinner size="sm" /></div> : null}

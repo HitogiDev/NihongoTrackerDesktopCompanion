@@ -12,6 +12,7 @@
   "metrics": { "label": "Metric", "xp": "XP", "hours": "Hours", "chars": "Characters", "time": "Time", "episodes": "Episodes", "pages": "Pages" },
   "medium": { "label": "Medium", "anime": "Anime", "manga": "Manga", "light-novel": "Light Novel", "vn": "Visual Novel", "game": "Game", "video": "Video", "movie": "Movie", "tv show": "TV Show", "book": "Book", "audio": "Audio" },
   "units": { "hours": "hrs" },
+  "place": { "1": "1st", "2": "2nd", "3": "3rd" },
   "table": { "rank": "Rank", "user": "User", "level": "Level" },
   "columnHeader": "{{filter}} ({{unit}})",
   "position": "#{{position}}",

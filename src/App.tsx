@@ -3,11 +3,12 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { listen } from '@tauri-apps/api/event';
 import { Sidebar } from './components/Sidebar';
 import { PageLoader } from './components/ui/Spinner';
+import { Toaster } from './components/ui/Toaster';
 import { useAppStore } from './store/useAppStore';
 import { events, ipc } from './lib/ipc';
 
 // Every window loads this same bundle, so each screen is its own chunk: the
-// session overlay should not parse the 2,500-line texthooker to show a timer.
+// session overlay should not parse the whole texthooker to show a timer.
 const LogCelebrationHost = lazy(() => import('./components/LogCelebrationHost'));
 const QuickLogModal = lazy(() => import('./components/QuickLogModal').then((m) => ({ default: m.QuickLogModal })));
 const Dashboard = lazy(() => import('./screens/Dashboard'));
@@ -101,20 +102,31 @@ export default function App() {
   }
 
   if (windowLabel === 'settings') {
-    return <div className="h-screen overflow-y-auto bg-base-100 text-base-content"><SettingsScreen /></div>;
+    return <div className="h-screen overflow-y-auto bg-base-100 text-base-content">
+      <Suspense fallback={<PageLoader />}><SettingsScreen /></Suspense>
+      <Toaster />
+    </div>;
   }
 
-  if (windowLabel === 'texthooker') return <TexthookerScreen />;
+  if (windowLabel === 'texthooker') {
+    return <>
+      <Suspense fallback={<div className="min-h-screen bg-base-300"><PageLoader /></div>}><TexthookerScreen /></Suspense>
+      <Toaster />
+    </>;
+  }
 
   const configured = Boolean(settings.api_key && settings.api_key.trim());
   // The reader takes the whole window, like the web app's chrome-less route.
   const isReader = windowLabel === 'texthooker' || location.pathname.startsWith('/texthooker');
+  // The guided setup keeps the whole window until it is finished or skipped.
+  const isOnboarding = location.pathname.startsWith('/onboarding');
 
   return (
     <div className="app-shell flex h-screen overflow-hidden bg-base-100 text-base-content">
-      {configured && !isReader ? <Sidebar /> : null}
+      {configured && !isReader && !isOnboarding ? <Sidebar /> : null}
       <main className="min-w-0 flex-1 overflow-y-auto bg-base-100">
-        <Suspense fallback={null}>
+        {/* A screen's chunk can take a moment the first time: show that. */}
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {!configured ? (
             <>
@@ -142,6 +154,7 @@ export default function App() {
         <LogCelebrationHost />
         <QuickLogModal open={quickLogOpen} onClose={closeQuickLog} reason={quickLogReason} />
       </Suspense>
+      <Toaster />
     </div>
   );
 }

@@ -25,5 +25,20 @@
     "hookerIdle": "Hook inactive",
     "nativeConnected": "LunaHook connected",
     "nativeConnecting": "Connecting LunaHook…"
+  },
+  "palette": {
+    "open": "Search…",
+    "title": "Commands",
+    "placeholder": "Type a command or a work…",
+    "empty": "Nothing matches.",
+    "log": "Log immersion",
+    "sync": "Sync now",
+    "launch": "Open {{title}}",
+    "workTexthooker": "Texthooker: {{title}}",
+    "groups": {
+      "sections": "Go to",
+      "actions": "Actions",
+      "works": "Library"
+    }
   }
 }

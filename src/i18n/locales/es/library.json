@@ -4,7 +4,9 @@
   "works": "Novelas y juegos",
   "filter": {
     "search": "Buscar en biblioteca",
-    "all": "Todas las obras"
+    "all": "Todas las obras",
+    "noMatches": "Ninguna obra coincide con el filtro",
+    "clear": "Quitar filtro"
   },
   "view": {
     "grid": "Vista en cuadrícula",
@@ -65,5 +67,13 @@
     "title": "Elegir proceso",
     "filter": "Filtrar por nombre o título de ventana…",
     "window": "ventana"
-  }
+  },
+  "toast": {
+    "saved": "{{title}} guardada.",
+    "saveFailed": "No se pudo guardar la obra: {{message}}",
+    "removed": "{{title}} quitada de la biblioteca.",
+    "removeFailed": "No se pudo quitar la obra: {{message}}",
+    "launchFailed": "No se pudo abrir el programa: {{message}}"
+  },
+  "loadFailed": "No se pudo cargar la biblioteca."
 }

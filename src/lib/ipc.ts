@@ -30,6 +30,7 @@ import type {
   TextHistoryEntry,
   TextLine,
   TextSessionSummary,
+  TodaySummary,
   TrackerSnapshot,
   UserSummary,
   VnApp,
@@ -99,6 +100,8 @@ export const ipc = {
   userStats: () => invoke<Record<string, unknown>>('user_stats'),
   /** Shares the reminder loop's cache, so calling it often costs no requests. */
   streakStatus: () => invoke<StreakStatus | null>('streak_status'),
+  /** Today's totals from this computer's outbox, in the account's day. */
+  todaySummary: () => invoke<TodaySummary>('today_summary'),
   ranking: (args: {
     page?: number;
     limit?: number;

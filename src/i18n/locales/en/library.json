@@ -4,7 +4,9 @@
   "works": "Visual novels and games",
   "filter": {
     "search": "Search library",
-    "all": "All works"
+    "all": "All works",
+    "noMatches": "No work matches the filter",
+    "clear": "Clear filter"
   },
   "view": {
     "grid": "Grid view",
@@ -65,5 +67,13 @@
     "title": "Choose process",
     "filter": "Filter by name or window title…",
     "window": "window"
-  }
+  },
+  "toast": {
+    "saved": "{{title}} saved.",
+    "saveFailed": "Could not save the work: {{message}}",
+    "removed": "{{title}} removed from the library.",
+    "removeFailed": "Could not remove the work: {{message}}",
+    "launchFailed": "Could not open the program: {{message}}"
+  },
+  "loadFailed": "The library could not be loaded."
 }
