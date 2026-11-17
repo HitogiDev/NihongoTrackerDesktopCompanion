@@ -51,7 +51,13 @@ function xpLevelProgress(xp?: number, from?: number, to?: number): number | null
 
 export default function Dashboard() {
   const { t } = useTranslation('dashboard');
-  const tracker = useAppStore((s) => s.tracker);
+  // Primitive selectors: the snapshot changes every second while a session
+  // runs, and only `ActiveSessions` needs to follow it.
+  const platformSupported = useAppStore((s) => s.tracker?.platform_supported ?? false);
+  const fullDetection = useAppStore((s) =>
+    Boolean(s.tracker?.capabilities.window_titles && s.tracker.capabilities.foreground));
+  const queuedCount = useAppStore((s) => s.tracker?.queued_count ?? 0);
+  const pendingCount = useAppStore((s) => s.tracker?.pending_count ?? 0);
   const settings = useAppStore((s) => s.settings);
   const online = useAppStore((s) => s.online);
   const user = useAppStore((s) => s.user);
@@ -86,10 +92,6 @@ export default function Dashboard() {
     }
   }
 
-  const anime = tracker?.anime ?? null;
-  const vn = tracker?.vn ?? null;
-  const idle = tracker?.idle_seconds ?? 0;
-
   // Refetched whenever the outbox drains, so a fresh log shows up right away.
   const { data: recentLogs } = useQuery({
     queryKey: ['recent-logs'],
@@ -123,9 +125,9 @@ export default function Dashboard() {
   return (
     <Page
       title={t('title')}
-      description={!tracker?.platform_supported
+      description={!platformSupported
         ? t('subtitleUnsupported')
-        : tracker.capabilities.window_titles && tracker.capabilities.foreground ? t('subtitle') : t('subtitlePartial')}
+        : fullDetection ? t('subtitle') : t('subtitlePartial')}
       actions={
         <>
           <Button variant="primary" size="sm" onClick={() => openQuickLog('manual')}>
@@ -169,29 +171,14 @@ export default function Dashboard() {
         <div className="alert alert-warning">
           <AlertTriangle className="w-5 h-5" />
           <span className="text-sm">
-            {tracker?.queued_count
-              ? t('offlineWarningQueued', { count: tracker.queued_count })
+            {queuedCount
+              ? t('offlineWarningQueued', { count: queuedCount })
               : t('offlineWarning')}
           </span>
         </div>
       ) : null}
 
-      {anime || vn ? (
-        // What is running comes first; what isn't shrinks to a line under it.
-        <div className="space-y-2">
-          <div className={`grid gap-4 ${anime && vn ? 'lg:grid-cols-2' : ''}`}>
-            {anime ? <AnimeCard key={anime.key} session={anime} /> : null}
-            {vn ? <VnCard session={vn} idleSeconds={idle} /> : null}
-          </div>
-          {!anime ? <IdleCard kind="anime" compact /> : null}
-          {!vn ? <IdleCard kind="vn" compact /> : null}
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <IdleCard kind="anime" />
-          <IdleCard kind="vn" />
-        </div>
-      )}
+      <ActiveSessions />
 
       {stats ? (
         <section className="space-y-3" aria-labelledby="dashboard-progress">
@@ -294,13 +281,40 @@ export default function Dashboard() {
         </>
       ) : null}
 
-      {(tracker?.pending_count ?? 0) > 0 ? (
+      {pendingCount > 0 ? (
         <Link to="/queue" className="btn btn-warning btn-block">
           <Inbox className="w-4 h-4" />
-          {t('reviewPending', { count: tracker?.pending_count ?? 0 })}
+          {t('reviewPending', { count: pendingCount })}
         </Link>
       ) : null}
     </Page>
+  );
+}
+
+/** The only part of the Dashboard that follows the per-second snapshot. */
+function ActiveSessions() {
+  const anime = useAppStore((s) => s.tracker?.anime ?? null);
+  const vn = useAppStore((s) => s.tracker?.vn ?? null);
+  const idle = useAppStore((s) => s.tracker?.idle_seconds ?? 0);
+
+  if (!anime && !vn) {
+    return (
+      <div className="grid gap-4 lg:grid-cols-2">
+        <IdleCard kind="anime" />
+        <IdleCard kind="vn" />
+      </div>
+    );
+  }
+  // What is running comes first; what isn't shrinks to a line under it.
+  return (
+    <div className="space-y-2">
+      <div className={`grid gap-4 ${anime && vn ? 'lg:grid-cols-2' : ''}`}>
+        {anime ? <AnimeCard key={anime.key} session={anime} /> : null}
+        {vn ? <VnCard session={vn} idleSeconds={idle} /> : null}
+      </div>
+      {!anime ? <IdleCard kind="anime" compact /> : null}
+      {!vn ? <IdleCard kind="vn" compact /> : null}
+    </div>
   );
 }
 
