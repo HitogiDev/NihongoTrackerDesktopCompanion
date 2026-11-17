@@ -60,7 +60,10 @@
   },
   "recent": {
     "title": "Latest logs",
-    "openWeb": "Open on the web"
+    "openWeb": "Open on the web",
+    "loadFailed": "The latest logs could not be loaded.",
+    "empty": "No logs yet",
+    "emptyBody": "What you log, here or on the website, shows up here."
   },
   "subtitlePartial": "Detection is limited on this system. Settings → Advanced lists what works.",
   "toast": {

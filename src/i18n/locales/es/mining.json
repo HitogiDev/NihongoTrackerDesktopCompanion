@@ -13,7 +13,7 @@
   "screenshotAlt": "Captura de la ventana de origen",
   "sendToAnki": "Enviar a Anki",
   "delete": "Eliminar frase guardada",
-  "empty": "Todavía no hay frases guardadas. Guarda una línea del texthooker o usa el atajo.",
+  "empty": "Guarda una línea del texthooker o usa el atajo.",
   "errors": {
     "lineNotFound": "Esa línea del texthooker ya no está disponible.",
     "noJapanese": "Esta línea no contiene texto japonés.",
@@ -29,5 +29,7 @@
     "saved": "Frase guardada.",
     "exported": "Enviada a Anki.",
     "deleted": "Frase guardada eliminada."
-  }
+  },
+  "loadFailed": "No se pudieron cargar las frases guardadas.",
+  "emptyTitle": "No hay frases guardadas"
 }

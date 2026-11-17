@@ -18,5 +18,7 @@
     "saveAndSend": "Save and send",
     "rejected": "The server rejected it: {{error}}"
   },
-  "retry": "Send again"
+  "retry": "Send again",
+  "loadFailed": "Pending logs could not be loaded.",
+  "outboxLoadFailed": "The send queue could not be loaded."
 }

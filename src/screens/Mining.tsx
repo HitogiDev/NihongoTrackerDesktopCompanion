@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { BookmarkPlus, Image as ImageIcon, Send, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { EmptyState, ErrorState, ListSkeleton } from '../components/ui/Empty';
 import { Field } from '../components/ui/Field';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { events, ipc } from '../lib/ipc';
@@ -64,7 +65,18 @@ export default function MiningScreen() {
       </div>
 
       <SectionTitle>{t('saved', { count: sentences.data?.length ?? 0 })}</SectionTitle>
-      {sentences.data?.length ? (
+      {sentences.isPending ? (
+        <ListSkeleton rows={3} className="h-24" />
+      ) : sentences.isError ? (
+        <div className="surface">
+          <ErrorState
+            title={t('loadFailed')}
+            error={miningError(sentences.error)}
+            retrying={sentences.isFetching}
+            onRetry={() => void sentences.refetch()}
+          />
+        </div>
+      ) : sentences.data?.length ? (
         <ul className="space-y-2">
           {sentences.data.map((sentence) => (
             <li key={sentence.id} className="surface p-3 space-y-2">
@@ -96,7 +108,11 @@ export default function MiningScreen() {
             </li>
           ))}
         </ul>
-      ) : <div className="surface p-6 text-sm text-base-content/60">{t('empty')}</div>}
+      ) : (
+        <div className="surface">
+          <EmptyState icon={BookmarkPlus} title={t('emptyTitle')} description={t('empty')} />
+        </div>
+      )}
     </Page>
   );
 }

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { BookOpenText, Grid2X2, Link2, List, Pencil, Play, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { EmptyState } from '../components/ui/Empty';
+import { EmptyState, ErrorState, Skeleton } from '../components/ui/Empty';
 import { Modal } from '../components/ui/Modal';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { VnAppModal } from '../components/VnAppModal';
@@ -69,7 +69,34 @@ export default function LibraryScreen() {
         {t('works')}
       </SectionTitle>
 
-      {list.length === 0 ? (
+      {apps.isPending ? (
+        <div className={view === 'grid' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'space-y-2'} aria-busy="true">
+          {Array.from({ length: view === 'grid' ? 5 : 3 }, (_, index) => (
+            <Skeleton key={index} className={view === 'grid' ? 'aspect-[3/5] w-full rounded-box' : 'h-20 w-full rounded-box'} />
+          ))}
+        </div>
+      ) : apps.isError ? (
+        <div className="surface">
+          <ErrorState
+            title={t('loadFailed')}
+            error={apps.error}
+            retrying={apps.isFetching}
+            onRetry={() => void apps.refetch()}
+          />
+        </div>
+      ) : list.length === 0 && (apps.data ?? []).length > 0 ? (
+        <div className="surface">
+          <EmptyState
+            icon={Search}
+            title={t('filter.noMatches')}
+            action={
+              <Button size="sm" appearance="outline" onClick={() => { setSearch(''); setMediaFilter('all'); }}>
+                {t('filter.clear')}
+              </Button>
+            }
+          />
+        </div>
+      ) : list.length === 0 ? (
         <div className="surface">
           <EmptyState
             icon={BookOpenText}

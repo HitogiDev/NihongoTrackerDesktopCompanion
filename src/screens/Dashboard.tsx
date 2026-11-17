@@ -25,7 +25,8 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Page, SectionTitle, StatTile } from '../components/ui/Page';
+import { EmptyState, ErrorState, ListSkeleton } from '../components/ui/Empty';
+import { Page, StatTile } from '../components/ui/Page';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import {
   formatClock,
@@ -246,34 +247,49 @@ function RecentLogs() {
   const online = useAppStore((s) => s.online);
   const settings = useAppStore((s) => s.settings);
   // Refetched whenever the outbox drains, so a fresh log shows up right away.
-  const { data: recentLogs } = useQuery({
+  const recentLogs = useQuery({
     queryKey: ['recent-logs'],
     queryFn: () => ipc.recentLogs(8),
     enabled: online === true,
     retry: false,
   });
-  const recent = recentLogs ?? [];
-  if (recent.length === 0) return null;
+  const recent = recentLogs.data ?? [];
+  // Offline the query is off and the notice above already says why.
+  if (online !== true && recent.length === 0) return null;
 
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        aside={
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            onClick={() =>
-              void openUrl(
-                `${settings?.api_base_url ?? ''}/user/${settings?.username ?? ''}`
-              )
-            }
-          >
-            {t('recent.openWeb')}
-          </button>
-        }
-      >
-        {t('recent.title')}
-      </SectionTitle>
+    <section className="space-y-3" aria-labelledby="dashboard-recent">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="dashboard-recent" className="text-base font-semibold">{t('recent.title')}</h2>
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs"
+          onClick={() =>
+            void openUrl(
+              `${settings?.api_base_url ?? ''}/user/${settings?.username ?? ''}`
+            )
+          }
+        >
+          {t('recent.openWeb')}
+        </button>
+      </div>
+      {recentLogs.isLoading ? <ListSkeleton rows={3} className="h-12" /> : null}
+      {recentLogs.isError && recent.length === 0 ? (
+        <div className="surface">
+          <ErrorState
+            compact
+            title={t('recent.loadFailed')}
+            error={recentLogs.error}
+            retrying={recentLogs.isFetching}
+            onRetry={() => void recentLogs.refetch()}
+          />
+        </div>
+      ) : null}
+      {recentLogs.isSuccess && recent.length === 0 ? (
+        <div className="surface">
+          <EmptyState compact icon={Inbox} title={t('recent.empty')} description={t('recent.emptyBody')} />
+        </div>
+      ) : null}
       <ul className="space-y-1.5">
         {recent.map((log) => {
           const logType = getMediaTypeClasses(log.type);

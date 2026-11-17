@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { EmptyState } from '../components/ui/Empty';
+import { EmptyState, ErrorState, ListSkeleton } from '../components/ui/Empty';
 import { Modal } from '../components/ui/Modal';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { MediaWebLink } from '../components/MediaWebLink';
@@ -104,7 +104,18 @@ export default function Queue() {
         {t('awaiting')}
       </SectionTitle>
 
-      {items.length === 0 ? (
+      {pending.isPending ? (
+        <ListSkeleton rows={2} className="h-28" />
+      ) : pending.isError ? (
+        <div className="surface">
+          <ErrorState
+            title={t('loadFailed')}
+            error={pending.error}
+            retrying={pending.isFetching}
+            onRetry={() => void pending.refetch()}
+          />
+        </div>
+      ) : items.length === 0 ? (
         <div className="surface">
           <EmptyState icon={Inbox} title={t('empty')} description={t('emptyBody')} />
         </div>
@@ -121,6 +132,21 @@ export default function Queue() {
           ))}
         </ul>
       )}
+
+      {outbox.isError ? (
+        <>
+          <SectionTitle>{t('outbox')}</SectionTitle>
+          <div className="surface">
+            <ErrorState
+              compact
+              title={t('outboxLoadFailed')}
+              error={outbox.error}
+              retrying={outbox.isFetching}
+              onRetry={() => void outbox.refetch()}
+            />
+          </div>
+        </>
+      ) : null}
 
       {outboxItems.length > 0 ? (
         <>
