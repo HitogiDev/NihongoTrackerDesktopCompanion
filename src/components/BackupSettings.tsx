@@ -5,6 +5,7 @@ import { DatabaseBackup, Upload } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { ipc } from '../lib/ipc';
+import { toast } from '../store/useToastStore';
 
 const FILTERS = [{ name: 'SQLite', extensions: ['sqlite3', 'sqlite', 'db'] }];
 
@@ -15,7 +16,6 @@ const FILTERS = [{ name: 'SQLite', extensions: ['sqlite3', 'sqlite', 'db'] }];
 export function BackupSettings() {
   const { t } = useTranslation(['settings', 'common']);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
 
   const exportBackup = async () => {
@@ -23,12 +23,11 @@ export function BackupSettings() {
     const path = await saveFile({ defaultPath: `nihongotracker-companion-${day}.sqlite3`, filters: FILTERS });
     if (!path) return;
     setBusy(true);
-    setMessage(null);
     try {
       await ipc.exportDatabase(path);
-      setMessage({ ok: true, text: t('backup.exported', { path }) });
+      toast.success(t('backup.exported', { path }));
     } catch (cause) {
-      setMessage({ ok: false, text: String(cause) });
+      toast.error(String(cause));
     } finally {
       setBusy(false);
     }
@@ -42,12 +41,11 @@ export function BackupSettings() {
   const restore = async () => {
     if (!restoring) return;
     setBusy(true);
-    setMessage(null);
     try {
       // Resolves only when the restore fails: on success the app restarts.
       await ipc.restoreDatabase(restoring);
     } catch (cause) {
-      setMessage({ ok: false, text: String(cause) });
+      toast.error(String(cause));
       setRestoring(null);
     } finally {
       setBusy(false);
@@ -70,9 +68,6 @@ export function BackupSettings() {
           {t('backup.restore')}
         </Button>
       </div>
-      {message ? (
-        <p className={`px-3 pb-3 text-xs break-all ${message.ok ? 'text-success' : 'text-error'}`}>{message.text}</p>
-      ) : null}
 
       <Modal
         open={restoring !== null}

@@ -12,6 +12,8 @@ import { MediaSearchModal } from '../components/MediaSearchModal';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import { ipc } from '../lib/ipc';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from '../store/useToastStore';
+import i18n from '../i18n';
 import type { MediaHit, ProcessEntry, VnApp } from '../lib/types';
 
 export default function LibraryScreen() {
@@ -29,19 +31,23 @@ export default function LibraryScreen() {
 
   const save = useMutation({
     mutationFn: (entry: VnApp) => ipc.upsertVnApp(entry),
-    onSuccess: (data) => {
+    onSuccess: (data, entry) => {
       queryClient.setQueryData(['vn-apps'], data);
       setAdding(false);
       setEditing(null);
+      toast.success(t('toast.saved', { title: entry.media_title }));
     },
+    onError: (error) => toast.error(t('toast.saveFailed', { message: String(error) })),
   });
 
   const remove = useMutation({
-    mutationFn: (exe: string) => ipc.deleteVnApp(exe),
-    onSuccess: (data) => {
+    mutationFn: (app: VnApp) => ipc.deleteVnApp(app.exe),
+    onSuccess: (data, app) => {
       queryClient.setQueryData(['vn-apps'], data);
       setDeleting(null);
+      toast.success(t('toast.removed', { title: app.media_title }));
     },
+    onError: (error) => toast.error(t('toast.removeFailed', { message: String(error) })),
   });
 
   const list = (apps.data ?? []).filter((app) => (mediaFilter === 'all' || app.media_type === mediaFilter) && `${app.media_title} ${app.exe}`.toLowerCase().includes(search.toLowerCase()));
@@ -125,7 +131,7 @@ export default function LibraryScreen() {
                           <Button
                             size="sm"
                             variant="primary"
-                            onClick={() => void ipc.launchProgram(app.launch_path!).catch(() => undefined)}
+                            onClick={() => void ipc.launchProgram(app.launch_path!).catch(launchFailed)}
                           >
                             <Play className="h-4 w-4" />
                             {t('launch.clickToRun')}
@@ -140,7 +146,7 @@ export default function LibraryScreen() {
                         {!app.enabled ? <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span> : null}
                       </div>
                       <div className="flex flex-wrap items-center gap-1">
-                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(() => undefined)}>{t('launch.hooker')}</Button> : null}
+                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(launchFailed)}>{t('launch.hooker')}</Button> : null}
                       </div>
                     </div>
                   </>
@@ -162,8 +168,8 @@ export default function LibraryScreen() {
                         {!app.enabled ? <span className="badge badge-ghost badge-xs mt-1">{t('disabled')}</span> : null}
                       </div>
                       <div className="flex flex-col gap-1">
-                        {app.launch_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.launch_path!).catch(() => undefined)}>{t('launch.game')}</Button> : null}
-                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(() => undefined)}>{t('launch.hooker')}</Button> : null}
+                        {app.launch_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.launch_path!).catch(launchFailed)}>{t('launch.game')}</Button> : null}
+                        {app.hooker_path ? <Button size="xs" appearance="outline" onClick={() => void ipc.launchProgram(app.hooker_path!).catch(launchFailed)}>{t('launch.hooker')}</Button> : null}
                         <Button size="xs" appearance="outline" onClick={() => setEditing(app)}>{t('common:edit')}</Button>
                         <Button size="xs" appearance="ghost" onClick={() => setDeleting(app)} aria-label={t('actions.remove', { title: app.media_title })}>
                           <Trash2 className="h-3 w-3" />
@@ -230,7 +236,7 @@ export default function LibraryScreen() {
               variant="error"
               loading={remove.isPending}
               onClick={() => {
-                if (deleting) remove.mutate(deleting.exe);
+                if (deleting) remove.mutate(deleting);
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -243,6 +249,10 @@ export default function LibraryScreen() {
       </Modal>
     </Page>
   );
+}
+
+function launchFailed(error: unknown) {
+  toast.error(i18n.t('library:toast.launchFailed', { message: String(error) }));
 }
 
 const EMPTY: VnApp = {

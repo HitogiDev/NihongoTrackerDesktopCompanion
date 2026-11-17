@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { listen } from '@tauri-apps/api/event';
 import { Sidebar } from './components/Sidebar';
 import { PageLoader } from './components/ui/Spinner';
+import { Toaster } from './components/ui/Toaster';
 import { useAppStore } from './store/useAppStore';
 import { events, ipc } from './lib/ipc';
 
@@ -103,11 +104,15 @@ export default function App() {
   if (windowLabel === 'settings') {
     return <div className="h-screen overflow-y-auto bg-base-100 text-base-content">
       <Suspense fallback={<PageLoader />}><SettingsScreen /></Suspense>
+      <Toaster />
     </div>;
   }
 
   if (windowLabel === 'texthooker') {
-    return <Suspense fallback={<div className="min-h-screen bg-base-300"><PageLoader /></div>}><TexthookerScreen /></Suspense>;
+    return <>
+      <Suspense fallback={<div className="min-h-screen bg-base-300"><PageLoader /></div>}><TexthookerScreen /></Suspense>
+      <Toaster />
+    </>;
   }
 
   const configured = Boolean(settings.api_key && settings.api_key.trim());
@@ -147,6 +152,7 @@ export default function App() {
         <LogCelebrationHost />
         <QuickLogModal open={quickLogOpen} onClose={closeQuickLog} reason={quickLogReason} />
       </Suspense>
+      <Toaster />
     </div>
   );
 }

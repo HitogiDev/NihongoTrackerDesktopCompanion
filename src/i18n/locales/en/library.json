@@ -65,5 +65,12 @@
     "title": "Choose process",
     "filter": "Filter by name or window title…",
     "window": "window"
+  },
+  "toast": {
+    "saved": "{{title}} saved.",
+    "saveFailed": "Could not save the work: {{message}}",
+    "removed": "{{title}} removed from the library.",
+    "removeFailed": "Could not remove the work: {{message}}",
+    "launchFailed": "Could not open the program: {{message}}"
   }
 }

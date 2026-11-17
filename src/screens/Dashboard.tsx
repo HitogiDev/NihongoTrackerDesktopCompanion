@@ -40,6 +40,7 @@ import type { AnimeSession, VnSession } from '../lib/types';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { MpvSetupPrompt, needsMpvSetup } from '../components/MpvSetup';
 import { useQuickLogStore } from '../store/useQuickLogStore';
+import { toast } from '../store/useToastStore';
 import { SocialActivityFeed } from '../components/SocialActivityFeed';
 import { FriendsImmersing } from '../components/FriendsImmersing';
 
@@ -88,6 +89,10 @@ export default function Dashboard() {
     try {
       await ipc.flushOutbox();
       await refreshConnection();
+      if (useAppStore.getState().online === false) toast.warning(t('toast.syncOffline'));
+      else toast.success(t('toast.synced'));
+    } catch (error) {
+      toast.error(t('toast.syncFailed', { message: String(error) }));
     } finally {
       setSyncing(false);
     }

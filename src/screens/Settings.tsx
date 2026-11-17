@@ -30,6 +30,7 @@ import {
   type SupportedLanguage,
 } from '../i18n/languages';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from '../store/useToastStore';
 
 // Same list daisyUI is compiled with in index.css, mirroring the web app.
 const THEMES = [
@@ -74,7 +75,6 @@ export default function SettingsScreen() {
   const [reconnectBusy, setReconnectBusy] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [dictionaryBusy, setDictionaryBusy] = useState(false);
-  const [dictionaryError, setDictionaryError] = useState<string | null>(null);
   const [dictionaryProgress, setDictionaryProgress] = useState<{ current: number; total: number; file: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'account' | 'tracking' | 'discord' | 'anki' | 'app'>('account');
 
@@ -106,7 +106,6 @@ export default function SettingsScreen() {
   }
 
   async function importDictionary() {
-    setDictionaryError(null);
     const selected = await open({
       multiple: true,
       directory: false,
@@ -116,6 +115,7 @@ export default function SettingsScreen() {
     if (paths.length === 0) return;
     setDictionaryBusy(true);
     const errors: string[] = [];
+    let imported = 0;
     try {
       // One at a time: each import unpacks and indexes a whole zip, and running
       // them in parallel would just fight over the disk.
@@ -124,6 +124,7 @@ export default function SettingsScreen() {
         setDictionaryProgress({ current: index + 1, total: paths.length, file });
         try {
           await ipc.dictionaryImport(path);
+          imported += 1;
           await queryClient.invalidateQueries({ queryKey: ['dictionaries'] });
         } catch (error) {
           errors.push(paths.length > 1 ? `${file}: ${String(error)}` : String(error));
@@ -132,7 +133,10 @@ export default function SettingsScreen() {
     } finally {
       setDictionaryBusy(false);
       setDictionaryProgress(null);
-      setDictionaryError(errors.length > 0 ? errors.join('\n') : null);
+      if (imported > 0) {
+        toast.success(imported === 1 ? t('dictionary.imported') : t('dictionary.importedMany', { count: imported }));
+      }
+      if (errors.length > 0) toast.error(errors.join('\n'));
     }
   }
 
@@ -451,7 +455,6 @@ export default function SettingsScreen() {
             {t('dictionary.progress', dictionaryProgress)}
           </p>
         ) : null}
-        {dictionaryError ? <p className="text-sm text-error selectable whitespace-pre-line">{dictionaryError}</p> : null}
         {(dictionaries.data ?? []).length > 0 ? (
           <ul className="space-y-1.5">
             {(dictionaries.data ?? []).map((dictionary) => (
@@ -466,9 +469,12 @@ export default function SettingsScreen() {
                   appearance="ghost"
                   aria-label={t('dictionary.remove')}
                   onClick={() =>
-                    void ipc.dictionaryRemove(dictionary.id).then(() =>
-                      queryClient.invalidateQueries({ queryKey: ['dictionaries'] })
-                    )
+                    void ipc.dictionaryRemove(dictionary.id)
+                      .then(() => {
+                        toast.success(t('dictionary.removed'));
+                        return queryClient.invalidateQueries({ queryKey: ['dictionaries'] });
+                      })
+                      .catch((error) => toast.error(String(error)))
                   }
                 >
                   <Trash2 className="w-4 h-4" />

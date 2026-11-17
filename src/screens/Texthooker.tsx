@@ -33,6 +33,7 @@ import { SettingsPanel, type SettingsTab } from './texthooker/SettingsPanel';
 import { LOCAL_SESSION } from './texthooker/constants';
 import { SessionPickerModal } from './texthooker/SessionPickerModal';
 import { ModalBackdrop } from '../components/ui/Modal';
+import { toast } from '../store/useToastStore';
 
 /** `vn://ended`: where a detected session went once the game closed. */
 interface EndedSession {
@@ -48,7 +49,6 @@ export default function TexthookerScreen() {
   const hooker = useAppStore((s) => s.hooker);
 
   const contentId = hooker?.content_id ?? LOCAL_SESSION;
-  const [miningFeedback, setMiningFeedback] = useState<string | null>(null);
   const [endedSession, setEndedSession] = useState<EndedSession | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -339,9 +339,9 @@ export default function TexthookerScreen() {
     try {
       if (lineId) await ipc.mineLine(lineId);
       else await ipc.mineLatestLine();
-      setMiningFeedback(t('mining.saved'));
+      toast.success(t('mining.saved'));
     } catch (error) {
-      setMiningFeedback(miningError(error));
+      toast.error(miningError(error));
     }
   }
 
@@ -373,7 +373,6 @@ export default function TexthookerScreen() {
           </button>
         </div>
       ) : null}
-      {miningFeedback ? <button type="button" className="fixed bottom-3 right-3 z-50 alert alert-info w-auto max-w-sm text-sm" onClick={() => setMiningFeedback(null)}>{miningFeedback}</button> : null}
 
       <TopBar
         settingsButtonRef={settingsButtonRef}

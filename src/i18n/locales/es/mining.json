@@ -24,5 +24,10 @@
     "ankiUnavailable": "No se pudo conectar con AnkiConnect. Abre Anki Desktop y comprueba el complemento.",
     "ankiInvalidResponse": "AnkiConnect devolvió una respuesta no válida.",
     "ankiTimeout": "AnkiConnect no respondió a tiempo. Trae Anki al frente, cierra cualquier diálogo abierto en él y vuelve a intentarlo."
+  },
+  "toast": {
+    "saved": "Frase guardada.",
+    "exported": "Enviada a Anki.",
+    "deleted": "Frase guardada eliminada."
   }
 }

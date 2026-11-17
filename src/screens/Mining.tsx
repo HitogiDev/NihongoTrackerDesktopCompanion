@@ -9,6 +9,7 @@ import { Page, SectionTitle } from '../components/ui/Page';
 import { events, ipc } from '../lib/ipc';
 import { miningError } from '../lib/mining';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from '../store/useToastStore';
 
 export default function MiningScreen() {
   const { t } = useTranslation('mining');
@@ -17,7 +18,6 @@ export default function MiningScreen() {
   const queryClient = useQueryClient();
   const [deck, setDeck] = useState(settings?.anki_deck ?? 'Default');
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; data: string } | null>(null);
   const sentences = useQuery({ queryKey: ['mined-sentences'], queryFn: ipc.minedSentences });
 
@@ -31,14 +31,14 @@ export default function MiningScreen() {
     return () => { void unlisten.then((fn) => fn()); };
   }, [queryClient]);
 
-  async function run(key: string, action: () => Promise<unknown>) {
+  async function run(key: string, action: () => Promise<unknown>, success: string) {
     setBusy(key);
-    setError(null);
     try {
       await action();
       await queryClient.invalidateQueries({ queryKey: ['mined-sentences'] });
+      toast.success(success);
     } catch (cause) {
-      setError(miningError(cause));
+      toast.error(miningError(cause));
     } finally {
       setBusy(null);
     }
@@ -49,7 +49,7 @@ export default function MiningScreen() {
       title={t('title')}
       description={t('subtitle')}
       actions={
-        <Button variant="primary" size="sm" loading={busy === 'latest'} onClick={() => void run('latest', ipc.mineLatestLine)}>
+        <Button variant="primary" size="sm" loading={busy === 'latest'} onClick={() => void run('latest', ipc.mineLatestLine, t('toast.saved'))}>
           <BookmarkPlus className="w-4 h-4" />{t('mineLatest')}
         </Button>
       }
@@ -61,7 +61,6 @@ export default function MiningScreen() {
             if (deck.trim() && deck !== settings?.anki_deck) void updateSettings({ anki_deck: deck.trim() });
           }} />}
         </Field>
-        {error ? <p role="alert" className="text-sm text-error selectable">{error}</p> : null}
       </div>
 
       <SectionTitle>{t('saved', { count: sentences.data?.length ?? 0 })}</SectionTitle>
@@ -80,17 +79,17 @@ export default function MiningScreen() {
               <div className="flex gap-2">
                 {sentence.screenshot_path ? <Button size="sm" appearance="ghost" onClick={() => {
                   if (preview?.id === sentence.id) { setPreview(null); return; }
-                  void ipc.minedScreenshot(sentence.id).then((data) => { if (data) setPreview({ id: sentence.id, data }); }).catch((cause) => setError(miningError(cause)));
+                  void ipc.minedScreenshot(sentence.id).then((data) => { if (data) setPreview({ id: sentence.id, data }); }).catch((cause) => toast.error(miningError(cause)));
                 }}>
                   <ImageIcon className="w-4 h-4" />{t('preview')}
                 </Button> : null}
                 {!sentence.anki_note_id ? <Button size="sm" appearance="outline" loading={busy === sentence.id} onClick={() => void run(sentence.id, async () => {
                   if (deck.trim() && deck.trim() !== settings?.anki_deck) await updateSettings({ anki_deck: deck.trim() });
                   return ipc.exportMinedToAnki(sentence.id);
-                })}>
+                }, t('toast.exported'))}>
                   <Send className="w-4 h-4" />{t('sendToAnki')}
                 </Button> : null}
-                <Button size="sm" appearance="ghost" aria-label={t('delete')} onClick={() => void run(`delete:${sentence.id}`, () => ipc.deleteMinedSentence(sentence.id))}>
+                <Button size="sm" appearance="ghost" aria-label={t('delete')} onClick={() => void run(`delete:${sentence.id}`, () => ipc.deleteMinedSentence(sentence.id), t('toast.deleted'))}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>

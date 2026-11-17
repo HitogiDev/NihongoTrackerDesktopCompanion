@@ -136,7 +136,10 @@
     "entries": "entries",
     "none": "No dictionaries imported yet.",
     "remove": "Remove dictionary",
-    "fileFilter": "Yomitan dictionary"
+    "fileFilter": "Yomitan dictionary",
+    "imported": "Dictionary imported.",
+    "importedMany": "{{count}} dictionaries imported.",
+    "removed": "Dictionary removed."
   },
   "filters": {
     "title": "Text filters",
