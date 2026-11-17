@@ -56,7 +56,6 @@ import { Field } from '../components/ui/Field';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { DictionaryPopup } from '../components/DictionaryPopup';
-import { textHitAtPoint } from '../lib/textHit';
 import { NativeHookChoices } from '../components/NativeHookChoices';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { formatClock, numberWithCommas } from '../lib/format';
@@ -68,14 +67,13 @@ import { useManualTimer } from './texthooker/useManualTimer';
 import { SessionClock, SessionSpeed } from './texthooker/SessionClock';
 import { useHookerLines } from './texthooker/useHookerLines';
 import { useRoom } from './texthooker/useRoom';
+import { useDictionaryHover } from './texthooker/useDictionaryHover';
 import { randomRoomId } from '../lib/room';
 import type {
-  DictionaryEntry,
   TextLine,
   SessionIntelligence,
   TextSessionSummary,
 } from '../lib/types';
-import type { LookupRequest } from '@nihongotracker/yomitan-content';
 
 const LOCAL_SESSION = 'local';
 
@@ -234,15 +232,6 @@ export default function TexthookerScreen() {
   const [isLogging, setIsLogging] = useState(false);
   const [logComment, setLogComment] = useState('');
   const [isLogAnimating, setIsLogAnimating] = useState(false);
-  const [dictionaryRequest, setDictionaryRequest] = useState<LookupRequest | null>(null);
-  const [dictionaryAnchor, setDictionaryAnchor] = useState<DOMRect | null>(null);
-  const [dictionaryVertical, setDictionaryVertical] = useState(false);
-  const [dictionaryEntries, setDictionaryEntries] = useState<DictionaryEntry[] | undefined>();
-  const [dictionaryLoading, setDictionaryLoading] = useState(false);
-  const dictionaryHoverTimerRef = useRef<number | null>(null);
-  const dictionaryHoverKeyRef = useRef<string | null>(null);
-  const dictionaryPointerRef = useRef<{ element: HTMLElement; text: string; x: number; y: number; context?: { lineId: string; contentId: string } } | null>(null);
-
   const [timerEditHours, setTimerEditHours] = useState(0);
   const [timerEditMinutes, setTimerEditMinutes] = useState(0);
   const [timerEditSeconds, setTimerEditSeconds] = useState(0);
@@ -404,87 +393,10 @@ export default function TexthookerScreen() {
   const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
   const connectionStatus = hooker?.status ?? 'disconnected';
 
-  const lookupDictionary = useCallback(async (request: LookupRequest) => {
-    setDictionaryLoading(true);
-    try {
-      const response = await ipc.dictionaryLookup(request.query, request.offset ?? 0);
-      setDictionaryEntries(response.entries);
-    } catch {
-      setDictionaryEntries([]);
-    } finally {
-      setDictionaryLoading(false);
-    }
-  }, []);
-
-  const [dictionaryContext, setDictionaryContext] = useState<{ lineId: string; contentId: string }>();
-  const scheduleDictionaryLookup = useCallback((element: HTMLElement, text: string, x: number, y: number, context?: { lineId: string; contentId: string }) => {
-    const hit = textHitAtPoint(element, x, y);
-    if (!hit) {
-      if (dictionaryHoverTimerRef.current !== null) window.clearTimeout(dictionaryHoverTimerRef.current);
-      dictionaryHoverTimerRef.current = null;
-      dictionaryHoverKeyRef.current = null;
-      return;
-    }
-    const { offset, rect: anchorRect } = hit;
-
-    const key = `${text}:${offset}`;
-    if (dictionaryHoverKeyRef.current === key) return;
-    dictionaryHoverKeyRef.current = key;
-    if (dictionaryHoverTimerRef.current !== null) {
-      window.clearTimeout(dictionaryHoverTimerRef.current);
-    }
-    dictionaryHoverTimerRef.current = window.setTimeout(() => {
-      setDictionaryContext(context);
-      setDictionaryAnchor(anchorRect);
-      setDictionaryVertical(hit.vertical);
-      setDictionaryEntries(undefined);
-      setDictionaryRequest({ query: text, offset });
-      dictionaryHoverTimerRef.current = null;
-    }, dictionaryPopupDelay);
-  }, [dictionaryPopupDelay]);
-
-  const openDictionaryAtPointer = useCallback((event: ReactMouseEvent<HTMLElement>, line: TextLine) => {
-    const element = event.currentTarget;
-    const text = line.text;
-    const context = { lineId: line.id, contentId: line.content_id };
-    dictionaryPointerRef.current = { element, text, x: event.clientX, y: event.clientY, context };
-    if (!event.shiftKey && !event.altKey) {
-      if (dictionaryHoverTimerRef.current !== null) {
-        window.clearTimeout(dictionaryHoverTimerRef.current);
-        dictionaryHoverTimerRef.current = null;
-      }
-      dictionaryHoverKeyRef.current = null;
-      return;
-    }
-    scheduleDictionaryLookup(element, text, event.clientX, event.clientY, context);
-  }, [scheduleDictionaryLookup]);
-
-  const cancelDictionaryHover = useCallback(() => {
-    if (dictionaryHoverTimerRef.current !== null) {
-      window.clearTimeout(dictionaryHoverTimerRef.current);
-      dictionaryHoverTimerRef.current = null;
-    }
-    dictionaryHoverKeyRef.current = null;
-    dictionaryPointerRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    const lookupOnModifierPress = (event: KeyboardEvent) => {
-      if ((event.key !== 'Shift' && event.key !== 'Alt') || event.repeat) return;
-      const activeElement = document.activeElement;
-      if (
-        activeElement instanceof HTMLElement &&
-        (activeElement.isContentEditable || activeElement.matches('input, textarea, select'))
-      ) {
-        return;
-      }
-      const pointer = dictionaryPointerRef.current;
-      if (pointer) scheduleDictionaryLookup(pointer.element, pointer.text, pointer.x, pointer.y, pointer.context);
-    };
-
-    document.addEventListener('keydown', lookupOnModifierPress);
-    return () => document.removeEventListener('keydown', lookupOnModifierPress);
-  }, [scheduleDictionaryLookup]);
+  const {
+    dictionaryRequest, dictionaryContext, dictionaryEntries, dictionaryLoading, dictionaryAnchor,
+    dictionaryVertical, lookupDictionary, openDictionaryAtPointer, cancelDictionaryHover, closeDictionary,
+  } = useDictionaryHover(dictionaryPopupDelay);
 
   // Closing the game ends the detected session and its counters drop to zero
   // right away; without saying where it went, the session looks lost.
@@ -2066,10 +1978,7 @@ export default function TexthookerScreen() {
           vertical={dictionaryVertical}
           theme={effectiveHookerTheme}
           onLookup={lookupDictionary}
-          onClose={() => {
-            setDictionaryRequest(null);
-            setDictionaryAnchor(null);
-          }}
+          onClose={closeDictionary}
         />
       ) : null}
 
