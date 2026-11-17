@@ -384,6 +384,9 @@ pub fn run() {
             // Never leave a presence hanging with whatever was being read when
             // the app closed.
             if matches!(event, tauri::RunEvent::Exit) {
+                // A session still open (the app quit with the reader up) is
+                // logged before it goes.
+                manga::session::reader_closed(app);
                 discord::shutdown(app);
                 app.state::<AppState>().game_hook.shutdown();
             }

@@ -232,6 +232,15 @@ pub fn session_summary(lang: &str, minutes: u64, chars: i64) -> String {
         _ => format!("{minutes} min, {chars} chars"),
     }
 }
+pub fn manga_session_summary(lang: &str, minutes: u64, pages: i64, chars: i64) -> String {
+    match (lang, chars > 0) {
+        ("es", true) => format!("{minutes} min, {pages} pág., {chars} car."),
+        ("es", false) => format!("{minutes} min, {pages} pág."),
+        (_, true) => format!("{minutes} min, {pages} pages, {chars} chars"),
+        (_, false) => format!("{minutes} min, {pages} pages"),
+    }
+}
+
 pub fn native_filter_error(lang: &str, line: usize, message: &str) -> String {
     match lang {
         "es" => format!("Regex inválida en la línea {line}: {message}"),

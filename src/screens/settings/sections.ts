@@ -80,7 +80,9 @@ export const SEARCH_INDEX: { section: SectionId; label: string; hint?: string }[
   { section: 'novels', label: 'settings:filters.regex', hint: 'settings:filters.regexHint' },
   { section: 'novels', label: 'settings:filters.words', hint: 'settings:filters.wordsHint' },
 
+  { section: 'manga', label: 'settings:manga.confirm', hint: 'settings:manga.confirmHint' },
   { section: 'manga', label: 'settings:manga.dwell', hint: 'settings:manga.dwellHint' },
+  { section: 'manga', label: 'settings:manga.idleLog', hint: 'settings:manga.idleLogHint' },
 
   { section: 'readingOverlay', label: 'readingOverlay:openSettings', hint: 'readingOverlay:settingsHint' },
 

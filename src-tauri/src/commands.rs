@@ -1585,6 +1585,7 @@ pub fn manga_link_series(
     if !state.db.link_manga_series(&series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
         return Err("Unknown series".into());
     }
+    crate::manga::session::series_linked(&app, &series_id, media_id.as_deref(), media_title.as_deref(), is_adult);
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(())
 }
@@ -1646,11 +1647,7 @@ pub async fn manga_session_open(app: AppHandle, state: State<'_, AppState>, volu
     if let Some(window) = app.get_webview_window(crate::manga::reader::LABEL) {
         crate::manga::session::set_focused(&app, window.is_focused().unwrap_or(false));
     }
-    let mut tracking = state.manga.tracking.lock().unwrap();
-    if tracking.open.as_ref().is_none_or(|open| open.volume_id != volume_id) {
-        tracking.open = Some(loaded);
-        tracking.session = None;
-    }
+    crate::manga::session::open_volume(&app, loaded);
     Ok(())
 }
 

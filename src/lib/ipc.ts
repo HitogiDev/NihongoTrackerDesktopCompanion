@@ -299,4 +299,6 @@ export const events = {
   mangaReaderOpen: 'manga://reader-open',
   /** The reading session (`MangaSession | null`) whenever it changes. */
   mangaSession: 'manga://session',
+  /** A reading session ended (`MangaSessionEnded`). */
+  mangaSessionEnded: 'manga://session-ended',
 } as const;

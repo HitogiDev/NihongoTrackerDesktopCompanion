@@ -231,6 +231,11 @@
   },
   "manga": {
     "dwell": "Una página cuenta tras {{count}} s en pantalla",
-    "dwellHint": "Cada página cuenta una sola vez, con sus caracteres si tiene texto. En doble página cuentan las dos."
+    "dwellHint": "Cada página cuenta una sola vez, con sus caracteres si tiene texto. En doble página cuentan las dos.",
+    "confirm": "Confirmar antes de registrar la sesión",
+    "confirmHint": "Al cerrar el lector, el log va a Pendientes. Las series sin vincular a NihongoTracker van siempre allí, para vincularlas antes.",
+    "idleLog": "Terminar la sesión tras (minutos sin leer)",
+    "idleLogHint": "La sesión se registra y al volver empieza otra. Con 0 sigue abierta hasta cerrar el lector.",
+    "clock": "El tiempo solo cuenta con la ventana del lector en primer plano y se pausa tras la inactividad configurada en Novelas visuales."
   }
 }

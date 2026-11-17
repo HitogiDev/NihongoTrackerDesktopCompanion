@@ -12,11 +12,18 @@
 //! the user is not away (`afk_timeout_secs`). A page's dwell time only adds up
 //! while the clock runs. The UI hears about it through `manga://session` and
 //! the tracker snapshot.
+//!
+//! A session becomes a log when the reader closes, when it moves to another
+//! volume, or after `manga_idle_log_minutes` with the clock stopped. The log
+//! goes through `sync` like every other: to Pendientes when the user wants to
+//! confirm it (`manga_confirm_before_log`) or the series is not linked to
+//! NihongoTracker yet, to the outbox otherwise.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::mokuro::MokuroPage;
@@ -97,6 +104,8 @@ impl OpenVolume {
 
 /// To every window: the session (or `null`) whenever it changes.
 pub const SESSION_EVENT: &str = "manga://session";
+/// To every window: a session ended, and where its log went.
+pub const ENDED_EVENT: &str = "manga://session-ended";
 
 /// Why the clock is stopped.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -191,19 +200,22 @@ pub struct TickInput {
     /// `afk_timeout_secs`; 0 never pauses.
     pub afk_secs: u64,
     pub dwell: Duration,
+    /// End the session after this long with the clock stopped; zero never does.
+    pub idle_log: Duration,
 }
 
 impl Tracking {
     /// Advances the session by one tick: starts it when the reader is open and
     /// being read, runs or stops its clock, and counts the pages that have
-    /// been on screen long enough.
-    pub fn step(&mut self, db: &Db, input: TickInput, now: impl FnOnce() -> String) {
-        let Some(open) = self.open.as_mut() else { return };
+    /// been on screen long enough. Returns the session when it has been idle
+    /// for so long that it is over.
+    pub fn step(&mut self, db: &Db, input: TickInput, now: impl FnOnce() -> String) -> Option<MangaSession> {
+        let Some(open) = self.open.as_mut() else { return self.finish() };
         let away = input.afk_secs > 0 && input.idle_secs >= input.afk_secs;
         let counting = input.focused && !away;
         if self.session.is_none() {
             if !counting {
-                return;
+                return None;
             }
             self.session = Some(MangaSession::start(open, now()));
             self.elapsed = Duration::ZERO;
@@ -233,7 +245,18 @@ impl Tracking {
         } else {
             self.inactive += input.elapsed;
             session.inactive_secs = self.inactive.as_secs();
+            if !input.idle_log.is_zero() && self.inactive >= input.idle_log {
+                return self.finish();
+            }
         }
+        None
+    }
+
+    /// Ends the session: it is the caller's to log.
+    pub fn finish(&mut self) -> Option<MangaSession> {
+        self.elapsed = Duration::ZERO;
+        self.inactive = Duration::ZERO;
+        self.session.take()
     }
 
     /// The session, if it changed since the last time this was asked.
@@ -277,6 +300,117 @@ pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
     credited
 }
 
+/// Whole minutes for the log, rounded: the site takes `time` in minutes.
+pub fn log_minutes(seconds: u64) -> u64 {
+    (seconds + 30) / 60
+}
+
+/// The log for a finished session, or `None` when there is nothing to log
+/// (no page read for the first time and under half a minute). Follows
+/// `src/lib/logRules.ts` for manga: `pages`, `chars` or `time`, `time` in
+/// minutes, and always a `description`.
+pub fn log_payload(session: &MangaSession, date: &str) -> Option<Value> {
+    let minutes = log_minutes(session.elapsed_secs);
+    if session.pages_read <= 0 && session.chars_read <= 0 && minutes == 0 {
+        return None;
+    }
+    let mut payload = json!({
+        "type": "manga",
+        "mediaTitle": session.title(),
+        "description": format!("{} — {}", session.series_title, session.volume_title),
+        "date": date,
+    });
+    if let Some(media_id) = session.media_id.as_deref().filter(|id| !id.trim().is_empty()) {
+        payload["mediaId"] = json!(media_id);
+    }
+    if session.pages_read > 0 {
+        payload["pages"] = json!(session.pages_read);
+    }
+    if session.chars_read > 0 {
+        payload["chars"] = json!(session.chars_read);
+    }
+    if minutes > 0 {
+        payload["time"] = json!(minutes);
+    }
+    // What the Pendientes card shows; dropped before the log is sent.
+    payload["_detected"] = json!({
+        "source": "manga",
+        "seriesId": session.series_id,
+        "volumeId": session.volume_id,
+        "volume": session.volume_title,
+        "seconds": session.elapsed_secs,
+    });
+    Some(payload)
+}
+
+/// Where a finished session went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Outcome {
+    Logged,
+    Pending,
+    Discarded,
+}
+
+/// Turns a finished session into a log, through `sync`, and tells the user.
+pub fn log_session(app: &AppHandle, session: &MangaSession, settings: &Settings) -> Outcome {
+    let payload = log_payload(session, &chrono::Utc::now().to_rfc3339());
+    // Unlinked, the log has no `mediaId`: it waits in Pendientes to be linked.
+    let confirm = settings.manga_confirm_before_log || session.media_id.is_none();
+    let outcome = match (&payload, confirm) {
+        (None, _) => Outcome::Discarded,
+        (Some(_), true) => Outcome::Pending,
+        (Some(_), false) => Outcome::Logged,
+    };
+    if let Some(payload) = &payload {
+        let lang = settings.language.as_str();
+        let summary = format!(
+            "{} — {}",
+            session.title(),
+            crate::i18n::manga_session_summary(lang, log_minutes(session.elapsed_secs), session.pages_read, session.chars_read)
+        );
+        if confirm {
+            crate::sync::add_pending(app, payload, "manga");
+        } else {
+            crate::sync::enqueue_log(app, payload);
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move { crate::sync::flush(&app).await });
+        }
+        if settings.notifications {
+            let title = if confirm { crate::i18n::session_awaiting_confirmation(lang) } else { crate::i18n::session_logged(lang) };
+            crate::notifications::show(app, title, &summary);
+        }
+    }
+    let _ = app.emit(
+        ENDED_EVENT,
+        json!({
+            "volumeId": session.volume_id,
+            "title": session.title(),
+            "pages": session.pages_read,
+            "chars": session.chars_read,
+            "minutes": log_minutes(session.elapsed_secs),
+            "outcome": outcome,
+        }),
+    );
+    outcome
+}
+
+/// Logs a session that ended outside the tick (the reader closed, another
+/// volume opened), from a thread that cannot wait on the settings lock.
+pub fn log_later(app: &AppHandle, session: MangaSession) {
+    let state = app.state::<AppState>();
+    if let Ok(settings) = state.settings.try_read() {
+        let settings = settings.clone();
+        log_session(app, &session, &settings);
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let settings = app.state::<AppState>().settings_snapshot().await;
+        log_session(&app, &session, &settings);
+    });
+}
+
 pub fn dwell_threshold(settings: &Settings) -> Duration {
     Duration::from_secs(settings.manga_page_dwell_secs.clamp(1, 120))
 }
@@ -291,12 +425,16 @@ pub fn tick(app: &AppHandle, settings: &Settings, elapsed: Duration, idle_secs: 
         idle_secs,
         afk_secs: settings.afk_timeout_secs,
         dwell: dwell_threshold(settings),
+        idle_log: Duration::from_secs(settings.manga_idle_log_minutes.saturating_mul(60)),
     };
-    let (session, changed) = {
+    let (session, changed, finished) = {
         let mut tracking = state.manga.tracking.lock().unwrap();
-        tracking.step(&state.db, input, crate::db::now_iso);
-        (tracking.session.clone(), tracking.changed())
+        let finished = tracking.step(&state.db, input, crate::db::now_iso);
+        (tracking.session.clone(), tracking.changed(), finished)
     };
+    if let Some(finished) = finished {
+        log_session(app, &finished, settings);
+    }
     if let Some(changed) = changed {
         let _ = app.emit(SESSION_EVENT, &changed);
     }
@@ -311,10 +449,49 @@ pub fn set_focused(app: &AppHandle, focused: bool) {
 /// The reader window is gone: nothing is on screen any more.
 pub fn reader_closed(app: &AppHandle) {
     set_focused(app, false);
+    let finished = {
+        let state = app.state::<AppState>();
+        let mut tracking = state.manga.tracking.lock().unwrap();
+        tracking.open = None;
+        tracking.finish()
+    };
+    if let Some(session) = finished {
+        log_later(app, session);
+    }
+}
+
+/// A series was linked (or unlinked) while it is being read: the session and
+/// its log follow, `is_adult` included.
+pub fn series_linked(app: &AppHandle, series_id: &str, media_id: Option<&str>, media_title: Option<&str>, is_adult: bool) {
     let state = app.state::<AppState>();
     let mut tracking = state.manga.tracking.lock().unwrap();
-    tracking.open = None;
-    tracking.session = None;
+    if let Some(open) = tracking.open.as_mut().filter(|open| open.series_id == series_id) {
+        open.media_id = media_id.map(str::to_string);
+        open.media_title = media_title.map(str::to_string);
+        open.is_adult = is_adult;
+    }
+    if let Some(session) = tracking.session.as_mut().filter(|session| session.series_id == series_id) {
+        session.media_id = media_id.map(str::to_string);
+        session.media_title = media_title.map(str::to_string);
+        session.is_adult = is_adult;
+    }
+}
+
+/// The reader shows `open` now. A session of another volume ends and is
+/// logged; the same volume again changes nothing.
+pub fn open_volume(app: &AppHandle, open: OpenVolume) {
+    let finished = {
+        let state = app.state::<AppState>();
+        let mut tracking = state.manga.tracking.lock().unwrap();
+        if tracking.open.as_ref().is_some_and(|current| current.volume_id == open.volume_id) {
+            return;
+        }
+        tracking.open = Some(open);
+        tracking.finish()
+    };
+    if let Some(session) = finished {
+        log_later(app, session);
+    }
 }
 
 #[cfg(test)]
@@ -404,7 +581,7 @@ pub(crate) mod tests {
     }
 
     fn input(elapsed: Duration, focused: bool, idle_secs: u64) -> TickInput {
-        TickInput { elapsed, focused, idle_secs, afk_secs: 120, dwell: 3 * SECOND }
+        TickInput { elapsed, focused, idle_secs, afk_secs: 120, dwell: 3 * SECOND, idle_log: 600 * SECOND }
     }
 
     fn reading(text: Vec<Option<MokuroPage>>) -> Tracking {
@@ -477,6 +654,88 @@ pub(crate) mod tests {
         assert_eq!(tracking.changed(), None, "under a second: nothing visible changed");
         drop(db);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn ten_minutes_with_the_clock_stopped_end_the_session() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        for _ in 0..599 {
+            assert!(tracking.step(&db, input(SECOND, false, 0), || "t".into()).is_none());
+        }
+        let ended = tracking.step(&db, input(SECOND, false, 0), || "t".into()).expect("ten minutes unfocused");
+        assert_eq!(ended.elapsed_secs, 1);
+        assert!(tracking.session.is_none());
+        assert!(tracking.open.is_some(), "the reader is still open: coming back starts a new session");
+        tracking.step(&db, input(SECOND, true, 0), || "t2".into());
+        assert_eq!(tracking.session.as_ref().unwrap().started_at, "t2");
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn closing_the_reader_hands_back_the_session() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        tracking.open = None;
+        assert!(tracking.step(&db, input(SECOND, true, 0), || "t".into()).is_some());
+        assert!(tracking.finish().is_none(), "only once");
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn session(pages: i64, chars: i64, seconds: u64, media_id: Option<&str>) -> MangaSession {
+        let mut session = MangaSession::start(&open_volume(vec![None]), "t".into());
+        session.pages_read = pages;
+        session.chars_read = chars;
+        session.elapsed_secs = seconds;
+        session.media_id = media_id.map(str::to_string);
+        session.media_title = media_id.map(|_| "Yotsuba&!".to_string());
+        session
+    }
+
+    /// `src/lib/logRules.ts` for manga, written out: a description, and at
+    /// least one of pages, chars or time, each a positive whole number.
+    fn assert_valid_manga_log(payload: &Value) {
+        assert_eq!(payload["type"], "manga");
+        assert!(payload["description"].as_str().is_some_and(|d| !d.trim().is_empty()), "description is required");
+        assert!(payload["date"].as_str().is_some());
+        let amounts: Vec<i64> = ["pages", "chars", "time"].iter().filter_map(|field| payload.get(*field)).map(|v| v.as_i64().expect("a whole number")).collect();
+        assert!(!amounts.is_empty(), "manga needs pages, chars or time");
+        assert!(amounts.iter().all(|amount| *amount > 0));
+        assert!(payload.get("episodes").is_none());
+    }
+
+    #[test]
+    fn the_log_follows_the_rules_for_manga() {
+        let linked = log_payload(&session(12, 3_400, 25 * 60 + 40, Some("30104")), "2026-11-17T10:00:00Z").unwrap();
+        assert_valid_manga_log(&linked);
+        assert_eq!(linked["description"], "よつばと! — 第1巻");
+        assert_eq!(linked["mediaId"], "30104");
+        assert_eq!(linked["mediaTitle"], "Yotsuba&!");
+        assert_eq!((linked["pages"].clone(), linked["chars"].clone(), linked["time"].clone()), (json!(12), json!(3_400), json!(26)));
+        assert_eq!(linked["_detected"]["seriesId"], "s1");
+
+        // Unlinked: no mediaId, the folder's title stands in.
+        let unlinked = log_payload(&session(3, 0, 50, None), "2026-11-17T10:00:00Z").unwrap();
+        assert_valid_manga_log(&unlinked);
+        assert!(unlinked.get("mediaId").is_none());
+        assert_eq!(unlinked["mediaTitle"], "よつばと!");
+        assert!(unlinked.get("chars").is_none(), "no text, no characters");
+
+        // A volume read again: no new pages, the time still counts.
+        let reread = log_payload(&session(0, 0, 9 * 60, Some("30104")), "d").unwrap();
+        assert_valid_manga_log(&reread);
+        assert_eq!(reread["time"], 9);
+        assert!(reread.get("pages").is_none());
+    }
+
+    #[test]
+    fn a_session_with_nothing_read_is_not_logged() {
+        assert!(log_payload(&session(0, 0, 29, None), "d").is_none());
+        assert!(log_payload(&session(0, 0, 30, None), "d").is_some(), "half a minute rounds up");
     }
 
     #[test]

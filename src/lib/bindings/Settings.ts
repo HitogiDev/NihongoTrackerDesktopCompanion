@@ -67,7 +67,17 @@ overlay_enabled: boolean,
 /**
  * Seconds a page must stay on screen before it counts as read.
  */
-manga_page_dwell_secs: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
+manga_page_dwell_secs: number, 
+/**
+ * Send manga sessions to Pendientes instead of logging them on close.
+ * Unlinked series always go there, to be linked first.
+ */
+manga_confirm_before_log: boolean, 
+/**
+ * End (and log) a session after this many minutes without reading. 0
+ * keeps it open until the reader closes.
+ */
+manga_idle_log_minutes: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
 /**
  * AnkiConnect server address, same as Yomitan's "AnkiConnect server
  * address": users who changed `webBindAddress`/`webBindPort` need it.

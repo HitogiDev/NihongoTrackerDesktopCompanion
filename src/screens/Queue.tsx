@@ -21,6 +21,8 @@ import { MediaWebLink } from '../components/MediaWebLink';
 import { LogForm } from '../components/LogForm';
 import { getMediaTypeClasses } from '../constants/mediaColors';
 import { logTypeLabel, relativeDate } from '../lib/format';
+import { mangaUrl } from '../lib/manga';
+import { Cover } from './manga/Cover';
 import { events, ipc } from '../lib/ipc';
 import { draftFromPayload, missing, toPayload, type LogDraft } from '../lib/logRules';
 import { episodeLabel, isEditableLog, outboxLabel, splitOutbox } from '../lib/queue';
@@ -268,7 +270,7 @@ function PendingCard({
   // sends), so ask it for the estimate instead of guessing. Offline: no badge.
   const { data: xp } = useQuery({
     // A merged row keeps its id but not its totals.
-    queryKey: ['preview-xp', item.id, payload.episodes, payload.time, payload.chars],
+    queryKey: ['preview-xp', item.id, payload.episodes, payload.time, payload.chars, payload.pages],
     queryFn: () => {
       const { _detected, ...body } = payload;
       void _detected;
@@ -284,6 +286,10 @@ function PendingCard({
       <div className="p-4 flex items-start gap-3">
         {detected?.image ? (
           <img src={detected.image} alt="" className="w-12 h-16 object-cover rounded-field" />
+        ) : detected?.source === 'manga' && detected.seriesId ? (
+          <div className="w-12 h-16 shrink-0 overflow-hidden rounded-field shadow-sm">
+            <Cover src={mangaUrl.cover(detected.seriesId)} />
+          </div>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className={`badge badge-outline ${type.color} gap-1`}>
@@ -297,6 +303,11 @@ function PendingCard({
               <span className={`badge badge-soft badge-sm ${type.bgColor} ${type.color}`}>
                 {t('common:episodesShort', { count: payload.episodes })}
                 {episodeLabel(detected?.episodes, detected?.episode)}
+              </span>
+            ) : null}
+            {payload.pages ? (
+              <span className={`badge badge-soft badge-sm ${type.bgColor} ${type.color}`}>
+                {t('common:pagesShort', { count: payload.pages })}
               </span>
             ) : null}
             {payload.time ? (
@@ -321,6 +332,12 @@ function PendingCard({
           </div>
           {detected?.file ? (
             <p className="text-xs text-base-content/50 mt-2 truncate">{detected.file}</p>
+          ) : null}
+          {detected?.source === 'manga' && detected.volume ? (
+            <p className="text-xs text-base-content/50 mt-2 truncate">{t('mangaVolume', { volume: detected.volume })}</p>
+          ) : null}
+          {detected?.source === 'manga' && !payload.mediaId ? (
+            <p className="text-xs text-base-content/60 mt-1">{t('linkHint')}</p>
           ) : null}
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">

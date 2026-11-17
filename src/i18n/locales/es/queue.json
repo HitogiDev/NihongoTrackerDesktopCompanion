@@ -20,5 +20,7 @@
   },
   "retry": "Volver a enviar",
   "loadFailed": "No se pudieron cargar los logs pendientes.",
-  "outboxLoadFailed": "No se pudo cargar la cola de envío."
+  "outboxLoadFailed": "No se pudo cargar la cola de envío.",
+  "mangaVolume": "{{volume}} · Lector de manga",
+  "linkHint": "Vincula la serie en la biblioteca de manga para registrarla sin pasar por aquí."
 }

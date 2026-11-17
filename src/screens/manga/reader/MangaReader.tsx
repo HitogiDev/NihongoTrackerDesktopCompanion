@@ -12,7 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
-import type { MokuroPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
+import type { MangaSessionEnded, MokuroPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, spreadOf, type Size } from './layout';
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
@@ -63,11 +63,18 @@ export default function MangaReaderWindow() {
       setTarget(event.payload);
       setOpened((count) => count + 1);
     });
+    // Where a session's log went, when it ends with the reader still open
+    // (idle too long, or the next volume opened).
+    const offEnded = listen<MangaSessionEnded>(events.mangaSessionEnded, ({ payload }) => {
+      if (payload.outcome === 'pending') toast.info(t('session.endedPending', { title: payload.title }));
+      else if (payload.outcome === 'logged') toast.success(t('session.endedLogged', { title: payload.title }));
+    });
     return () => {
       alive = false;
       void off.then((fn) => fn());
+      void offEnded.then((fn) => fn());
     };
-  }, []);
+  }, [t]);
 
   if (target === undefined) return <FullScreenMessage><Spinner size="lg" className="opacity-60" /></FullScreenMessage>;
   if (target === null) {

@@ -18,6 +18,9 @@ fn d_afk() -> u64 {
 fn d_manga_dwell() -> u64 {
     3
 }
+fn d_manga_idle_log() -> u64 {
+    10
+}
 /// What mpv's own sample `mpv.conf` suggests, and what most people already have.
 /// On Windows `playback::normalize_ipc_path` maps it to the real named pipe.
 fn d_mpv_ipc() -> String {
@@ -148,6 +151,14 @@ pub struct Settings {
     /// Seconds a page must stay on screen before it counts as read.
     #[serde(default = "d_manga_dwell")]
     pub manga_page_dwell_secs: u64,
+    /// Send manga sessions to Pendientes instead of logging them on close.
+    /// Unlinked series always go there, to be linked first.
+    #[serde(default = "d_true")]
+    pub manga_confirm_before_log: bool,
+    /// End (and log) a session after this many minutes without reading. 0
+    /// keeps it open until the reader closes.
+    #[serde(default = "d_manga_idle_log")]
+    pub manga_idle_log_minutes: u64,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -308,6 +319,8 @@ impl Default for Settings {
             vn_confirm_before_log: true,
             overlay_enabled: false,
             manga_page_dwell_secs: d_manga_dwell(),
+            manga_confirm_before_log: true,
+            manga_idle_log_minutes: d_manga_idle_log(),
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),

@@ -65,6 +65,8 @@
     "summary": "{{time}} · {{pages}} pages · {{chars}} characters",
     "pages": "{{count}} pg",
     "pagesHint": "Pages read for the first time in this session",
-    "chars": "{{count, number}} chars"
+    "chars": "{{count, number}} chars",
+    "endedPending": "Session of {{title}} finished: confirm it in Pending",
+    "endedLogged": "Session of {{title}} logged"
   }
 }

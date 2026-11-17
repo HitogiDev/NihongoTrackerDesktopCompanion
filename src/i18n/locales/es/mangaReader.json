@@ -65,6 +65,8 @@
     "summary": "{{time}} · {{pages}} páginas · {{chars}} caracteres",
     "pages": "{{count}} pág.",
     "pagesHint": "Páginas leídas por primera vez en esta sesión",
-    "chars": "{{count, number}} car."
+    "chars": "{{count, number}} car.",
+    "endedPending": "Sesión de {{title}} terminada: confírmala en Pendientes",
+    "endedLogged": "Sesión de {{title}} registrada"
   }
 }

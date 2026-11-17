@@ -283,7 +283,21 @@ export interface LogPayload {
     exe?: string;
     lines?: number;
     seconds?: number;
+    /** Manga reader sessions (`manga::session::log_payload`). */
+    seriesId?: string;
+    volumeId?: string;
+    volume?: string;
   };
+}
+
+/** `manga://session-ended`, built with `json!` in `manga::session::log_session`. */
+export interface MangaSessionEnded {
+  volumeId: string;
+  title: string;
+  pages: number;
+  chars: number;
+  minutes: number;
+  outcome: 'logged' | 'pending' | 'discarded';
 }
 
 export interface PendingItem {
