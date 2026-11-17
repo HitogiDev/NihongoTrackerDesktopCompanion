@@ -1,9 +1,45 @@
 {
-  "title": "Connect your account",
-  "subtitle": "The companion uses an API key, not your password.",
   "server": "Server",
   "apiKey": "API key",
   "apiKeyHint": "Settings → API keys on NihongoTracker. It starts with ntk_ and is shown only once.",
   "connect": "Connect",
-  "createKey": "Create an API key"
+  "createKey": "Create an API key",
+  "steps": {
+    "label": "Setup steps",
+    "connect": "Account",
+    "track": "Tracking",
+    "work": "First work",
+    "dictionary": "Dictionary"
+  },
+  "pages": {
+    "connect": {
+      "title": "Connect your account",
+      "subtitle": "The companion uses an API key, not your password."
+    },
+    "track": {
+      "title": "What should it follow?",
+      "subtitle": "You can change any of this later in Settings."
+    },
+    "work": {
+      "title": "Your first novel or game",
+      "subtitle": "Register its executable and a session starts when you open it."
+    },
+    "dictionary": {
+      "title": "An offline dictionary",
+      "subtitle": "Look up words in the texthooker and the reading overlay."
+    }
+  },
+  "work": {
+    "add": "Add a work",
+    "addAnother": "Add another",
+    "animeNote": "Anime needs nothing here: open the episode in your player and it is recognised."
+  },
+  "dictionary": {
+    "where": "Any Yomitan dictionary zip works, such as Jitendex. More can be added in Settings → Dictionaries."
+  },
+  "nav": {
+    "skip": "Skip",
+    "next": "Next",
+    "finish": "Start"
+  }
 }

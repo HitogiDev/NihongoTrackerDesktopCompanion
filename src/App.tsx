@@ -118,10 +118,12 @@ export default function App() {
   const configured = Boolean(settings.api_key && settings.api_key.trim());
   // The reader takes the whole window, like the web app's chrome-less route.
   const isReader = windowLabel === 'texthooker' || location.pathname.startsWith('/texthooker');
+  // The guided setup keeps the whole window until it is finished or skipped.
+  const isOnboarding = location.pathname.startsWith('/onboarding');
 
   return (
     <div className="app-shell flex h-screen overflow-hidden bg-base-100 text-base-content">
-      {configured && !isReader ? <Sidebar /> : null}
+      {configured && !isReader && !isOnboarding ? <Sidebar /> : null}
       <main className="min-w-0 flex-1 overflow-y-auto bg-base-100">
         {/* A screen's chunk can take a moment the first time: show that. */}
         <Suspense fallback={<PageLoader />}>
