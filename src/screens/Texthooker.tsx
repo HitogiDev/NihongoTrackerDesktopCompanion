@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -17,7 +16,7 @@ import { Modal } from '../components/ui/Modal';
 import { DictionaryPopup } from '../components/DictionaryPopup';
 import { NativeHookChoices } from '../components/NativeHookChoices';
 import { MediaSearchModal } from '../components/MediaSearchModal';
-import { formatClock, numberWithCommas } from '../lib/format';
+import { numberWithCommas } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
 import { miningError } from '../lib/mining';
 import { useShallow } from 'zustand/react/shallow';
@@ -32,8 +31,7 @@ import { TimerEditModal, TimerResetModal } from './texthooker/TimerEditModal';
 import { StatsModal } from './texthooker/StatsModal';
 import { SettingsPanel, type SettingsTab } from './texthooker/SettingsPanel';
 import { LOCAL_SESSION } from './texthooker/constants';
-import type { TextSessionSummary } from '../lib/types';
-
+import { SessionPickerModal } from './texthooker/SessionPickerModal';
 
 /** `vn://ended`: where a detected session went once the game closed. */
 interface EndedSession {
@@ -41,7 +39,6 @@ interface EndedSession {
   chars: number;
   outcome: 'pending' | 'logged' | 'discarded';
 }
-
 
 export default function TexthookerScreen() {
   const { t } = useTranslation(['texthooker', 'common']);
@@ -507,7 +504,6 @@ export default function TexthookerScreen() {
         </form>
       </dialog>
 
-
       <LineList
         lines={lines}
         contentId={contentId}
@@ -620,93 +616,5 @@ export default function TexthookerScreen() {
         }}
       />
     </div>
-  );
-}
-
-/** Every session stored locally, plus the free-form one. */
-function SessionPickerModal({
-  open,
-  currentId,
-  onClose,
-  onPick,
-  onSearch,
-}: {
-  open: boolean;
-  currentId: string;
-  onClose: () => void;
-  onPick: (session: TextSessionSummary) => void | Promise<void>;
-  onSearch: () => void;
-}) {
-  const { t } = useTranslation('texthooker');
-  const { data } = useQuery({
-    queryKey: ['text-sessions'],
-    queryFn: ipc.listTextSessions,
-    enabled: open,
-  });
-
-  const rows = useMemo(() => {
-    const sessions = data ?? [];
-    if (sessions.some((s) => s.contentId === LOCAL_SESSION)) return sessions;
-    return [
-      {
-        contentId: LOCAL_SESSION,
-        mediaTitle: null,
-        mediaType: null,
-        timerSeconds: 0,
-        lines: 0,
-        chars: 0,
-        sessionChars: 0,
-        sessionLines: 0,
-      },
-      ...sessions,
-    ];
-  }, [data]);
-
-  return (
-    <dialog className={`modal modal-bottom sm:modal-middle ${open ? 'modal-open' : ''}`}>
-      <div className="modal-box max-w-2xl">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-bold text-lg">{t('sessions.title')}</h3>
-          <button onClick={onClose} className="btn btn-ghost btn-sm btn-circle">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <ul className="max-h-96 overflow-y-auto space-y-1">
-          {rows.map((session) => (
-            <li key={session.contentId}>
-              <button
-                type="button"
-                className={`flex w-full items-center gap-3 rounded-field px-3 py-2 text-left transition-colors cursor-pointer ${
-                  session.contentId === currentId
-                    ? 'bg-primary text-primary-content'
-                    : 'hover:bg-base-200'
-                }`}
-                onClick={() => void onPick(session)}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium truncate">
-                    {session.contentId === LOCAL_SESSION
-                      ? t('sessions.free')
-                      : (session.mediaTitle ?? session.contentId)}
-                  </span>
-                  <span className="block text-xs opacity-70 font-mono">{session.contentId}</span>
-                </span>
-                <span className="text-xs tabular-nums opacity-80 shrink-0">
-                  {numberWithCommas(session.chars)} car. · {formatClock(session.timerSeconds)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="modal-action">
-          <button type="button" className="btn btn-primary" onClick={onSearch}>
-            {t('sessions.linkAnother')}
-          </button>
-        </div>
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
   );
 }
