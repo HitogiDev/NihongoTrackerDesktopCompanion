@@ -1104,11 +1104,12 @@ mod reader_tests {
 
 // WebView2 window creation must run outside the synchronous IPC callback so
 // its initialization can keep processing messages on the UI thread.
-async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdResult<()> {
+pub(crate) async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdResult<()> {
     let (label, width, height, min_width, min_height) = match kind {
         "settings" => ("settings", 900.0, 760.0, 560.0, 480.0),
         "reading-overlay-settings" => ("reading-overlay-settings", 680.0, 720.0, 420.0, 440.0),
         "texthooker" => ("texthooker", 1100.0, 760.0, 760.0, 480.0),
+        crate::manga::reader::LABEL => (crate::manga::reader::LABEL, 1180.0, 860.0, 520.0, 420.0),
         _ => return Err("unknown companion window".to_string()),
     };
 
@@ -1586,4 +1587,42 @@ pub fn manga_link_series(
     }
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(())
+}
+
+/// Opens the reader window on a volume, at `page` or where the user left off.
+#[tauri::command]
+pub async fn manga_open_reader(app: AppHandle, volume_id: String, page: Option<i64>) -> CmdResult<()> {
+    crate::manga::reader::open(&app, &volume_id, page).await
+}
+
+/// What the reader window should show. Peeked, not taken: a reload of the
+/// window shows the same volume.
+#[tauri::command]
+pub fn manga_reader_target(state: State<'_, AppState>) -> Option<crate::manga::reader::ReaderTarget> {
+    state.manga.reader.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn manga_reader_volume(state: State<'_, AppState>, volume_id: String) -> CmdResult<Option<crate::manga::reader::ReaderVolume>> {
+    crate::manga::reader::volume(&state.db, &volume_id).map_err(err)
+}
+
+/// Where the user is in a volume (0-based). Called with a debounce while
+/// reading and once more when the window closes.
+#[tauri::command]
+pub fn manga_save_progress(state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
+    if state.db.manga_volume_location(&volume_id).map_err(err)?.is_none() {
+        return Err("Unknown volume".into());
+    }
+    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)
+}
+
+#[tauri::command]
+pub fn manga_save_reader_prefs(
+    state: State<'_, AppState>,
+    series_id: String,
+    prefs: crate::manga::reader::ReaderPrefs,
+) -> CmdResult<crate::manga::reader::ReaderPrefs> {
+    crate::manga::reader::save_prefs(&state.db, &series_id, &prefs).map_err(err)?;
+    Ok(prefs)
 }

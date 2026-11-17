@@ -8,6 +8,7 @@ pub mod archive;
 pub mod library;
 pub mod mokuro;
 pub mod protocol;
+pub mod reader;
 pub mod store;
 pub mod thumbs;
 
@@ -22,6 +23,8 @@ pub struct Runtime {
     /// A library scan is running: a second one would only redo its work.
     pub scanning: AtomicBool,
     pub last_scan: Mutex<Option<Instant>>,
+    /// The volume the reader window shows, or is about to.
+    pub reader: Mutex<Option<reader::ReaderTarget>>,
 }
 
 /// Extensions the webview can show as a page.

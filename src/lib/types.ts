@@ -32,6 +32,14 @@ import type { NativeHookCandidate } from './bindings/NativeHookCandidate';
 import type { NativeHookTextFilters } from './bindings/NativeHookTextFilters';
 import type { ParsedAnime } from './bindings/ParsedAnime';
 import type { ProcessEntry } from './bindings/ProcessEntry';
+import type { PageFit } from './bindings/PageFit';
+import type { ReaderBackground } from './bindings/ReaderBackground';
+import type { ReaderLayout } from './bindings/ReaderLayout';
+import type { ReaderPrefs } from './bindings/ReaderPrefs';
+import type { ReaderTarget } from './bindings/ReaderTarget';
+import type { ReaderVolume } from './bindings/ReaderVolume';
+import type { ReadingDirection } from './bindings/ReadingDirection';
+import type { TextLayerMode } from './bindings/TextLayerMode';
 import type { ReadingOverlaySettings } from './bindings/ReadingOverlaySettings';
 import type { ReadingOverlayState } from './bindings/ReadingOverlayState';
 import type { Settings } from './bindings/Settings';
@@ -74,6 +82,14 @@ export type {
   NativeHookTextFilters,
   ParsedAnime,
   ProcessEntry,
+  PageFit,
+  ReaderBackground,
+  ReaderLayout,
+  ReaderPrefs,
+  ReaderTarget,
+  ReaderVolume,
+  ReadingDirection,
+  TextLayerMode,
   ReadingOverlaySettings,
   ReadingOverlayState,
   Settings,

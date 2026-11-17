@@ -61,6 +61,8 @@ pub fn aux_window_title(lang: &str, kind: &str) -> &'static str {
         ("es", "settings") => "Ajustes · NihongoTracker Companion",
         ("es", "reading-overlay-settings") => "Ajustes del overlay · NihongoTracker Companion",
         ("es", "texthooker") => "Texthooker · NihongoTracker Companion",
+        ("es", "manga-reader") => "Lector de manga · NihongoTracker Companion",
+        (_, "manga-reader") => "Manga reader · NihongoTracker Companion",
         (_, "settings") => "Settings · NihongoTracker Companion",
         (_, "reading-overlay-settings") => "Overlay settings · NihongoTracker Companion",
         _ => "Texthooker · NihongoTracker Companion",

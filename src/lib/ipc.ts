@@ -18,6 +18,9 @@ import type {
   MangaLibrary,
   MangaSeriesDetail,
   MangaSource,
+  ReaderPrefs,
+  ReaderTarget,
+  ReaderVolume,
   ScanSummary,
   MinedSentence,
   MpvSetup,
@@ -237,6 +240,13 @@ export const ipc = {
     invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
   /** Opens (or focuses) the reader window on a volume. */
   mangaOpenReader: (volumeId: string, page?: number) => invoke<void>('manga_open_reader', { volumeId, page }),
+  /** The reader window asks what to show once its page loads. */
+  mangaReaderTarget: () => invoke<ReaderTarget | null>('manga_reader_target'),
+  mangaReaderVolume: (volumeId: string) => invoke<ReaderVolume | null>('manga_reader_volume', { volumeId }),
+  mangaSaveProgress: (volumeId: string, page: number, finished: boolean) =>
+    invoke<void>('manga_save_progress', { volumeId, page, finished }),
+  mangaSaveReaderPrefs: (seriesId: string, prefs: ReaderPrefs) =>
+    invoke<ReaderPrefs>('manga_save_reader_prefs', { seriesId, prefs }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -276,4 +286,6 @@ export const events = {
   streakAuthRequired: 'streak://auth-required',
   discordStatus: 'discord://status',
   mangaLibrary: 'manga://library-changed',
+  /** To the reader window: show another volume. */
+  mangaReaderOpen: 'manga://reader-open',
 } as const;

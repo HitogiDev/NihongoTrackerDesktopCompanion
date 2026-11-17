@@ -202,6 +202,11 @@ pub fn run() {
                 return;
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // The reader closes for real: it saves its page on the way out
+                // (`onCloseRequested`) and a hidden one would only hold memory.
+                if window.label() == manga::reader::LABEL {
+                    return;
+                }
                 if matches!(window.label(), "settings" | "texthooker" | reading_overlay::SETTINGS_LABEL) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -356,6 +361,11 @@ pub fn run() {
             commands::manga_library,
             commands::manga_series_detail,
             commands::manga_link_series,
+            commands::manga_open_reader,
+            commands::manga_reader_target,
+            commands::manga_reader_volume,
+            commands::manga_save_progress,
+            commands::manga_save_reader_prefs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")
