@@ -62,6 +62,7 @@ import { MediaSearchModal } from '../components/MediaSearchModal';
 import { formatClock, numberWithCommas, readingSpeed } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
 import { miningError } from '../lib/mining';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store/useAppStore';
 import {
   RoomConnection,
@@ -203,7 +204,6 @@ export default function TexthookerScreen() {
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const hooker = useAppStore((s) => s.hooker);
-  const tracker = useAppStore((s) => s.tracker);
   const readingOverlay = useReadingOverlay();
   const online = useAppStore((s) => s.online);
 
@@ -281,15 +281,33 @@ export default function TexthookerScreen() {
   const [isTopbarVertical, setIsTopbarVertical] = useState(false);
 
   // A detected visual novel drives the clock from Rust; the manual timer is for
-  // everything else.
-  const autoSession = tracker?.vn && tracker.vn.content_id === contentId ? tracker.vn : null;
-  const nativeHook = tracker?.game_hook.exe ? tracker.game_hook : null;
+  // everything else. Only the fields read here: the snapshot changes every
+  // second while a session counts, and the clock is not one of them.
+  const autoSession = useAppStore(useShallow((s) => {
+    const vn = s.tracker?.vn;
+    return vn && vn.content_id === contentId
+      ? {
+          paused_by_user: vn.paused_by_user,
+          session_chars: vn.session_chars,
+          session_lines: vn.session_lines,
+          image: vn.image,
+        }
+      : null;
+  }));
+  const autoElapsed = useAppStore((s) =>
+    s.tracker?.vn && s.tracker.vn.content_id === contentId ? s.tracker.vn.elapsed_secs : null);
+  const hasAutoSession = Boolean(autoSession);
+  const detectedVn = useAppStore(useShallow((s) => s.tracker?.vn
+    ? { exe: s.tracker.vn.exe, media_title: s.tracker.vn.media_title }
+    : null));
+  const gameHook = useAppStore((s) => s.tracker?.game_hook ?? null);
+  const nativeHook = gameHook?.exe ? gameHook : null;
   const nativeSession = nativeHook?.content_id === contentId;
   const nativeSelected = Boolean(nativeSession && !nativeHook.websocket_selected);
   const nativeInput = nativeSelected && nativeHook
     && ['starting', 'attached', 'receiving'].includes(nativeHook.phase);
   const hookApps = useQuery({ queryKey: ['vn-apps'], queryFn: ipc.listVnApps, enabled: isHookPickerOpen });
-  const hookApp = hookApps.data?.find((entry) => entry.exe.toLowerCase() === tracker?.vn?.exe.toLowerCase());
+  const hookApp = hookApps.data?.find((entry) => entry.exe.toLowerCase() === detectedVn?.exe.toLowerCase());
   const [enablingHook, setEnablingHook] = useState(false);
   useEffect(() => {
     inputSourceRequestRef.current += 1;
@@ -348,7 +366,7 @@ export default function TexthookerScreen() {
       hookPickerOpenedForPidRef.current = nativeHook.pid;
     }
   }, [nativeHook?.pid, nativeHook?.selected_hook_code, nativeInput]);
-  const seconds = autoSession ? autoSession.elapsed_secs : manualSeconds;
+  const seconds = autoElapsed ?? manualSeconds;
 
   const enableNativeHook = async () => {
     if (!hookApp) return;
@@ -495,12 +513,12 @@ export default function TexthookerScreen() {
     ) return;
     setLines(nextLines);
     setTotals(nextTotals);
-    if (!autoSession) {
+    if (!hasAutoSession) {
       setManualSeconds(nextTotals.timerSeconds);
       secondsRef.current = nextTotals.timerSeconds;
       anchorRef.current = { at: Date.now(), seconds: nextTotals.timerSeconds };
     }
-  }, [contentId, autoSession]);
+  }, [contentId, hasAutoSession]);
 
   useEffect(() => {
     if (displayedContentIdRef.current !== contentId) {
@@ -574,7 +592,6 @@ export default function TexthookerScreen() {
     };
   }, [contentId, reload]);
 
-  const hasAutoSession = Boolean(autoSession);
   useEffect(() => { if (hasAutoSession) setEndedSession(null); }, [hasAutoSession]);
   useEffect(() => { setEndedSession(null); }, [contentId]);
 
@@ -602,7 +619,7 @@ export default function TexthookerScreen() {
   // must never lose time, and the auto-pause deadline caps how much of a gap
   // can be banked.
   useEffect(() => {
-    if (autoSession || !isTimerActive) return;
+    if (hasAutoSession || !isTimerActive) return;
     anchorTimer(secondsRef.current);
 
     const tick = () => {
@@ -629,11 +646,11 @@ export default function TexthookerScreen() {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', tick);
     };
-  }, [isTimerActive, autoPauseTimeout, autoSession, anchorTimer]);
+  }, [isTimerActive, autoPauseTimeout, hasAutoSession, anchorTimer]);
 
   // Persist the manual clock so a restart doesn't lose the sitting.
   useEffect(() => {
-    if (autoSession) return;
+    if (hasAutoSession) return;
     const id = setInterval(() => {
       void ipc.hookerSetTimer(contentId, secondsRef.current);
     }, 15000);
@@ -641,7 +658,7 @@ export default function TexthookerScreen() {
       clearInterval(id);
       void ipc.hookerSetTimer(contentId, secondsRef.current);
     };
-  }, [contentId, autoSession]);
+  }, [contentId, hasAutoSession]);
 
   // ── room ────────────────────────────────────────────────────────────
 
@@ -731,7 +748,7 @@ export default function TexthookerScreen() {
   const handleResetTimer = useCallback(async () => {
     setSavingTimer(true); setTimerError(false);
     try {
-      if (autoSession) await ipc.setSessionPaused(true);
+      if (hasAutoSession) await ipc.setSessionPaused(true);
       await ipc.hookerSetTimer(contentId, 0, true);
       if (contentIdRef.current !== contentId) return;
       secondsRef.current = 0;
@@ -741,7 +758,7 @@ export default function TexthookerScreen() {
       setIsResetTimerConfirmOpen(false);
     } catch { setTimerError(true); }
     finally { setSavingTimer(false); }
-  }, [contentId, autoSession, anchorTimer]);
+  }, [contentId, hasAutoSession, anchorTimer]);
 
   useEffect(() => { setIsTimerEditOpen(false); setIsResetTimerConfirmOpen(false); setTimerError(false); }, [contentId]);
 
@@ -2363,8 +2380,8 @@ export default function TexthookerScreen() {
         )}
       >
         <div className="max-h-[55vh] overflow-y-auto">
-          <NativeHookChoices status={nativeHook} title={tracker?.vn?.media_title} selected={selectedHookCode} onSelect={setSelectedHookCode}
-            enable={!nativeHook && tracker?.vn && !hookApp?.native_hook_enabled ? { busy: enablingHook, disabled: !hookApp || hookApps.isPending, onClick: () => void enableNativeHook() } : undefined}
+          <NativeHookChoices status={nativeHook} title={detectedVn?.media_title} selected={selectedHookCode} onSelect={setSelectedHookCode}
+            enable={!nativeHook && detectedVn && !hookApp?.native_hook_enabled ? { busy: enablingHook, disabled: !hookApp || hookApps.isPending, onClick: () => void enableNativeHook() } : undefined}
             trackingRequired={!nativeHook && Boolean(hookApp?.native_hook_enabled)} />
         </div>
         {hookSaveError && <p className="mt-3 text-sm text-error">{hookSaveError}</p>}
