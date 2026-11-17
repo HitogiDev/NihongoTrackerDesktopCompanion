@@ -833,8 +833,13 @@ impl Db {
     pub fn lines_for(&self, content_id: &str, limit: i64) -> Result<Vec<TextLine>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT id, content_id, text, chars, created_at, synced FROM text_lines
-                 WHERE content_id = ?1 ORDER BY created_at LIMIT ?2",
+                // The newest `limit` lines, returned oldest first: a reader with
+                // more history than the limit must still show what just came in.
+                "SELECT id, content_id, text, chars, created_at, synced FROM (
+                     SELECT rowid AS rid, id, content_id, text, chars, created_at, synced
+                     FROM text_lines WHERE content_id = ?1
+                     ORDER BY created_at DESC, rowid DESC LIMIT ?2
+                 ) ORDER BY created_at, rid",
             )?;
             let rows = stmt.query_map(params![content_id, limit], map_line)?;
             rows.collect()
@@ -1336,6 +1341,32 @@ mod mining_tests {
 
         drop(db);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lines_for_returns_the_newest_lines_oldest_first() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        for index in 0..10 {
+            db.insert_line(&TextLine {
+                id: format!("l{index}"), content_id: "v1".into(), text: "日本語".into(), chars: 3,
+                created_at: format!("2026-01-01T00:00:{index:02}Z"), synced: false,
+            }).unwrap();
+        }
+        // Same instant: insertion order decides, as in `latest_line`.
+        db.insert_line(&TextLine {
+            id: "tie".into(), content_id: "v1".into(), text: "日本語".into(), chars: 3,
+            created_at: "2026-01-01T00:00:09Z".into(), synced: false,
+        }).unwrap();
+        db.insert_line(&TextLine {
+            id: "other".into(), content_id: "v2".into(), text: "日本語".into(), chars: 3,
+            created_at: "2026-01-01T00:00:30Z".into(), synced: false,
+        }).unwrap();
+
+        let ids = |limit| db.lines_for("v1", limit).unwrap().into_iter().map(|line| line.id).collect::<Vec<_>>();
+        assert_eq!(ids(3), vec!["l8", "l9", "tie"]);
+        assert_eq!(ids(100).len(), 11);
+        assert_eq!(ids(100).first().map(String::as_str), Some("l0"));
+        assert_eq!(db.latest_line("v1").unwrap().map(|line| line.id), Some("tie".into()));
     }
 
     #[test]
