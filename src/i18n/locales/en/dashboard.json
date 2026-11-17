@@ -64,7 +64,7 @@
   },
   "reviewPending": "Review {{count}} pending log",
   "reviewPending_other": "Review {{count}} pending logs",
-  "subtitlePartial": "Detection is limited on this system. Settings → Tracking lists what works.",
+  "subtitlePartial": "Detection is limited on this system. Settings → Advanced lists what works.",
   "toast": {
     "synced": "Synced with NihongoTracker.",
     "syncOffline": "Still no connection. Your logs stay queued and will be sent later.",

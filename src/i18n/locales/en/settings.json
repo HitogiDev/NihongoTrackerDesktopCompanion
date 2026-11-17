@@ -1,14 +1,6 @@
 {
   "title": "Settings",
   "subtitle": "How things are detected, when they are logged, and where they are sent.",
-  "tabs": {
-    "label": "Settings sections",
-    "account": "Account",
-    "tracking": "Tracking",
-    "discord": "Discord",
-    "anki": "Anki",
-    "app": "App"
-  },
   "anki": {
     "url": "AnkiConnect address",
     "urlHint": "Same as Yomitan's \"AnkiConnect server address\". Change it only if you changed AnkiConnect's bind address or port.",
@@ -216,5 +208,19 @@
     "confirmTitle": "Restore this backup?",
     "confirmBody": "Everything stored locally is replaced with the backup and the app restarts. Logs still waiting in the queue are replaced too. The current database is kept as companion.before-restore.sqlite3 in the app data folder.",
     "confirm": "Restore and restart"
+  },
+  "sections": {
+    "label": "Settings sections",
+    "account": "Account",
+    "anime": "Anime",
+    "novels": "Visual novels and games",
+    "readingOverlay": "Reading overlay",
+    "dictionaries": "Dictionaries",
+    "anki": "Anki",
+    "discord": "Discord",
+    "app": "Appearance and app",
+    "backup": "Backups and updates",
+    "advanced": "Advanced",
+    "detectionLoop": "Detection"
   }
 }

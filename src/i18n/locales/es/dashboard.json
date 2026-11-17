@@ -64,7 +64,7 @@
   },
   "reviewPending": "Revisar {{count}} registro pendiente",
   "reviewPending_other": "Revisar {{count}} registros pendientes",
-  "subtitlePartial": "La detección es limitada en este sistema. En Ajustes → Seguimiento ves qué funciona.",
+  "subtitlePartial": "La detección es limitada en este sistema. En Ajustes → Avanzado ves qué funciona.",
   "toast": {
     "synced": "Sincronizado con NihongoTracker.",
     "syncOffline": "Sigue sin haber conexión. Tus logs siguen en cola y se enviarán más tarde.",
