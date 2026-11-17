@@ -232,6 +232,17 @@ pub fn session_summary(lang: &str, minutes: u64, chars: i64) -> String {
         _ => format!("{minutes} min, {chars} chars"),
     }
 }
+/// The state line of a manga presence: pages, and characters when there are.
+pub fn discord_manga_state(lang: &str, pages: i64, chars: i64) -> String {
+    let count = compact_chars(lang, chars);
+    match (lang, chars > 0) {
+        ("es", true) => format!("{pages} páginas · {count} caracteres"),
+        ("es", false) => format!("{pages} páginas"),
+        (_, true) => format!("{pages} pages · {count} characters"),
+        (_, false) => format!("{pages} pages"),
+    }
+}
+
 pub fn manga_session_summary(lang: &str, minutes: u64, pages: i64, chars: i64) -> String {
     match (lang, chars > 0) {
         ("es", true) => format!("{minutes} min, {pages} pág., {chars} car."),

@@ -11,6 +11,9 @@
 //!    presence: no title, no cover.
 //! 3. Otherwise the full thing.
 //!
+//! Sessions are taken in this order: a detected VN or game, the manga reader
+//! (where an unlinked series counts as unresolved), then a video.
+//!
 //! The connection lives on its own OS thread because the crate's IPC is
 //! blocking. Discord may not be running, may be started later, or may quit
 //! mid-session; the thread reconnects with backoff and an IPC failure can never
@@ -239,6 +242,56 @@ pub fn decide(
         }
         // Out of focus and "idling" turned off: fall through. The presence
         // goes empty, exactly as if nothing was being read.
+    }
+
+    // The manga reader, under the same rules. A series not linked to
+    // NihongoTracker only has its folder's name, which is as unresolved as a
+    // release file name: generic. `is_adult` comes with the session (linked
+    // from the media, or set for an adult source), never looked up here.
+    if let Some(manga) = snapshot.manga.as_ref() {
+        if manga.counting || settings.discord_show_idle {
+            let series_key = format!("manga:{}", manga.series_id);
+            if let Some(entry) = manga
+                .media_id
+                .as_deref()
+                .and_then(|id| blacklisted(blacklist, id))
+                .or_else(|| blacklisted(blacklist, &series_key))
+            {
+                return Decision::Blocked { label: entry.label.clone() };
+            }
+            let reason = if manga.is_adult {
+                Reason::Adult
+            } else if manga.media_id.is_none() {
+                Reason::Unresolved
+            } else if settings.discord_generic_mode {
+                Reason::Generic
+            } else {
+                Reason::Full
+            };
+            let hide = reason != Reason::Full;
+            let title = manga.title().to_string();
+            return Decision::Show {
+                presence: Presence {
+                    details: if hide {
+                        crate::i18n::discord_generic(lang).to_string()
+                    } else if manga.counting {
+                        crate::i18n::discord_reading(lang, &title)
+                    } else {
+                        crate::i18n::discord_idling(lang, &title)
+                    },
+                    // Counts only: they identify nothing, like a VN's characters.
+                    state: crate::i18n::discord_manga_state(lang, manga.pages_read, manga.chars_read),
+                    large_image: settings.discord_large_image.clone(),
+                    large_text: if hide { crate::i18n::discord_generic(lang).to_string() } else { title },
+                    start_epoch: epoch_of(&manga.started_at),
+                    end_epoch: None,
+                    watching: false,
+                    button,
+                    generic: hide,
+                },
+                reason,
+            };
+        }
     }
 
     if let Some(anime) = snapshot.anime.as_ref().filter(|anime| !anime.paused) {
@@ -740,6 +793,94 @@ mod tests {
         assert!(presence.generic);
         assert!(!presence.details.contains("蒼"));
         assert_ne!(presence.large_image, "https://img/cover.jpg");
+    }
+
+    fn manga(media_id: Option<&str>, is_adult: bool) -> crate::manga::session::MangaSession {
+        serde_json::from_value(serde_json::json!({
+            "volume_id": "vol-1", "series_id": "ser-1",
+            "series_title": "[Scans] Yotsuba (raw)", "volume_title": "第1巻",
+            "media_id": media_id, "media_title": media_id.map(|_| "Yotsuba&!"),
+            "is_adult": is_adult, "has_text": true, "page": 4, "page_count": 200,
+            "pages_read": 12, "chars_read": 3400, "elapsed_secs": 600, "counting": true,
+            "pause": null, "inactive_secs": 0, "started_at": "2026-08-12T20:00:00Z"
+        }))
+        .unwrap()
+    }
+
+    fn snapshot_manga(session: crate::manga::session::MangaSession) -> TrackerSnapshot {
+        TrackerSnapshot { manga: Some(session), ..Default::default() }
+    }
+
+    fn says_nothing_about_the_work(presence: &Presence) {
+        for text in [&presence.details, &presence.state, &presence.large_text, &presence.large_image] {
+            assert!(!text.contains("Yotsuba") && !text.contains("第1巻"), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_linked_manga_shows_reading_its_title_and_the_counts() {
+        let Decision::Show { presence, reason } = decide(&snapshot_manga(manga(Some("30104"), false)), &settings(), &[], NOW) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Full);
+        assert_eq!(presence.details, "Reading Yotsuba&!");
+        assert_eq!(presence.state, "12 pages · 3.4k characters");
+        assert_eq!(presence.large_image, settings().discord_large_image, "a local cover is never uploaded");
+        assert!(!presence.watching);
+    }
+
+    #[test]
+    fn an_adult_or_unlinked_manga_is_generic() {
+        let Decision::Show { presence, reason } = decide(&snapshot_manga(manga(Some("30104"), true)), &settings(), &[], NOW) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Adult);
+        assert!(presence.generic);
+        says_nothing_about_the_work(&presence);
+
+        let Decision::Show { presence, reason } = decide(&snapshot_manga(manga(None, false)), &settings(), &[], NOW) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Unresolved, "a folder name is not a resolved title");
+        says_nothing_about_the_work(&presence);
+
+        let generic = Settings { discord_generic_mode: true, ..settings() };
+        let Decision::Show { reason, presence } = decide(&snapshot_manga(manga(Some("30104"), false)), &generic, &[], NOW) else {
+            panic!("expected a presence");
+        };
+        assert_eq!(reason, Reason::Generic);
+        says_nothing_about_the_work(&presence);
+    }
+
+    #[test]
+    fn a_blacklisted_manga_publishes_nothing_even_when_adult() {
+        let list = [entry("30104", "media")];
+        for adult in [false, true] {
+            assert!(matches!(decide(&snapshot_manga(manga(Some("30104"), adult)), &settings(), &list, NOW), Decision::Blocked { .. }));
+        }
+        let by_series = [entry("manga:ser-1", "media")];
+        assert!(matches!(decide(&snapshot_manga(manga(None, false)), &settings(), &by_series, NOW), Decision::Blocked { .. }));
+    }
+
+    #[test]
+    fn a_paused_manga_idles_or_clears() {
+        let mut paused = manga(Some("30104"), false);
+        paused.counting = false;
+        let Decision::Show { presence, .. } = decide(&snapshot_manga(paused.clone()), &settings(), &[], NOW) else {
+            panic!("idling is on by default");
+        };
+        assert_eq!(presence.details, "Idling in Yotsuba&!");
+        let no_idle = Settings { discord_show_idle: false, ..settings() };
+        assert_eq!(decide(&snapshot_manga(paused), &no_idle, &[], NOW), Decision::Idle);
+    }
+
+    #[test]
+    fn a_detected_vn_wins_over_the_manga_reader() {
+        let snapshot = TrackerSnapshot { vn: Some(vn(false)), manga: Some(manga(Some("30104"), false)), ..Default::default() };
+        let Decision::Show { presence, .. } = decide(&snapshot, &settings(), &[], NOW) else {
+            panic!("expected a presence");
+        };
+        assert!(presence.details.contains("蒼"));
     }
 
     fn snapshot_anime(session: AnimeSession) -> TrackerSnapshot {
