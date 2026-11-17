@@ -942,8 +942,19 @@ pub async fn anki_model_fields(state: State<'_, AppState>, model: String) -> Cmd
 }
 
 #[tauri::command]
-pub async fn mine_dictionary_entry(state: State<'_, AppState>, word: String, reading: String, meaning: String, sentence: String, line_id: Option<String>, content_id: Option<String>) -> CmdResult<i64> {
+pub async fn mine_dictionary_entry(app: AppHandle, state: State<'_, AppState>, word: String, reading: String, meaning: String, sentence: String, line_id: Option<String>, content_id: Option<String>) -> CmdResult<i64> {
     let settings = state.settings_snapshot().await;
+    // A manga block is a line once its page is read; looked up before that,
+    // it becomes one now, so the card still has its sentence and its work.
+    if let Some(id) = line_id.clone().filter(|id| crate::manga::session::parse_line_id(id).is_some()) {
+        let found = tauri::async_runtime::spawn_blocking(move || crate::manga::session::ensure_line(&app, &id))
+            .await
+            .map_err(err)?;
+        if let Some(found) = found {
+            let (line, title) = found?;
+            return sync::add_dictionary_note(&settings, &word, &reading, &meaning, &line.text, &title).await;
+        }
+    }
     if let Some(line_id) = line_id {
         let (sentence, title) = dictionary_line_context(&state.db, &line_id, content_id.as_deref())?;
         return sync::add_dictionary_note(&settings, &word, &reading, &meaning, &sentence, &title).await;
@@ -1104,11 +1115,12 @@ mod reader_tests {
 
 // WebView2 window creation must run outside the synchronous IPC callback so
 // its initialization can keep processing messages on the UI thread.
-async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdResult<()> {
+pub(crate) async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdResult<()> {
     let (label, width, height, min_width, min_height) = match kind {
         "settings" => ("settings", 900.0, 760.0, 560.0, 480.0),
         "reading-overlay-settings" => ("reading-overlay-settings", 680.0, 720.0, 420.0, 440.0),
         "texthooker" => ("texthooker", 1100.0, 760.0, 760.0, 480.0),
+        crate::manga::reader::LABEL => (crate::manga::reader::LABEL, 1180.0, 860.0, 520.0, 420.0),
         _ => return Err("unknown companion window".to_string()),
     };
 
@@ -1496,4 +1508,190 @@ pub fn request_window_titles_permission() -> bool {
 #[tauri::command]
 pub fn parse_release_name(name: String) -> Value {
     serde_json::to_value(crate::parser::parse(&name)).unwrap_or(Value::Null)
+}
+
+// ── manga ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn manga_sources(state: State<'_, AppState>) -> CmdResult<Vec<crate::manga::store::MangaSource>> {
+    state.db.manga_sources().map_err(err)
+}
+
+/// Adds a folder to the manga library and scans it. Errors are codes the UI
+/// translates: `not-a-folder`, `already-added`.
+#[tauri::command]
+pub async fn manga_add_local_root(app: AppHandle, path: String) -> CmdResult<crate::manga::library::ScanSummary> {
+    let root = std::path::PathBuf::from(&path);
+    {
+        let state = app.state::<AppState>();
+        let existing: Vec<std::path::PathBuf> = state
+            .db
+            .manga_sources()
+            .map_err(err)?
+            .into_iter()
+            .filter(|source| source.kind == crate::manga::store::SOURCE_LOCAL)
+            .map(|source| source.url.into())
+            .collect();
+        crate::manga::library::check_new_root(&root, &existing).map_err(str::to_string)?;
+        let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+        state
+            .db
+            .add_manga_source(&uuid::Uuid::new_v4().to_string(), crate::manga::store::SOURCE_LOCAL, &name, &path)
+            .map_err(err)?;
+    }
+    crate::manga::library::rescan(&app, true).await
+}
+
+/// Forgets a library root and its series. The files are not touched.
+#[tauri::command]
+pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let volumes = state.db.delete_manga_source(&id).map_err(err)?;
+    if let Ok(cache_dir) = app.path().app_cache_dir() {
+        crate::manga::thumbs::purge(&cache_dir, &volumes);
+    }
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+/// Rescans the local roots. `force` is the user's button; opening the screen
+/// passes `false` and is skipped if a scan ran a moment ago.
+#[tauri::command]
+pub async fn manga_rescan(app: AppHandle, force: Option<bool>) -> CmdResult<crate::manga::library::ScanSummary> {
+    crate::manga::library::rescan(&app, force.unwrap_or(false)).await
+}
+
+/// The Manga screen: roots, series and the "continue reading" shelf.
+#[tauri::command]
+pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::store::MangaLibrary> {
+    Ok(crate::manga::store::MangaLibrary {
+        sources: state.db.manga_sources().map_err(err)?,
+        series: state.db.manga_series_list().map_err(err)?,
+        continue_reading: state.db.manga_continue_reading(12).map_err(err)?,
+    })
+}
+
+#[tauri::command]
+pub fn manga_series_detail(state: State<'_, AppState>, series_id: String) -> CmdResult<Option<crate::manga::store::MangaSeriesDetail>> {
+    let Some(series) = state.db.manga_series(&series_id).map_err(err)? else { return Ok(None) };
+    let volumes = state.db.manga_volumes(&series_id).map_err(err)?;
+    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes }))
+}
+
+/// Links a series to its NihongoTracker media (or unlinks it with `None`).
+/// `is_adult` travels with the link, as it does for VNs, so Discord never has
+/// to ask.
+#[tauri::command]
+pub fn manga_link_series(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    series_id: String,
+    media_id: Option<String>,
+    media_title: Option<String>,
+    is_adult: Option<bool>,
+) -> CmdResult<()> {
+    let media_id = media_id.filter(|id| !id.trim().is_empty());
+    let media_title = media_title.filter(|_| media_id.is_some());
+    let is_adult = media_id.is_some() && is_adult.unwrap_or(false);
+    if !state.db.link_manga_series(&series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
+        return Err("Unknown series".into());
+    }
+    crate::manga::session::series_linked(&app, &series_id, media_id.as_deref(), media_title.as_deref(), is_adult);
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+/// Opens the reader window on a volume, at `page` or where the user left off.
+#[tauri::command]
+pub async fn manga_open_reader(app: AppHandle, volume_id: String, page: Option<i64>) -> CmdResult<()> {
+    crate::manga::reader::open(&app, &volume_id, page).await
+}
+
+/// What the reader window should show. Peeked, not taken: a reload of the
+/// window shows the same volume.
+#[tauri::command]
+pub fn manga_reader_target(state: State<'_, AppState>) -> Option<crate::manga::reader::ReaderTarget> {
+    state.manga.reader.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn manga_reader_volume(state: State<'_, AppState>, volume_id: String) -> CmdResult<Option<crate::manga::reader::ReaderVolume>> {
+    crate::manga::reader::volume(&state.db, &volume_id).map_err(err)
+}
+
+/// Where the user is in a volume (0-based). Called with a debounce while
+/// reading and once more when the window closes.
+#[tauri::command]
+pub fn manga_save_progress(state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
+    if state.db.manga_volume_location(&volume_id).map_err(err)?.is_none() {
+        return Err("Unknown volume".into());
+    }
+    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)
+}
+
+#[tauri::command]
+pub fn manga_save_reader_prefs(
+    state: State<'_, AppState>,
+    series_id: String,
+    prefs: crate::manga::reader::ReaderPrefs,
+) -> CmdResult<crate::manga::reader::ReaderPrefs> {
+    crate::manga::reader::save_prefs(&state.db, &series_id, &prefs).map_err(err)?;
+    Ok(prefs)
+}
+
+/// The reader shows this volume now: Rust starts counting its pages. Loads
+/// its text off the async runtime, like `manga_volume_text`.
+#[tauri::command]
+pub async fn manga_session_open(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
+    let db = state.db.clone();
+    let id = volume_id.clone();
+    let loaded = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let Some(volume) = crate::manga::reader::volume(&db, &id).map_err(|e| e.to_string())? else {
+            return Err("Unknown volume".into());
+        };
+        let text = crate::manga::mokuro::volume_text(&db, &id).unwrap_or_default();
+        Ok(crate::manga::session::OpenVolume::new(&volume, text))
+    })
+    .await
+    .map_err(err)??;
+    // The window may have been focused before its page asked.
+    if let Some(window) = app.get_webview_window(crate::manga::reader::LABEL) {
+        crate::manga::session::set_focused(&app, window.is_focused().unwrap_or(false));
+    }
+    crate::manga::session::open_volume(&app, loaded);
+    Ok(())
+}
+
+/// Mines a block of the reader's text, with the panel around it as its
+/// picture (see `manga::session::mine_block`).
+#[tauri::command]
+pub async fn manga_mine_block(app: AppHandle, volume_id: String, page: i64, block: usize) -> CmdResult<MinedSentence> {
+    tauri::async_runtime::spawn_blocking(move || crate::manga::session::mine_block(&app, &volume_id, page, block))
+        .await
+        .map_err(err)?
+}
+
+/// The reading session, for a window that opens after it started.
+#[tauri::command]
+pub fn manga_session_state(state: State<'_, AppState>) -> Option<crate::manga::session::MangaSession> {
+    state.manga.tracking.lock().unwrap().session.clone()
+}
+
+/// The pages the reader has on screen (two in a spread, none past the end).
+#[tauri::command]
+pub fn manga_session_pages(state: State<'_, AppState>, volume_id: String, pages: Vec<i64>) {
+    let mut tracking = state.manga.tracking.lock().unwrap();
+    if let Some(open) = tracking.open.as_mut().filter(|open| open.volume_id == volume_id) {
+        open.show(&pages);
+    }
+}
+
+/// The text of every page of a volume (`null` where there is none), for the
+/// reader's text layer.
+#[tauri::command]
+pub async fn manga_volume_text(state: State<'_, AppState>, volume_id: String) -> CmdResult<Vec<Option<crate::manga::mokuro::MokuroPage>>> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::manga::mokuro::volume_text(&db, &volume_id))
+        .await
+        .map_err(err)?
 }

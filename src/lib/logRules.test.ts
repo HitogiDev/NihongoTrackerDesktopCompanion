@@ -67,4 +67,30 @@ describe('draftFromPayload', () => {
     // datetime-local has minute precision, which this date already has.
     expect(back).toEqual(payload);
   });
+
+  it('accepts the log a manga reader session makes, linked or not', () => {
+    // The shape `manga::session::log_payload` builds (see its Rust tests).
+    const linked = {
+      type: 'manga',
+      mediaTitle: 'Yotsuba&!',
+      description: 'よつばと! — 第1巻',
+      mediaId: '30104',
+      pages: 12,
+      chars: 3400,
+      time: 26,
+      date: '2026-11-17T10:00:00.000Z',
+      _detected: { source: 'manga', seriesId: 's1', volumeId: 'v1', volume: '第1巻', seconds: 1540 },
+    };
+    const draftLinked = draftFromPayload(linked);
+    expect(missing(draftLinked)).toBeNull();
+    const { _detected, ...body } = linked;
+    void _detected;
+    expect(toPayload(draftLinked, new Date())).toEqual(body);
+
+    const unlinked = { type: 'manga', mediaTitle: 'よつばと!', description: 'よつばと! — 第1巻', pages: 3, date: '2026-11-17T10:00:00.000Z' };
+    const draftUnlinked = draftFromPayload(unlinked);
+    expect(missing(draftUnlinked)).toBeNull();
+    expect(toPayload(draftUnlinked, new Date()).mediaId).toBeUndefined();
+    expect(missing({ ...draftUnlinked, pages: '' })).toBe('any');
+  });
 });

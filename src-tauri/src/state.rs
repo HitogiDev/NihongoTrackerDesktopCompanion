@@ -152,6 +152,9 @@ pub struct TrackerSnapshot {
     pub idle_seconds: u64,
     pub anime: Option<AnimeSession>,
     pub vn: Option<VnSession>,
+    /// Reading in the manga reader (see `manga::session`).
+    #[serde(default)]
+    pub manga: Option<crate::manga::session::MangaSession>,
     pub queued_count: i64,
     pub pending_count: i64,
     #[serde(default)]
@@ -340,6 +343,7 @@ pub struct AppState {
     /// Last `auth/verify` outcome and when it was taken, so every window that
     /// opens does not send its own request (see `connection::cached`).
     pub connection_last: std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>>,
+    pub manga: crate::manga::Runtime,
 }
 
 impl AppState {

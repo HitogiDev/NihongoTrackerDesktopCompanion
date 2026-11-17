@@ -20,5 +20,7 @@
   },
   "retry": "Send again",
   "loadFailed": "Pending logs could not be loaded.",
-  "outboxLoadFailed": "The send queue could not be loaded."
+  "outboxLoadFailed": "The send queue could not be loaded.",
+  "mangaVolume": "{{volume}} · Manga reader",
+  "linkHint": "Link the series in the Manga library to log it without stopping here."
 }

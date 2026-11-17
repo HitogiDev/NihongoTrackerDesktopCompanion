@@ -61,6 +61,8 @@ pub fn aux_window_title(lang: &str, kind: &str) -> &'static str {
         ("es", "settings") => "Ajustes · NihongoTracker Companion",
         ("es", "reading-overlay-settings") => "Ajustes del overlay · NihongoTracker Companion",
         ("es", "texthooker") => "Texthooker · NihongoTracker Companion",
+        ("es", "manga-reader") => "Lector de manga · NihongoTracker Companion",
+        (_, "manga-reader") => "Manga reader · NihongoTracker Companion",
         (_, "settings") => "Settings · NihongoTracker Companion",
         (_, "reading-overlay-settings") => "Overlay settings · NihongoTracker Companion",
         _ => "Texthooker · NihongoTracker Companion",
@@ -230,6 +232,26 @@ pub fn session_summary(lang: &str, minutes: u64, chars: i64) -> String {
         _ => format!("{minutes} min, {chars} chars"),
     }
 }
+/// The state line of a manga presence: pages, and characters when there are.
+pub fn discord_manga_state(lang: &str, pages: i64, chars: i64) -> String {
+    let count = compact_chars(lang, chars);
+    match (lang, chars > 0) {
+        ("es", true) => format!("{pages} páginas · {count} caracteres"),
+        ("es", false) => format!("{pages} páginas"),
+        (_, true) => format!("{pages} pages · {count} characters"),
+        (_, false) => format!("{pages} pages"),
+    }
+}
+
+pub fn manga_session_summary(lang: &str, minutes: u64, pages: i64, chars: i64) -> String {
+    match (lang, chars > 0) {
+        ("es", true) => format!("{minutes} min, {pages} pág., {chars} car."),
+        ("es", false) => format!("{minutes} min, {pages} pág."),
+        (_, true) => format!("{minutes} min, {pages} pages, {chars} chars"),
+        (_, false) => format!("{minutes} min, {pages} pages"),
+    }
+}
+
 pub fn native_filter_error(lang: &str, line: usize, message: &str) -> String {
     match lang {
         "es" => format!("Regex inválida en la línea {line}: {message}"),

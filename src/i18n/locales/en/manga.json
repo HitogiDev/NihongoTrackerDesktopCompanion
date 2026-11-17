@@ -1,0 +1,106 @@
+{
+  "title": "Manga",
+  "subtitle": "Read your manga in Japanese, with mokuro text and dictionary lookups.",
+  "search": "Search series",
+  "loadFailed": "Could not load the manga library",
+  "tabs": {
+    "label": "Where the manga comes from",
+    "all": "All",
+    "local": "Local",
+    "webdav": "WebDAV",
+    "extensions": "Extensions",
+    "soon": "Soon",
+    "soonHint": "Coming in a later update"
+  },
+  "actions": {
+    "addFolder": "Add folder",
+    "folders": "Folders",
+    "rescan": "Rescan folders",
+    "readVolume": "Read {{volume}}",
+    "continueAt": "Continue {{volume}} · p. {{page}}"
+  },
+  "shelf": {
+    "title": "Continue reading",
+    "upNext": "Up next",
+    "page": "p. {{page}} / {{count}}",
+    "open": "{{title}} — {{volume}}"
+  },
+  "grid": {
+    "title": "Series",
+    "volumes_one": "{{count}} volume",
+    "volumes_other": "{{count}} volumes",
+    "finished_one": "{{count}} read",
+    "finished_other": "{{count}} read",
+    "text": "OCR",
+    "textHint": "Has text you can hover and look up",
+    "progress": "{{percent}}% read",
+    "noMatches": "No series matches the filter",
+    "clear": "Clear filter",
+    "nothingFound": "No manga in your folders yet",
+    "nothingFoundBody": "Image folders, CBZ and ZIP files count as volumes, and the folder they are in as the series. Add files and rescan."
+  },
+  "detail": {
+    "back": "Back to the library",
+    "loadFailed": "Could not load this series",
+    "gone": "This series is no longer in the library",
+    "goneBody": "Its folder was removed or moved. Rescan or add the folder again.",
+    "volumes": "Volumes",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "hasText": "With text",
+    "percentRead": "{{percent}}% read",
+    "textMokuro": "Text from mokuro",
+    "textOcr": "Text from OCR",
+    "noText": "No text",
+    "finished": "Read",
+    "link": "Link to NihongoTracker",
+    "linkHint": "Linking tells NihongoTracker which manga you are reading.",
+    "unlink": "Unlink"
+  },
+  "folders": {
+    "title": "Library folders",
+    "body": "Every folder here is scanned for series. Each subfolder with volumes is a series.",
+    "pick": "Choose a manga folder",
+    "none": "No folders yet.",
+    "series_one": "{{count}} series",
+    "series_other": "{{count}} series",
+    "remove": "Remove {{name}} from the library",
+    "removeHint": "Removing a folder only forgets it here: no file is deleted."
+  },
+  "empty": {
+    "title": "Your manga shelf is empty",
+    "body": "Add manga from your computer to read it with hover lookups. Your progress stays on this computer.",
+    "local": {
+      "title": "A folder on this computer",
+      "body": "Folders of images, CBZ or ZIP volumes, and the .mokuro files that give them text."
+    },
+    "webdav": {
+      "title": "A WebDAV server",
+      "body": "Your own server with volumes and their .mokuro files, read on demand."
+    },
+    "extensions": {
+      "title": "Extensions",
+      "body": "Online sources through a local Suwayomi server, only if you choose to install it."
+    },
+    "tip": "Tip: put each series in its own folder. A file called Vol 1.mokuro next to Vol 1.cbz or a Vol 1 folder gives that volume its text."
+  },
+  "errors": {
+    "notAFolder": "That is not a folder this app can read.",
+    "alreadyAdded": "That folder, or one that contains it, is already in the library."
+  },
+  "toast": {
+    "added_one": "Found {{count}} series",
+    "added_other": "Found {{count}} series",
+    "addedEmpty": "Folder added, but no manga was found in it yet",
+    "addFailed": "Could not add the folder: {{message}}",
+    "rescanned_one": "Library up to date: {{count}} series",
+    "rescanned_other": "Library up to date: {{count}} series",
+    "rescanFailed": "Could not rescan: {{message}}",
+    "offline": "Not available right now: {{names}}",
+    "removed": "{{name}} removed from the library",
+    "removeFailed": "Could not remove the folder: {{message}}",
+    "linked": "{{title}} linked to NihongoTracker",
+    "linkFailed": "Could not link: {{message}}",
+    "openFailed": "Could not open the reader: {{message}}"
+  }
+}

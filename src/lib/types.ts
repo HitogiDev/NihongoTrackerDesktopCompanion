@@ -15,6 +15,17 @@ import type { FilterPreview } from './bindings/FilterPreview';
 import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
 import type { MediaMatch } from './bindings/MediaMatch';
+import type { MangaContinue } from './bindings/MangaContinue';
+import type { MangaLibrary } from './bindings/MangaLibrary';
+import type { MangaPause } from './bindings/MangaPause';
+import type { MangaSeries } from './bindings/MangaSeries';
+import type { MangaSeriesDetail } from './bindings/MangaSeriesDetail';
+import type { MangaSession } from './bindings/MangaSession';
+import type { MangaSource } from './bindings/MangaSource';
+import type { MangaVolume } from './bindings/MangaVolume';
+import type { MokuroBlock } from './bindings/MokuroBlock';
+import type { MokuroPage } from './bindings/MokuroPage';
+import type { ScanSummary } from './bindings/ScanSummary';
 import type { MinedSentence } from './bindings/MinedSentence';
 import type { MpvSetup } from './bindings/MpvSetup';
 import type { NativeGameHookPhase } from './bindings/NativeGameHookPhase';
@@ -23,6 +34,14 @@ import type { NativeHookCandidate } from './bindings/NativeHookCandidate';
 import type { NativeHookTextFilters } from './bindings/NativeHookTextFilters';
 import type { ParsedAnime } from './bindings/ParsedAnime';
 import type { ProcessEntry } from './bindings/ProcessEntry';
+import type { PageFit } from './bindings/PageFit';
+import type { ReaderBackground } from './bindings/ReaderBackground';
+import type { ReaderLayout } from './bindings/ReaderLayout';
+import type { ReaderPrefs } from './bindings/ReaderPrefs';
+import type { ReaderTarget } from './bindings/ReaderTarget';
+import type { ReaderVolume } from './bindings/ReaderVolume';
+import type { ReadingDirection } from './bindings/ReadingDirection';
+import type { TextLayerMode } from './bindings/TextLayerMode';
 import type { ReadingOverlaySettings } from './bindings/ReadingOverlaySettings';
 import type { ReadingOverlayState } from './bindings/ReadingOverlayState';
 import type { Settings } from './bindings/Settings';
@@ -48,6 +67,17 @@ export type {
   HookerState,
   HookerStatus,
   MediaMatch,
+  MangaContinue,
+  MangaLibrary,
+  MangaPause,
+  MangaSeries,
+  MangaSeriesDetail,
+  MangaSession,
+  MangaSource,
+  MangaVolume,
+  MokuroBlock,
+  MokuroPage,
+  ScanSummary,
   MinedSentence,
   MpvSetup,
   NativeGameHookPhase,
@@ -56,6 +86,14 @@ export type {
   NativeHookTextFilters,
   ParsedAnime,
   ProcessEntry,
+  PageFit,
+  ReaderBackground,
+  ReaderLayout,
+  ReaderPrefs,
+  ReaderTarget,
+  ReaderVolume,
+  ReadingDirection,
+  TextLayerMode,
   ReadingOverlaySettings,
   ReadingOverlayState,
   Settings,
@@ -245,7 +283,21 @@ export interface LogPayload {
     exe?: string;
     lines?: number;
     seconds?: number;
+    /** Manga reader sessions (`manga::session::log_payload`). */
+    seriesId?: string;
+    volumeId?: string;
+    volume?: string;
   };
+}
+
+/** `manga://session-ended`, built with `json!` in `manga::session::log_session`. */
+export interface MangaSessionEnded {
+  volumeId: string;
+  title: string;
+  pages: number;
+  chars: number;
+  minutes: number;
+  outcome: 'logged' | 'pending' | 'discarded';
 }
 
 export interface PendingItem {

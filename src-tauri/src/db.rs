@@ -248,6 +248,66 @@ CREATE TABLE IF NOT EXISTS discord_blacklist (
     kind TEXT NOT NULL,
     label TEXT NOT NULL
 );
+-- Manga reader (see `manga::store`). `auth_json` never leaves Rust.
+CREATE TABLE IF NOT EXISTS manga_sources (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    auth_json TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS manga_series (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    title TEXT NOT NULL,
+    cover TEXT,
+    media_id TEXT,
+    media_title TEXT,
+    is_adult INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS manga_series_ref ON manga_series(source_id, source_ref);
+CREATE TABLE IF NOT EXISTS manga_volumes (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES manga_series(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    format TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    page_count INTEGER NOT NULL DEFAULT 0,
+    pages_json TEXT NOT NULL DEFAULT '[]',
+    signature TEXT,
+    mokuro_path TEXT,
+    ocr_state TEXT NOT NULL DEFAULT 'none',
+    added_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS manga_volumes_series ON manga_volumes(series_id, position);
+-- No foreign key: progress outlives a volume that is gone for a while (an
+-- unplugged drive) and comes back with the same id.
+CREATE TABLE IF NOT EXISTS manga_progress (
+    volume_id TEXT PRIMARY KEY,
+    page INTEGER NOT NULL DEFAULT 0,
+    finished INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS manga_progress_updated ON manga_progress(updated_at DESC);
+CREATE TABLE IF NOT EXISTS manga_page_text (
+    volume_id TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    blocks_json TEXT NOT NULL,
+    engine TEXT NOT NULL,
+    PRIMARY KEY (volume_id, page)
+);
+CREATE TABLE IF NOT EXISTS manga_page_read (
+    volume_id TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    chars INTEGER NOT NULL DEFAULT 0,
+    read_at TEXT NOT NULL,
+    PRIMARY KEY (volume_id, page)
+);
 "#;
 
 /// Columns added after the first release. SQLite has no `ADD COLUMN IF NOT
@@ -364,7 +424,7 @@ impl Db {
         Ok(())
     }
 
-    fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+    pub(crate) fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         let guard = self.conn.lock().expect("db mutex poisoned");
         f(&guard)
     }

@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   AlertTriangle,
+  BookImage,
   BookOpenText,
   Check,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
   Flame,
   Headphones,
   Inbox,
+  Link2,
   KeyRound,
   MonitorPlay,
   Pause,
@@ -39,7 +41,9 @@ import {
 } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
 import { useAppStore } from '../store/useAppStore';
-import type { AnimeSession, UserSummary, VnSession } from '../lib/types';
+import type { AnimeSession, MangaSession, UserSummary, VnSession } from '../lib/types';
+import { mangaUrl, readPercent } from '../lib/manga';
+import { Cover } from './manga/Cover';
 import { MediaSearchModal } from '../components/MediaSearchModal';
 import { MpvSetupPrompt, needsMpvSetup } from '../components/MpvSetup';
 import { useQuickLogStore } from '../store/useQuickLogStore';
@@ -422,10 +426,12 @@ function CommunitySection() {
 function ActiveSessions() {
   const anime = useAppStore((s) => s.tracker?.anime ?? null);
   const vn = useAppStore((s) => s.tracker?.vn ?? null);
+  const manga = useAppStore((s) => s.tracker?.manga ?? null);
   const idle = useAppStore((s) => s.tracker?.idle_seconds ?? 0);
+  const running = [anime, vn, manga].filter(Boolean).length;
 
   // Nothing running: two lines, so today's numbers stay near the top.
-  if (!anime && !vn) {
+  if (running === 0) {
     return (
       <div className="grid gap-2 lg:grid-cols-2">
         <IdleCard kind="anime" />
@@ -436,7 +442,8 @@ function ActiveSessions() {
   // What is running comes first; what isn't shrinks to a line under it.
   return (
     <div className="space-y-2">
-      <div className={`grid gap-4 ${anime && vn ? 'lg:grid-cols-2' : ''}`}>
+      <div className={`grid gap-4 ${running > 1 ? 'lg:grid-cols-2' : ''}`}>
+        {manga ? <MangaCard key={`${manga.volume_id}:${manga.started_at}`} session={manga} /> : null}
         {anime ? <AnimeCard key={anime.key} session={anime} /> : null}
         {vn ? <VnCard session={vn} idleSeconds={idle} /> : null}
       </div>
@@ -743,6 +750,96 @@ function VnCard({ session, idleSeconds }: { session: VnSession; idleSeconds: num
             {t('vn.openTexthooker')}
           </button>
         </div>
+      </div>
+    </article>
+  );
+}
+
+/** A session in the manga reader: what is read, and what has been counted. */
+function MangaCard({ session }: { session: MangaSession }) {
+  const { t } = useTranslation('dashboard');
+  const type = getMediaTypeClasses('manga');
+  const title = session.media_title || session.series_title;
+  const percent = readPercent(session.page, session.page_count);
+  const stats = [
+    { label: t('manga.time'), value: formatClock(session.elapsed_secs) },
+    { label: t('manga.pages'), value: numberWithCommas(session.pages_read) },
+    ...(session.has_text ? [{ label: t('manga.characters'), value: numberWithCommas(session.chars_read) }] : []),
+  ];
+
+  return (
+    <article className={`surface overflow-hidden border ${type.borderColor}`}>
+      <div className={`h-1 w-full ${type.accentColor}`} />
+      <div className="p-4 space-y-3">
+        <header className="flex items-start gap-3">
+          <div className="w-14 h-20 shrink-0 overflow-hidden rounded-field shadow-sm">
+            <Cover src={mangaUrl.cover(session.series_id)} eager />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  session.counting ? 'bg-success recording-dot' : 'bg-base-content/30'
+                }`}
+              />
+              <span className="text-xs font-medium text-base-content/70">
+                {session.counting ? t('manga.counting') : t('manga.paused')}
+              </span>
+              <span className={`badge badge-outline badge-sm ${type.color} ml-auto gap-1`}>
+                <BookImage className="w-3 h-3" />
+                {t('manga.badge')}
+              </span>
+            </div>
+            <h3 className="font-bold text-base leading-tight mt-1 truncate">{title}</h3>
+            <p className="text-xs text-base-content/60 truncate">
+              {session.volume_title} · {t('manga.pageOf', { page: Math.min(session.page + 1, session.page_count), count: session.page_count })}
+            </p>
+            <div
+              className="mt-2 h-1 overflow-hidden rounded-full bg-base-200"
+              role="progressbar"
+              aria-label={t('manga.volumeProgress')}
+              aria-valuenow={percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className={`h-full rounded-full ${type.accentColor} motion-safe:transition-[width] motion-safe:duration-500`} style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+        </header>
+
+        <div className={`grid gap-2 text-center ${stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {stats.map((stat) => (
+            <div key={stat.label} className="rounded-field bg-base-200/60 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-base-content/60">{stat.label}</div>
+              <div className="font-bold tabular-nums">{stat.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {!session.counting ? (
+          <p className="text-xs text-base-content/60 flex items-center gap-1.5">
+            <Pause className="w-3 h-3" />
+            {session.pause === 'idle'
+              ? t('manga.pausedIdle', { duration: formatDuration(session.inactive_secs) })
+              : t('manga.pausedUnfocused')}
+          </p>
+        ) : null}
+
+        {!session.media_id ? (
+          <div className="flex items-center gap-2 rounded-field bg-warning/10 px-3 py-2 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-warning" />
+            <span className="flex-1">{t('manga.unlinked')}</span>
+            <Link to={`/manga/${session.series_id}`} className="btn btn-ghost btn-xs gap-1">
+              <Link2 className="w-3 h-3" />
+              {t('manga.link')}
+            </Link>
+          </div>
+        ) : null}
+
+        <button type="button" onClick={() => void ipc.mangaOpenReader(session.volume_id)} className="btn btn-primary btn-sm w-full">
+          <BookImage className="w-4 h-4" />
+          {t('manga.open')}
+        </button>
       </div>
     </article>
   );

@@ -7,6 +7,7 @@ mod dictionary;
 mod discord;
 mod fushi;
 mod i18n;
+mod manga;
 mod mining;
 mod mpv_config;
 mod native_hook;
@@ -73,6 +74,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
+        // Manga pages, thumbnails and covers by opaque id (see `manga::protocol`).
+        .register_asynchronous_uri_scheme_protocol(manga::protocol::SCHEME, |ctx, request, responder| {
+            manga::protocol::handle(ctx.app_handle(), request, responder);
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let db = Arc::new(Db::open(&data_dir.join("companion.sqlite3"))?);
@@ -117,6 +122,7 @@ pub fn run() {
                 outbox_flush: Default::default(),
                 main_intent: Default::default(),
                 connection_last: Default::default(),
+                manga: Default::default(),
             });
 
             // Started minimized, the main window is not built at all until the
@@ -195,7 +201,19 @@ pub fn run() {
                 }
                 return;
             }
+            if window.label() == manga::reader::LABEL {
+                match event {
+                    WindowEvent::Focused(focused) => manga::session::set_focused(window.app_handle(), *focused),
+                    WindowEvent::Destroyed => manga::session::reader_closed(window.app_handle()),
+                    _ => {}
+                }
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // The reader closes for real: it saves its page on the way out
+                // (`onCloseRequested`) and a hidden one would only hold memory.
+                if window.label() == manga::reader::LABEL {
+                    return;
+                }
                 if matches!(window.label(), "settings" | "texthooker" | reading_overlay::SETTINGS_LABEL) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -343,6 +361,23 @@ pub fn run() {
             commands::install_update,
             commands::request_window_titles_permission,
             commands::parse_release_name,
+            commands::manga_sources,
+            commands::manga_add_local_root,
+            commands::manga_remove_source,
+            commands::manga_rescan,
+            commands::manga_library,
+            commands::manga_series_detail,
+            commands::manga_link_series,
+            commands::manga_open_reader,
+            commands::manga_reader_target,
+            commands::manga_reader_volume,
+            commands::manga_save_progress,
+            commands::manga_save_reader_prefs,
+            commands::manga_volume_text,
+            commands::manga_session_open,
+            commands::manga_session_pages,
+            commands::manga_session_state,
+            commands::manga_mine_block,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")
@@ -350,6 +385,9 @@ pub fn run() {
             // Never leave a presence hanging with whatever was being read when
             // the app closed.
             if matches!(event, tauri::RunEvent::Exit) {
+                // A session still open (the app quit with the reader up) is
+                // logged before it goes.
+                manga::session::reader_closed(app);
                 discord::shutdown(app);
                 app.state::<AppState>().game_hook.shutdown();
             }

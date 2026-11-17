@@ -45,6 +45,8 @@ src-tauri/src/
   i18n.rs        Los pocos textos que muestra Rust (bandeja y notificaciones)
   sync.rs        Outbox con reintentos + push de líneas
   commands.rs    Superficie IPC
+  manga/         Lector de manga: biblioteca local, CBZ, .mokuro, protocolo manga://,
+                 sesión de lectura, logs y minado con recorte (session.rs, crop.rs)
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -55,7 +57,7 @@ src/
   lib/types.ts   Reexporta bindings/ + lo que Rust pasa sin tipar (respuestas de la API)
   lib/logRules.ts Campos obligatorios por tipo de log, compartidos por todos los formularios
   store/         zustand: settings, tracker, hooker (se alimentan de eventos)
-  screens/       Dashboard, Queue, Library, Texthooker, Settings, Onboarding
+  screens/       Dashboard, Queue, Library, Manga, Texthooker, Settings, Onboarding
   components/ui/ Design system copiado de NihongoTracker/Frontend
 ```
 
@@ -125,7 +127,7 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
 - Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas
   cargan el mismo bundle.
 - En producción `src/lib/desktop.ts` anula los atajos y el menú contextual del
-  navegador. Los atajos de la app (Ctrl/⌘+1…6, `,`, `L`, `T`) viven en `Sidebar`.
+  navegador. Los atajos de la app (Ctrl/⌘+1…7, `,`, `L`, `T`) viven en `Sidebar`.
 
 ### Actualizaciones
 
@@ -276,6 +278,112 @@ Lo que hay que saber antes de tocarlo:
 - El paquete no tiene ni una cadena visible: el botón de volver y sus textos los
   pone cada app con su i18n. `useLookupHistory` solo lleva la pila.
 
+### Lector de manga
+
+Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
+`src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1 y M2.
+
+- **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
+  protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
+  `page/<volumen>/<n>`, `thumb/<volumen>/<n>`, `cover/<serie>`. Solo ids
+  opacos; el archivo sale de la base de datos, nunca de la URL. `parse` solo
+  decodifica `%2F` (lo que hace `convertFileSrc`) y rechaza cualquier otro
+  carácter: no añadas formas que acepten rutas. Las páginas de una carpeta se
+  vuelven a comprobar dentro de la carpeta tras resolver enlaces. La URL la
+  construye `src/lib/manga.ts` (`mangaUrl`), que deja a `convertFileSrc` el
+  esquema de cada SO (`http://manga.localhost` en Windows).
+- **CBZ desconfiado** (`archive.rs`): nombres con `..`, absolutos o con `:`
+  no son páginas; una entrada que infla más de 50:1 (por encima de 2 MB) es
+  una bomba; toda lectura corta a 64 MB diga lo que diga la cabecera. Orden
+  natural (`natural_cmp`, carpeta a carpeta) sin `__MACOSX` ni ocultos.
+- **Detección** (`library.rs`): carpeta con imágenes = tomo, `.cbz`/`.zip` =
+  tomo, `<Vol>.mokuro` junto a `<Vol>.cbz` o a `<Vol>/` = texto, la carpeta que
+  lo contiene = serie. `<Vol>.webp` y `cover.*` son portadas, no páginas. Los
+  ids son UUID v5 de la ruta (`stable_id`): el progreso (`manga_progress`, sin
+  clave foránea a propósito) sobrevive a un reescaneo y a un disco que vuelve.
+  Una raíz que no existe se salta, nunca se vacía. Raíces solapadas se
+  rechazan. Un archivo sin cambios (tamaño + fecha) no se reabre.
+- El escaneo va en `spawn_blocking`, de uno en uno (`manga::Runtime::scanning`),
+  y al abrir la pantalla como mucho uno por minuto; emite
+  `manga://library-changed`. Las miniaturas viven en
+  `app_cache_dir/manga/thumbs/<volumen>/` y se borran cuando cambia la firma
+  del tomo.
+- `.mokuro` (`mokuro.rs`) se lee con serde tolerante: campos de más se ignoran,
+  de menos toman su valor por defecto. Las páginas se casan por final de ruta,
+  luego por nombre sin extensión y, si no casa nada pero el número coincide,
+  por orden. `manga_page_text` (la caché del OCR futuro) guarda páginas en ese
+  mismo formato y solo rellena las que el `.mokuro` no cubre.
+- `manga_sources.auth_json` no sale de Rust: ningún struct de la UI lo lleva
+  (igual que la clave de API, en claro en la SQLite y dentro de las copias).
+- **Ventana `manga-reader`**: una sola, en `open_aux_window_inner`,
+  `capabilities/default.json` y `App.tsx`. Rust guarda a qué tomo apunta
+  (`Runtime::reader`); la página lo pide con `manga_reader_target` al cargar o
+  lo recibe por `manga://reader-open` si ya existe. Se cierra de verdad (no se
+  oculta con "minimizar a la bandeja") y guarda la página en
+  `onCloseRequested`; mientras se lee, con debounce de 600 ms.
+- Disposición (una, doble, tira), dirección y "portada sola" son por serie;
+  ajuste, fondo y capa de texto, globales (`manga::reader::prefs`, en `kv`).
+  Las dobles páginas (`buildSpreads`) dejan sola una página ancha (proporción
+  > 1,15) y reanudan los pares tras ella. Los tamaños de página salen de
+  `fitSpread`, en píxeles exactos, para que la capa de texto case con la imagen.
+- La lógica pura del lector está en `reader/layout.ts` y `reader/textLayer.ts`
+  con sus tests: navegación por teclado según la dirección (en RTL la flecha
+  izquierda avanza), zonas de clic, precarga de ±2 dobles páginas.
+- **Capa de texto**: cajas escaladas desde `img_width`, `vertical-rl` si el
+  bloque es vertical, fuente ajustada a la caja (`blockFontSize`). Estilos en
+  `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
+  `src/hooks/useDictionaryHover.ts`, el mismo que el texthooker
+  (`openDictionaryAt` para cualquier elemento). Ctrl+C sin selección selecciona
+  el bloque y el evento `copy` escribe sus líneas unidas: no depende del
+  permiso de portapapeles de cada webview.
+- Los fondos del lector (`.manga-bg-*`) son colores propios en `index.css`, no
+  tokens del tema: el papel sigue siendo papel en tema oscuro.
+- **Seguimiento** (`manga/session.rs`): el lector solo dice qué tomo enseña
+  (`manga_session_open`) y qué páginas hay en pantalla
+  (`manga_session_pages`; las dos de una doble página, ninguna en la tarjeta
+  final). El resto lo decide Rust en el tick del watcher
+  (`session::tick`, sin red): una página cuenta tras
+  `manga_page_dwell_secs` (3 s) en pantalla, con `count_japanese` de sus
+  bloques, y **una sola vez** (`manga_page_read`, `INSERT OR IGNORE`). Sin
+  texto cuenta la página pero no caracteres.
+- **Cronómetro** como el de una VN: corre solo con la ventana del lector con
+  foco (`Runtime::reader_focused`, de `WindowEvent::Focused` en `lib.rs`) y
+  sin inactividad (`afk_timeout_secs`); el tiempo de permanencia de una página
+  se para con él. La sesión (`MangaSession`) viaja en `TrackerSnapshot.manga`
+  y por `manga://session`; la pintan la barra del lector (`SessionIndicator`)
+  y la tarjeta del Dashboard. La sesión no existe hasta el primer tick de
+  lectura.
+- **Log** al cerrar el lector (`WindowEvent::Destroyed`), al pasar a otro tomo,
+  al salir de la app (`RunEvent::Exit`) o tras `manga_idle_log_minutes` (10)
+  con el reloj parado; al volver empieza otra sesión. `log_payload` es puro y
+  cumple `logRules.ts` (`pages`/`chars`/`time`, `time` en minutos redondeados,
+  `description` = "<serie> — <tomo>"); menos de medio minuto sin páginas nuevas
+  se descarta. Va a Pendientes (`add_pending`, fuente `manga`) si
+  `manga_confirm_before_log` (por defecto) **o si la serie no está vinculada**
+  (sin `mediaId`); si no, al outbox. Vincular la serie mientras se lee
+  actualiza la sesión (`session::series_linked`). `manga://session-ended`
+  dice adónde fue. Los ajustes están en Ajustes → Lector de manga.
+- **Líneas**: los bloques de una página que cuenta van a `text_lines` con
+  `content_id` = el `mediaId` o `manga:<serie>`, id
+  `manga:<tomo>:<página>:<bloque>` (el mismo bloque es siempre la misma
+  línea) y `synced = 1`: son contexto local, **nunca** se empujan a la API del
+  texthooker. No pasan por `texthooker::ingest`.
+- **Minado** (`manga_mine_block`, botón sobre el bloque o Ctrl+M): guarda la
+  línea, la mina y recorta en Rust la viñeta alrededor del bloque
+  (`crop.rs`: caja escalada de `img_width` a la imagen real, margen del 60 %
+  del lado mayor, mínimo 48 px) como PNG en `app_data_dir/mined/` con
+  `set_mined_screenshot`. Una búsqueda en el diccionario desde un bloque lleva
+  ese id de línea; `mine_dictionary_entry` la crea si la página aún no contó
+  (`session::ensure_line`).
+- **Discord**: tras la VN y antes del vídeo, misma política de `decide`. La
+  lista negra mira el `mediaId` y `manga:<serie>`; una serie sin vincular es
+  `Unresolved` (su título es el nombre de una carpeta) y `is_adult` viaja en
+  la sesión desde `manga_series.is_adult`. Nunca se publica la portada local.
+  Cuando haya fuentes con NSFW (M6), la serie se marca `is_adult` al añadirla.
+- Sin hacer todavía (M3+): WebDAV, OCR, extensiones. El `share_activity`
+  (amigos inmersos) aún no incluye el manga.
+
 ### Copia de seguridad
 
 `export_database` hace `VACUUM INTO` (copia consistente aunque haya WAL) y
@@ -292,7 +400,9 @@ capturas no van dentro.
 `texthooker://status`, `texthooker://timer`, `outbox://changed`,
 `pending://changed`, `settings://changed`, `log://celebration`,
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
-`discord://status`, `updater://available`, `updater://progress`. Están
+`discord://status`, `updater://available`, `updater://progress`,
+`manga://library-changed`, `manga://reader-open`, `manga://session`,
+`manga://session-ended`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve

@@ -1,0 +1,80 @@
+{
+  "close": "Cerrar",
+  "fullscreen": "Pantalla completa",
+  "exitFullscreen": "Salir de pantalla completa",
+  "nothing": "Abre un tomo desde la pantalla Manga.",
+  "gone": "Este tomo ya no está en la biblioteca.",
+  "loadFailed": "No se pudo abrir el tomo: {{message}}",
+  "pageAlt": "Página {{page}}",
+  "pageFailed": "No se pudo leer esta página",
+  "pageOf": "{{page}} / {{count}}",
+  "spreadOf": "{{first}}–{{last}} / {{count}}",
+  "pages": "Páginas",
+  "goToPage": "Ir a la página {{page}}",
+  "seek": "Página",
+  "settings": {
+    "title": "Ajustes de lectura",
+    "layout": "Disposición",
+    "coverAlone": "Portada sola",
+    "coverAloneHint": "Desactívalo si las dobles páginas no cuadran",
+    "direction": "Dirección",
+    "fit": "Ajuste",
+    "background": "Fondo",
+    "textLayer": "Texto",
+    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa · T texto · Mayús o Alt sobre el texto: diccionario · Ctrl+C copia un bloque · Ctrl+M lo mina"
+  },
+  "layout": {
+    "single": "Una",
+    "double": "Doble",
+    "vertical": "Tira"
+  },
+  "direction": {
+    "rtl": "Derecha a izquierda",
+    "ltr": "Izquierda a derecha",
+    "rtlShort": "DaI",
+    "ltrShort": "IaD"
+  },
+  "fit": {
+    "height": "Alto",
+    "width": "Ancho",
+    "original": "Original"
+  },
+  "background": {
+    "black": "Negro",
+    "gray": "Gris",
+    "paper": "Papel"
+  },
+  "text": {
+    "hover": "Al pasar",
+    "always": "Siempre",
+    "hidden": "Oculto",
+    "toggle": "Texto: {{mode}}",
+    "copied": "Bloque copiado",
+    "copy": "Copiar",
+    "mine": "Minar"
+  },
+  "end": {
+    "title": "Fin de {{volume}}",
+    "next": "Sigue {{volume}}.",
+    "last": "Era el último tomo de tu biblioteca.",
+    "readNext": "Leer {{volume}}",
+    "restart": "Desde el principio"
+  },
+  "session": {
+    "counting": "Contando",
+    "pausedIdle": "En pausa: sin actividad",
+    "pausedUnfocused": "En pausa: ventana en segundo plano",
+    "summary": "{{time}} · {{pages}} páginas · {{chars}} caracteres",
+    "pages": "{{count}} pág.",
+    "pagesHint": "Páginas leídas por primera vez en esta sesión",
+    "chars": "{{count, number}} car.",
+    "endedPending": "Sesión de {{title}} terminada: confírmala en Pendientes",
+    "endedLogged": "Sesión de {{title}} registrada"
+  },
+  "mine": {
+    "done": "Minado, con la viñeta como imagen",
+    "noPicture": "Minado sin imagen: no se pudo recortar la página",
+    "failed": "No se pudo minar el bloque: {{message}}",
+    "hoverFirst": "Pon el ratón sobre un bloque de texto para minarlo"
+  }
+}

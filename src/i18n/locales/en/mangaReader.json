@@ -1,0 +1,80 @@
+{
+  "close": "Close",
+  "fullscreen": "Full screen",
+  "exitFullscreen": "Exit full screen",
+  "nothing": "Open a volume from the Manga screen.",
+  "gone": "This volume is no longer in the library.",
+  "loadFailed": "Could not open the volume: {{message}}",
+  "pageAlt": "Page {{page}}",
+  "pageFailed": "This page could not be read",
+  "pageOf": "{{page}} / {{count}}",
+  "spreadOf": "{{first}}–{{last}} / {{count}}",
+  "pages": "Pages",
+  "goToPage": "Go to page {{page}}",
+  "seek": "Page",
+  "settings": {
+    "title": "Reading settings",
+    "layout": "Layout",
+    "coverAlone": "Cover on its own",
+    "coverAloneHint": "Turn off if the spreads do not line up",
+    "direction": "Direction",
+    "fit": "Fit",
+    "background": "Background",
+    "textLayer": "Text",
+    "shortcuts": "← → turn pages · Space / Shift+Space · Home / End · F full screen · T text · Shift or Alt over text: dictionary · Ctrl+C copies a block · Ctrl+M mines it"
+  },
+  "layout": {
+    "single": "Single",
+    "double": "Double",
+    "vertical": "Strip"
+  },
+  "direction": {
+    "rtl": "Right to left",
+    "ltr": "Left to right",
+    "rtlShort": "RTL",
+    "ltrShort": "LTR"
+  },
+  "fit": {
+    "height": "Height",
+    "width": "Width",
+    "original": "Original"
+  },
+  "background": {
+    "black": "Black",
+    "gray": "Gray",
+    "paper": "Paper"
+  },
+  "text": {
+    "hover": "On hover",
+    "always": "Always",
+    "hidden": "Hidden",
+    "toggle": "Text: {{mode}}",
+    "copied": "Block copied",
+    "copy": "Copy",
+    "mine": "Mine"
+  },
+  "end": {
+    "title": "End of {{volume}}",
+    "next": "{{volume}} is next.",
+    "last": "That was the last volume in your library.",
+    "readNext": "Read {{volume}}",
+    "restart": "From the start"
+  },
+  "session": {
+    "counting": "Counting",
+    "pausedIdle": "Paused: no activity",
+    "pausedUnfocused": "Paused: window in the background",
+    "summary": "{{time}} · {{pages}} pages · {{chars}} characters",
+    "pages": "{{count}} pg",
+    "pagesHint": "Pages read for the first time in this session",
+    "chars": "{{count, number}} chars",
+    "endedPending": "Session of {{title}} finished: confirm it in Pending",
+    "endedLogged": "Session of {{title}} logged"
+  },
+  "mine": {
+    "done": "Mined, with the panel as its picture",
+    "noPicture": "Mined, without a picture: the page could not be cropped",
+    "failed": "Could not mine the block: {{message}}",
+    "hoverFirst": "Point at a text block to mine it"
+  }
+}

@@ -34,6 +34,7 @@
   "patreonTiers": { "consumer": "Consumer", "donator": "Donator", "enthusiast": "Enthusiast" },
   "none": "—",
   "minutesShort": "{{count}} min",
+  "pagesShort": "{{count}} pages",
   "charsShort": "{{count, number}} chars",
   "episodesShort": "{{count}} ep.",
   "linesShort": "{{count}} lines",

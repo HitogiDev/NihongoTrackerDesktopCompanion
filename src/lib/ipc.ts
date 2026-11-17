@@ -15,6 +15,15 @@ import type {
   LogPayload,
   MediaHit,
   MediaMatch,
+  MangaLibrary,
+  MangaSession,
+  MangaSeriesDetail,
+  MangaSource,
+  MokuroPage,
+  ReaderPrefs,
+  ReaderTarget,
+  ReaderVolume,
+  ScanSummary,
   MinedSentence,
   MpvSetup,
   OutboxItem,
@@ -219,6 +228,38 @@ export const ipc = {
   remoteTextSession: (contentId: string) =>
     invoke<Record<string, unknown>>('remote_text_session', { contentId }),
 
+  // manga library
+  mangaSources: () => invoke<MangaSource[]>('manga_sources'),
+  /** Rejects with `not-a-folder` or `already-added` (see `mangaErrorKey`). */
+  mangaAddLocalRoot: (path: string) => invoke<ScanSummary>('manga_add_local_root', { path }),
+  mangaRemoveSource: (id: string) => invoke<void>('manga_remove_source', { id }),
+  /** `force` for the user's button; without it a scan from the last minute is enough. */
+  mangaRescan: (force = false) => invoke<ScanSummary>('manga_rescan', { force }),
+  mangaLibrary: () => invoke<MangaLibrary>('manga_library'),
+  mangaSeriesDetail: (seriesId: string) => invoke<MangaSeriesDetail | null>('manga_series_detail', { seriesId }),
+  /** `mediaId: null` unlinks. */
+  mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
+    invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
+  /** Opens (or focuses) the reader window on a volume. */
+  mangaOpenReader: (volumeId: string, page?: number) => invoke<void>('manga_open_reader', { volumeId, page }),
+  /** The reader window asks what to show once its page loads. */
+  mangaReaderTarget: () => invoke<ReaderTarget | null>('manga_reader_target'),
+  mangaReaderVolume: (volumeId: string) => invoke<ReaderVolume | null>('manga_reader_volume', { volumeId }),
+  mangaSaveProgress: (volumeId: string, page: number, finished: boolean) =>
+    invoke<void>('manga_save_progress', { volumeId, page, finished }),
+  mangaSaveReaderPrefs: (seriesId: string, prefs: ReaderPrefs) =>
+    invoke<ReaderPrefs>('manga_save_reader_prefs', { seriesId, prefs }),
+  /** The text of every page (`null` where there is none), for the text layer. */
+  mangaVolumeText: (volumeId: string) => invoke<(MokuroPage | null)[]>('manga_volume_text', { volumeId }),
+  /** The reader shows this volume: Rust starts counting it (see `manga::session`). */
+  mangaSessionOpen: (volumeId: string) => invoke<void>('manga_session_open', { volumeId }),
+  /** The pages on screen now; none past the last page. */
+  mangaSessionPages: (volumeId: string, pages: number[]) => invoke<void>('manga_session_pages', { volumeId, pages }),
+  mangaSessionState: () => invoke<MangaSession | null>('manga_session_state'),
+  /** Mines a text block, with the panel around it as the card's picture. */
+  mangaMineBlock: (volumeId: string, page: number, block: number) =>
+    invoke<MinedSentence>('manga_mine_block', { volumeId, page, block }),
+
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
   dictionaryImport: (path: string) =>
@@ -256,4 +297,11 @@ export const events = {
   updateProgress: 'updater://progress',
   streakAuthRequired: 'streak://auth-required',
   discordStatus: 'discord://status',
+  mangaLibrary: 'manga://library-changed',
+  /** To the reader window: show another volume. */
+  mangaReaderOpen: 'manga://reader-open',
+  /** The reading session (`MangaSession | null`) whenever it changes. */
+  mangaSession: 'manga://session',
+  /** A reading session ended (`MangaSessionEnded`). */
+  mangaSessionEnded: 'manga://session-ended',
 } as const;
