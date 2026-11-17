@@ -2,6 +2,7 @@
 //! texthooker line buffer. Everything the app needs to keep working with no
 //! network, and to catch up once it comes back.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -19,6 +20,12 @@ pub struct Db {
     /// can never store a list older than the last write. Every write to the
     /// table goes through [`Db::writing_vn_apps`], which clears it.
     vn_apps: Mutex<Option<Arc<[VnApp]>>>,
+    /// `(lines, chars)` per content id, kept in step by the line writes
+    /// (write-through) so the tick does not re-aggregate a whole work every
+    /// second. Same locking rule as `vn_apps`.
+    text_totals: Mutex<HashMap<String, (i64, i64)>>,
+    /// `text_state` rows as last read or written. Same locking rule.
+    text_states: Mutex<HashMap<String, TextState>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -293,6 +300,8 @@ impl Db {
         Ok(Self {
             conn: Mutex::new(conn),
             vn_apps: Mutex::new(None),
+            text_totals: Mutex::new(HashMap::new()),
+            text_states: Mutex::new(HashMap::new()),
         })
     }
 
@@ -351,6 +360,16 @@ impl Db {
     /// Drops every in-memory copy of the tables. The caller holds `conn`.
     fn invalidate_caches(&self) {
         *self.vn_apps.lock().expect("vn_apps cache poisoned") = None;
+        self.totals_cache().clear();
+        self.states_cache().clear();
+    }
+
+    fn totals_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, (i64, i64)>> {
+        self.text_totals.lock().expect("text totals cache poisoned")
+    }
+
+    fn states_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, TextState>> {
+        self.text_states.lock().expect("text state cache poisoned")
     }
 
     // ── settings ───────────────────────────────────────────────────────
@@ -784,6 +803,12 @@ impl Db {
                     line.synced as i64
                 ],
             )?;
+            if changed > 0 {
+                if let Some((lines, chars)) = self.totals_cache().get_mut(&line.content_id) {
+                    *lines += 1;
+                    *chars += line.chars;
+                }
+            }
             Ok(changed > 0)
         })
     }
@@ -883,54 +908,70 @@ impl Db {
 
     pub fn delete_line(&self, id: &str) -> Result<()> {
         self.with(|c| {
-            c.execute("DELETE FROM text_lines WHERE id = ?1", params![id])
-                .map(|_| ())
+            let result = c.execute("DELETE FROM text_lines WHERE id = ?1", params![id]).map(|_| ());
+            // Which work the line belonged to is not known here, and deleting
+            // is rare: start the totals over.
+            self.totals_cache().clear();
+            result
         })
     }
 
     pub fn clear_lines(&self, content_id: &str) -> Result<()> {
         self.with(|c| {
-            c.execute(
-                "DELETE FROM text_lines WHERE content_id = ?1",
-                params![content_id],
-            )
-            .map(|_| ())
+            let result = c
+                .execute("DELETE FROM text_lines WHERE content_id = ?1", params![content_id])
+                .map(|_| ());
+            self.totals_cache().remove(content_id);
+            result
         })
     }
 
     /// `(lines, chars)` currently stored for a session.
     pub fn text_totals(&self, content_id: &str) -> (i64, i64) {
         self.with(|c| {
-            c.query_row(
+            if let Some(totals) = self.totals_cache().get(content_id) {
+                return Ok(*totals);
+            }
+            let totals: (i64, i64) = c.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(chars), 0) FROM text_lines WHERE content_id = ?1",
                 params![content_id],
                 |r| Ok((r.get(0)?, r.get(1)?)),
-            )
+            )?;
+            self.totals_cache().insert(content_id.to_string(), totals);
+            Ok(totals)
         })
         .unwrap_or((0, 0))
     }
 
     pub fn get_text_state(&self, content_id: &str) -> TextState {
         self.with(|c| {
-            c.query_row(
-                "SELECT content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title
-                 FROM text_state WHERE content_id = ?1",
-                params![content_id],
-                |r| {
-                    Ok(TextState {
-                        content_id: r.get(0)?,
-                        timer_seconds: r.get(1)?,
-                        baseline_chars: r.get(2)?,
-                        baseline_lines: r.get(3)?,
-                        media_type: r.get(4)?,
-                        media_title: r.get(5)?,
-                    })
-                },
-            )
-            .optional()
+            if let Some(state) = self.states_cache().get(content_id) {
+                return Ok(state.clone());
+            }
+            let state = c
+                .query_row(
+                    "SELECT content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title
+                     FROM text_state WHERE content_id = ?1",
+                    params![content_id],
+                    |r| {
+                        Ok(TextState {
+                            content_id: r.get(0)?,
+                            timer_seconds: r.get(1)?,
+                            baseline_chars: r.get(2)?,
+                            baseline_lines: r.get(3)?,
+                            media_type: r.get(4)?,
+                            media_title: r.get(5)?,
+                        })
+                    },
+                )
+                .optional()?
+                .unwrap_or(TextState {
+                    content_id: content_id.to_string(),
+                    ..Default::default()
+                });
+            self.states_cache().insert(content_id.to_string(), state.clone());
+            Ok(state)
         })
-        .ok()
-        .flatten()
         .unwrap_or(TextState {
             content_id: content_id.to_string(),
             ..Default::default()
@@ -939,7 +980,7 @@ impl Db {
 
     pub fn save_text_state(&self, state: &TextState) -> Result<()> {
         self.with(|c| {
-            c.execute(
+            let result = c.execute(
                 "INSERT INTO text_state (content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT(content_id) DO UPDATE SET
@@ -956,8 +997,23 @@ impl Db {
                     state.media_type,
                     state.media_title
                 ],
-            )
-            .map(|_| ())
+            );
+            let mut cache = self.states_cache();
+            match (&result, cache.get_mut(&state.content_id)) {
+                // The same COALESCE as the statement: a missing title keeps the stored one.
+                (Ok(_), Some(cached)) => {
+                    *cached = TextState {
+                        media_type: state.media_type.clone().or_else(|| cached.media_type.take()),
+                        media_title: state.media_title.clone().or_else(|| cached.media_title.take()),
+                        ..state.clone()
+                    };
+                }
+                (Ok(_), None) => {}
+                (Err(_), _) => {
+                    cache.remove(&state.content_id);
+                }
+            }
+            result.map(|_| ())
         })
     }
 
@@ -1264,6 +1320,61 @@ mod mining_tests {
 
         drop(db);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cached_text_totals_and_state_match_the_tables() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let direct = |db: &Db, content_id: &str| -> (i64, i64) {
+            db.with(|c| c.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(chars), 0) FROM text_lines WHERE content_id = ?1",
+                rusqlite::params![content_id], |r| Ok((r.get(0)?, r.get(1)?)),
+            )).unwrap()
+        };
+        let line = |id: &str, content_id: &str, chars: i64| TextLine {
+            id: id.into(), content_id: content_id.into(), text: "日本語".into(), chars,
+            created_at: super::now_iso(), synced: false,
+        };
+        let check = |db: &Db| for id in ["v1", "v2"] {
+            assert_eq!(db.text_totals(id), direct(db, id), "{id}");
+        };
+
+        check(&db);
+        db.insert_line(&line("a", "v1", 3)).unwrap();
+        db.insert_line(&line("b", "v1", 5)).unwrap();
+        db.insert_line(&line("c", "v2", 7)).unwrap();
+        check(&db);
+        // A repeated id is ignored by the table, and by the totals.
+        assert!(!db.insert_line(&line("a", "v1", 3)).unwrap());
+        check(&db);
+        assert_eq!(db.text_totals("v1"), (2, 8));
+
+        db.delete_line("a").unwrap();
+        check(&db);
+        // The reader's undo puts it back.
+        db.insert_line(&line("a", "v1", 3)).unwrap();
+        check(&db);
+        db.clear_lines("v1").unwrap();
+        check(&db);
+        assert_eq!(db.text_totals("v1"), (0, 0));
+        assert_eq!(db.text_totals("v2"), (1, 7));
+
+        // The state cache follows the statement's COALESCE on the title.
+        let stored = |db: &Db| db.with(|c| c.query_row(
+            "SELECT timer_seconds, baseline_chars, media_title FROM text_state WHERE content_id = 'v1'",
+            [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?)),
+        )).unwrap();
+        assert_eq!(db.get_text_state("v1").timer_seconds, 0);
+        db.save_text_state(&super::TextState {
+            content_id: "v1".into(), timer_seconds: 60, baseline_chars: 8,
+            media_title: Some("AIR".into()), ..Default::default()
+        }).unwrap();
+        db.save_text_state(&super::TextState {
+            content_id: "v1".into(), timer_seconds: 90, baseline_chars: 8, ..Default::default()
+        }).unwrap();
+        let cached = db.get_text_state("v1");
+        assert_eq!((cached.timer_seconds, cached.baseline_chars, cached.media_title), stored(&db));
+        assert_eq!(stored(&db), (90, 8, Some("AIR".into())));
     }
 
     #[test]
