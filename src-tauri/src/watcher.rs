@@ -29,6 +29,7 @@ pub const EVT_VN_ENDED: &str = "vn://ended";
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut processes = ProcessWatch::new();
+        let mut last_emitted: Option<TrackerSnapshot> = None;
         let mut persist_countdown: u64 = 0;
         let mut last_tick = Instant::now();
         loop {
@@ -42,7 +43,7 @@ pub fn spawn(app: AppHandle) {
             let elapsed = credited_elapsed(now.duration_since(last_tick), interval);
             last_tick = now;
 
-            tick(&app, &mut processes, &settings, elapsed, &mut persist_countdown).await;
+            tick(&app, &mut processes, &mut last_emitted, &settings, elapsed, &mut persist_countdown).await;
             tokio::time::sleep(Duration::from_millis(interval)).await;
         }
     });
@@ -209,6 +210,7 @@ fn observe(processes: &mut ProcessWatch, now: Instant, session_pids: &[u32]) -> 
 async fn tick(
     app: &AppHandle,
     processes: &mut ProcessWatch,
+    last_emitted: &mut Option<TrackerSnapshot>,
     settings: &Settings,
     elapsed: Duration,
     persist_countdown: &mut u64,
@@ -253,11 +255,41 @@ async fn tick(
     apply_vn_timer_edit(&state, &mut snapshot);
     *current = snapshot.clone();
     drop(current);
-    let _ = app.emit(EVT_TRACKER, &snapshot);
-    crate::native_bridge::publish_status(app, &snapshot.game_hook).await;
+    // New windows ask for the state with `get_tracker_state` when they open,
+    // so an unchanged snapshot needs no event.
+    if should_emit(last_emitted.as_ref(), &snapshot) {
+        let _ = app.emit(EVT_TRACKER, &snapshot);
+    }
+    // A reader that connects gets the current status on its own (see
+    // `native_bridge::serve`); the broadcast is only for changes.
+    if last_emitted.as_ref().is_none_or(|last| last.game_hook != snapshot.game_hook) {
+        crate::native_bridge::publish_status(app, &snapshot.game_hook).await;
+    }
     // Hands the presence to its own thread, which owns the rate limit and the
-    // socket; nothing here can block on Discord.
+    // socket and drops a presence equal to the one published; nothing here can
+    // block on Discord. Called every tick: a blacklist edit must still apply.
     crate::discord::update(app, &snapshot, settings).await;
+    *last_emitted = Some(snapshot);
+}
+
+/// Whether the UI, last sent `prev`, needs `next`. The idle time only shows on
+/// the VN card, so without a VN session it changing alone is not news; neither
+/// is the sub-second remainder of a timer, which is never serialized.
+fn should_emit(prev: Option<&TrackerSnapshot>, next: &TrackerSnapshot) -> bool {
+    fn visible(snapshot: &TrackerSnapshot) -> TrackerSnapshot {
+        let mut snapshot = snapshot.clone();
+        if snapshot.vn.is_none() {
+            snapshot.idle_seconds = 0;
+        }
+        if let Some(anime) = snapshot.anime.as_mut() {
+            anime.elapsed_carry_ms = 0;
+        }
+        if let Some(vn) = snapshot.vn.as_mut() {
+            vn.elapsed_carry_ms = 0;
+        }
+        snapshot
+    }
+    prev.is_none_or(|prev| visible(prev) != visible(next))
 }
 
 fn apply_vn_timer_edit(state: &AppState, snapshot: &mut TrackerSnapshot) {
@@ -1019,6 +1051,39 @@ mod observation_tests {
         observed.foreground_process = None;
         observed.foreground_title = None;
         assert_eq!(observed.active_window_summary(), (None, None));
+    }
+
+    #[test]
+    fn the_state_is_emitted_only_when_something_visible_changed() {
+        let idle = TrackerSnapshot { enabled: true, idle_seconds: 3, ..Default::default() };
+        assert!(should_emit(None, &idle), "the first tick always goes out");
+        assert!(!should_emit(Some(&idle), &idle.clone()));
+
+        // Idle time alone is news only on the VN card.
+        let later = TrackerSnapshot { idle_seconds: 4, ..idle.clone() };
+        assert!(!should_emit(Some(&idle), &later));
+
+        let vn: VnSession = serde_json::from_value(json!({
+            "exe": "game.exe", "content_id": "v1", "media_title": "VN", "media_type": "vn",
+            "elapsed_secs": 10, "counting": true, "started_at": "launch",
+            "session_chars": 0, "session_lines": 0
+        })).unwrap();
+        let reading = TrackerSnapshot { vn: Some(vn.clone()), ..idle.clone() };
+        assert!(should_emit(Some(&idle), &reading), "a session started");
+        let reading_idle = TrackerSnapshot { idle_seconds: 30, ..reading.clone() };
+        assert!(should_emit(Some(&reading), &reading_idle), "the VN card shows idle time");
+
+        // A sub-second remainder is not serialized; a whole second is.
+        let mut carry = reading.clone();
+        carry.vn.as_mut().unwrap().elapsed_carry_ms = 500;
+        assert!(!should_emit(Some(&reading), &carry));
+        let mut second = reading.clone();
+        second.vn.as_mut().unwrap().elapsed_secs = 11;
+        assert!(should_emit(Some(&reading), &second));
+
+        let counts = TrackerSnapshot { pending_count: 1, ..idle.clone() };
+        assert!(should_emit(Some(&idle), &counts));
+        assert!(should_emit(Some(&reading), &idle), "a session ended");
     }
 
     #[test]
