@@ -1,14 +1,20 @@
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { BookmarkPlus, X } from 'lucide-react';
 import type { TextLine } from '../../lib/types';
 import { COLUMN_HEIGHT, FONT_FAMILY_STACKS } from './constants';
+import { LINE_WINDOW_STEP, lineWindowStart, trimmedStart } from './lineWindow';
+
+/** Without IntersectionObserver nothing could load older lines: render all. */
+const CAN_WINDOW = typeof IntersectionObserver !== 'undefined';
 
 interface LineListProps {
   lines: TextLine[];
@@ -27,7 +33,9 @@ interface LineListProps {
 }
 
 /** The reader lines. Memoized with stable props, so opening a modal or the
- *  settings panel does not walk thousands of lines again. */
+ *  settings panel does not walk thousands of lines again. Only the last few
+ *  hundred are rendered; scrolling near the first one shown adds older ones.
+ *  `lines` stays whole: stats, undo, copy and rooms do not see the window. */
 export const LineList = memo(function LineList({
   lines, contentId, vertical, lineGap, lineSpacing, fontSize, fontFamily,
   saveLabel, deleteLabel, onPointer, onLeave, onSave, onDelete,
@@ -36,20 +44,88 @@ export const LineList = memo(function LineList({
   const followLatestRef = useRef(true);
   const lastScrollExtentRef = useRef<number | null>(null);
 
+  // The window starts at a pinned line id; see `lineWindowStart`.
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const previousStartRef = useRef<number | null>(null);
+  const previousLinesRef = useRef(lines);
+  /** A line on screen, and where it was, before older lines were added. */
+  const pendingAdjustRef = useRef<{ node: Element; left: number; top: number } | null>(null);
+  const start = CAN_WINDOW ? lineWindowStart(lines, pinnedId, previousStartRef.current) : 0;
+  const visibleLines = useMemo(() => (start > 0 ? lines.slice(start) : lines), [lines, start]);
+
   useLayoutEffect(() => {
     followLatestRef.current = true;
     lastScrollExtentRef.current = null;
   }, [contentId, vertical]);
 
   useLayoutEffect(() => {
+    setPinnedId(null);
+    previousStartRef.current = null;
+    pendingAdjustRef.current = null;
+  }, [contentId]);
+
+  // Pin the window to its first line. While following the latest line, new
+  // lines would grow it without end: past the slack it is trimmed back.
+  useLayoutEffect(() => {
+    let next = start;
+    if (lines !== previousLinesRef.current && followLatestRef.current) {
+      next = trimmedStart(lines.length, start);
+    }
+    previousLinesRef.current = lines;
+    previousStartRef.current = next;
+    const wanted = lines[next]?.id ?? null;
+    if (CAN_WINDOW && wanted !== pinnedId) setPinnedId(wanted);
+  }, [lines, start, pinnedId]);
+
+  useLayoutEffect(() => {
     const el = listContainerRef.current;
     if (!el) return;
+    const pending = pendingAdjustRef.current;
+    pendingAdjustRef.current = null;
+    const extent = vertical ? el.scrollWidth : el.scrollHeight;
     if (followLatestRef.current) {
       if (vertical) el.scrollLeft = Math.min(0, el.clientWidth - el.scrollWidth);
       else el.scrollTop = el.scrollHeight;
+    } else if (pending?.node.isConnected) {
+      // WebKit has no scroll anchoring: lines added above would push the text
+      // being read. Put the line that was on screen back where it was; moving
+      // the viewport by the same amount works for the RTL vertical list too.
+      const rect = pending.node.getBoundingClientRect();
+      if (vertical) el.scrollLeft += rect.left - pending.left;
+      else el.scrollTop += rect.top - pending.top;
     }
-    lastScrollExtentRef.current = vertical ? el.scrollWidth : el.scrollHeight;
-  }, [lines, vertical]);
+    lastScrollExtentRef.current = extent;
+  }, [visibleLines, vertical]);
+
+  const loadOlder = useRef(() => {});
+  loadOlder.current = () => {
+    const el = listContainerRef.current;
+    if (!el || start <= 0 || pendingAdjustRef.current) return;
+    const view = el.getBoundingClientRect();
+    const children = Array.from(el.children);
+    const node = children.find((child) => {
+      const rect = child.getBoundingClientRect();
+      return vertical ? rect.left < view.right : rect.bottom > view.top;
+    }) ?? children[0];
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    pendingAdjustRef.current = { node, left: rect.left, top: rect.top };
+    setPinnedId(lines[Math.max(0, start - LINE_WINDOW_STEP)].id);
+  };
+
+  // The first line shown is the sentinel: once it comes near, add older ones.
+  useEffect(() => {
+    const first = listContainerRef.current?.firstElementChild;
+    if (!CAN_WINDOW || start <= 0 || !first) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadOlder.current();
+      },
+      { root: listContainerRef.current, rootMargin: '600px' },
+    );
+    observer.observe(first);
+    return () => observer.disconnect();
+  }, [visibleLines, start, vertical]);
 
   const listStyles = useMemo<CSSProperties>(() => (vertical
     ? { columnGap: lineGap, rowGap: lineGap, direction: 'rtl' }
@@ -91,7 +167,7 @@ export const LineList = memo(function LineList({
           : el.scrollHeight - el.clientHeight - el.scrollTop < 48;
       }}
     >
-      {lines.map((line) => (
+      {visibleLines.map((line) => (
         <LineItem
           key={line.id}
           line={line}
