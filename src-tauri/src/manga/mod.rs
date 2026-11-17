@@ -5,6 +5,7 @@
 //! resolves them against the database (see `protocol`).
 
 pub mod archive;
+pub mod store;
 
 use std::cmp::Ordering;
 
