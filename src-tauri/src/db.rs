@@ -277,15 +277,33 @@ pub enum RestoreError {
 fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(SCHEMA)?;
     for statement in MIGRATIONS {
-        let _ = conn.execute(statement, []);
+        add_column(conn, statement);
     }
-    if conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).is_ok() {
+    if add_column(conn, "ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0") {
         conn.execute("UPDATE vn_apps SET browser_texthooker = 1 WHERE texthooker_url IS NOT NULL AND TRIM(texthooker_url) != ''", [])?;
     }
-    if conn.execute("ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'", []).is_ok() {
+    if add_column(conn, "ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'") {
         conn.execute("UPDATE vn_apps SET reader_mode = CASE WHEN browser_texthooker = 1 THEN 'browser' ELSE 'integrated' END", [])?;
     }
     Ok(())
+}
+
+/// Runs one `ADD COLUMN`; `true` when the column is new. A duplicate column is
+/// the expected answer on an up-to-date database; anything else is logged
+/// rather than hidden, and the app carries on as before.
+fn add_column(conn: &Connection, statement: &str) -> bool {
+    match conn.execute(statement, []) {
+        Ok(_) => true,
+        Err(error) if is_duplicate_column(&error) => false,
+        Err(error) => {
+            log::warn!("database migration failed: {statement}: {error}");
+            false
+        }
+    }
+}
+
+fn is_duplicate_column(error: &rusqlite::Error) -> bool {
+    matches!(error, rusqlite::Error::SqliteFailure(_, Some(message)) if message.starts_with("duplicate column name"))
 }
 
 impl Db {
@@ -1373,6 +1391,22 @@ mod mining_tests {
         let cached = db.get_text_state("v1");
         assert_eq!((cached.timer_seconds, cached.baseline_chars, cached.media_title), stored(&db));
         assert_eq!(stored(&db), (90, 8, Some("AIR".into())));
+    }
+
+    #[test]
+    fn only_a_duplicate_column_counts_as_already_migrated() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(super::SCHEMA).unwrap();
+        let statement = "ALTER TABLE vn_apps ADD COLUMN filter_chinese INTEGER";
+        assert!(super::add_column(&conn, statement));
+        let again = conn.execute(statement, []).unwrap_err();
+        assert!(super::is_duplicate_column(&again), "{again}");
+        assert!(!super::add_column(&conn, statement));
+        let missing = conn.execute("ALTER TABLE nope ADD COLUMN x INTEGER", []).unwrap_err();
+        assert!(!super::is_duplicate_column(&missing), "{missing}");
+        // Migrating twice is a no-op.
+        super::migrate(&conn).unwrap();
+        super::migrate(&conn).unwrap();
     }
 
     #[test]
