@@ -1,50 +1,27 @@
 import { NativeHookTextFilters } from '../components/NativeHookTextFilters';
-import { useReadingOverlay } from '../hooks/useReadingOverlay';
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   Activity,
   BarChart2,
-  BookOpen,
   Brain,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Copy,
-  Crown,
-  Edit3,
-  FileText,
   HelpCircle,
-  Home,
   Inbox,
-  Link as LinkIcon,
   Monitor,
-  Pause,
-  PanelTop,
-  Play,
-  RotateCcw,
   Save,
-  SlidersHorizontal,
-  Target,
   Settings,
   Trash2,
   Share2,
-  Type,
-  Undo2,
-  Unlink,
-  Users,
   X,
 } from 'lucide-react';
 import { Field } from '../components/ui/Field';
@@ -64,6 +41,7 @@ import { useHookerLines } from './texthooker/useHookerLines';
 import { useRoom } from './texthooker/useRoom';
 import { useDictionaryHover } from './texthooker/useDictionaryHover';
 import { LineList } from './texthooker/LineList';
+import { TopBar } from './texthooker/TopBar';
 import {
   FONT_FAMILY_OPTIONS,
   HOOKER_THEME_OPTIONS,
@@ -153,11 +131,9 @@ function durationLabel(seconds: number) {
 export default function TexthookerScreen() {
   const { t } = useTranslation(['texthooker', 'common']);
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const hooker = useAppStore((s) => s.hooker);
-  const readingOverlay = useReadingOverlay();
   const online = useAppStore((s) => s.online);
 
   const contentId = hooker?.content_id ?? LOCAL_SESSION;
@@ -193,12 +169,8 @@ export default function TexthookerScreen() {
   const [timerEditMinutes, setTimerEditMinutes] = useState(0);
   const [timerEditSeconds, setTimerEditSeconds] = useState(0);
 
-  const topbarRef = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const topbarNaturalWidthRef = useRef(0);
-  const isTopbarVerticalRef = useRef(false);
-  const [isTopbarVertical, setIsTopbarVertical] = useState(false);
 
   // A detected visual novel drives the clock from Rust; the manual timer is for
   // everything else. Only the fields read here: the snapshot changes every
@@ -320,7 +292,6 @@ export default function TexthookerScreen() {
   const fontFamily = settings?.texthooker_font_family ?? 'Noto Sans JP';
   const customCss = settings?.texthooker_custom_css ?? '';
   const hookerTheme = settings?.texthooker_theme ?? 'system';
-  const isTopbarHidden = settings?.texthooker_topbar_hidden ?? false;
   const forceTopbarVertical = settings?.texthooker_force_topbar_vertical ?? false;
   const autoPauseTimeout = settings?.texthooker_auto_pause_timeout ?? 120;
   const {
@@ -344,8 +315,6 @@ export default function TexthookerScreen() {
     copyInvite, connectRoom, disconnectRoom,
   } = useRoom({ settings, contentId, reload });
   const dictionaryPopupDelay = Math.max(0, Math.min(2000, settings?.dictionary_popup_delay_ms ?? 75));
-  const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
-  const connectionStatus = hooker?.status ?? 'disconnected';
 
   const {
     dictionaryRequest, dictionaryContext, dictionaryEntries, dictionaryLoading, dictionaryAnchor,
@@ -501,93 +470,6 @@ export default function TexthookerScreen() {
     };
   }, [isSettingsOpen]);
 
-  useEffect(() => {
-    isTopbarVerticalRef.current = isTopbarVertical;
-  }, [isTopbarVertical]);
-
-  // Flip the bar to a column once it no longer fits. scrollWidth is only the
-  // natural row width while it is actually a row, so keep the last known one.
-  useEffect(() => {
-    const checkLayout = () => {
-      const el = topbarRef.current;
-      if (el && !isTopbarVerticalRef.current) {
-        topbarNaturalWidthRef.current = el.scrollWidth;
-      }
-      if (topbarNaturalWidthRef.current === 0) return;
-      const shouldBeVertical = topbarNaturalWidthRef.current > window.innerWidth - 16;
-      if (shouldBeVertical !== isTopbarVerticalRef.current) {
-        setIsTopbarVertical(shouldBeVertical);
-      }
-    };
-    checkLayout();
-    window.addEventListener('resize', checkLayout);
-    const interval = setInterval(checkLayout, 500);
-    return () => {
-      window.removeEventListener('resize', checkLayout);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const topbarMetrics: Array<{ key: string; title: string; content: ReactNode }> = [];
-  if (settings?.texthooker_show_timer) {
-    topbarMetrics.push({
-      key: 'timer',
-      title: t('topbar.timer'),
-      content: (
-        <>
-          <Clock className="w-4 h-4 opacity-70" />
-          <SessionClock clock={clock} />
-        </>
-      ),
-    });
-  }
-  if (settings?.texthooker_show_speed) {
-    topbarMetrics.push({
-      key: 'reading-speed',
-      title: t('topbar.speed'),
-      content: (
-        <>
-          <Activity className="w-4 h-4 opacity-70" />
-          <SessionSpeed clock={clock} chars={currentSessionChars} suffix="/h" />
-        </>
-      ),
-    });
-  }
-  if (settings?.texthooker_show_characters) {
-    topbarMetrics.push({
-      key: 'characters',
-      title: t('topbar.charactersDetail', {
-        session: numberWithCommas(currentSessionChars),
-        total: numberWithCommas(charsNumber),
-      }),
-      content: (
-        <>
-          <Type className="w-4 h-4 opacity-70" />
-          {numberWithCommas(currentSessionChars)}
-        </>
-      ),
-    });
-  }
-  if (settings?.texthooker_show_lines) {
-    topbarMetrics.push({
-      key: 'lines',
-      title: t('topbar.linesDetail', {
-        session: numberWithCommas(currentSessionLines),
-        total: numberWithCommas(linesNumber),
-      }),
-      content: (
-        <>
-          <FileText className="w-4 h-4 opacity-70" />
-          {numberWithCommas(currentSessionLines)}
-        </>
-      ),
-    });
-  }
-
-  const topbarIconBtnClass = effectiveTopbarVertical
-    ? 'btn btn-xs btn-ghost w-full justify-center'
-    : 'btn btn-xs btn-ghost btn-square';
-
   const systemTheme =
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches
       ? 'light'
@@ -661,260 +543,37 @@ export default function TexthookerScreen() {
       ) : null}
       {miningFeedback ? <button type="button" className="fixed bottom-3 right-3 z-50 alert alert-info w-auto max-w-sm text-sm" onClick={() => setMiningFeedback(null)}>{miningFeedback}</button> : null}
 
-      {/* Top Bar */}
-      {isTopbarHidden && effectiveTopbarVertical ? (
-        <button
-          type="button"
-          onClick={() => void updateSettings({ texthooker_topbar_hidden: false })}
-          className="fixed top-1/2 right-0 -translate-y-1/2 w-4 h-10 flex items-center justify-center bg-base-100 rounded-l-md shadow-sm z-50 text-base-content"
-          title={t('topbar.show')}
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-      ) : (
-        <div
-          ref={topbarRef}
-          className={`fixed top-1 right-1 m-2 px-3 py-2 bg-base-100 rounded-md shadow-sm z-50 text-base-content inline-flex items-center th-topbar ${
-            effectiveTopbarVertical ? 'flex-col items-stretch gap-2' : 'flex-row gap-3'
-          }`}
-        >
-          {effectiveTopbarVertical && (
-            <button
-              type="button"
-              onClick={() => void updateSettings({ texthooker_topbar_hidden: true })}
-              className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 w-4 h-10 flex items-center justify-center bg-base-100 rounded-l-md shadow-sm text-base-content"
-              title={t('topbar.hide')}
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {topbarMetrics.map((metric, index) => (
-            <Fragment key={metric.key}>
-              <div className="font-mono text-base flex items-center gap-2" title={metric.title}>
-                {metric.content}
-              </div>
-              {index < topbarMetrics.length - 1 && (
-                <div
-                  className={`bg-base-content/20 ${
-                    effectiveTopbarVertical ? 'w-full h-px' : 'w-px h-4'
-                  }`}
-                ></div>
-              )}
-            </Fragment>
-          ))}
-
-          {topbarMetrics.length > 0 && (
-            <div
-              className={`bg-base-content/20 ${
-                effectiveTopbarVertical ? 'w-full h-px my-1' : 'w-px h-4 mx-1'
-              }`}
-            ></div>
-          )}
-
-          {nativeSession || autoSession ? (
-            <>
-              <div className="join" role="group" aria-label={t('topbar.inputSource')}>
-                <button
-                  type="button"
-                  className={nativeSelected ? 'join-item btn btn-outline btn-sm btn-square relative' : 'join-item btn btn-primary btn-sm btn-square relative'}
-                  aria-pressed={!nativeSelected}
-                  disabled={changingInput}
-                  title={t('topbar.websocket', { status: connectionStatus })}
-                  aria-label={t('topbar.websocket', { status: connectionStatus })}
-                  onClick={() => nativeSelected
-                    ? void changeInputSource('websocket')
-                    : void (['connected', 'connecting'].includes(connectionStatus) ? ipc.hookerDisconnect() : ipc.hookerConnect())}
-                >
-                  {connectionStatus === 'connected' && !nativeSelected ? <LinkIcon className="h-4 w-4" /> : <Unlink className="h-4 w-4" />}
-                  {!nativeSelected && <span aria-hidden="true" className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-success' : connectionStatus === 'connecting' ? 'bg-warning' : connectionStatus === 'error' ? 'bg-error' : 'bg-base-content/40'}`} />}
-                </button>
-                <button
-                  type="button"
-                  className={nativeSelected ? 'join-item btn btn-primary btn-sm btn-square relative' : 'join-item btn btn-outline btn-sm btn-square relative'}
-                  aria-pressed={nativeSelected}
-                  disabled={changingInput}
-                  title={t(`hookSelection.status.${nativeSession ? nativeHook?.phase : 'inactive'}`)}
-                  aria-label={t('hookSelection.button')}
-                  onClick={() => !nativeSession ? openHookPicker() : !nativeSelected && void changeInputSource('lunahook')}
-                >
-                  <Target className="h-4 w-4" />
-                  {nativeSelected && <span aria-hidden="true" className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${nativeHook?.phase === 'error' || nativeHook?.phase === 'unavailable' ? 'bg-error' : nativeHook?.selected_hook_code && ['attached', 'receiving'].includes(nativeHook.phase) ? 'bg-success' : 'bg-warning'}`} />}
-                </button>
-              </div>
-              {nativeSelected && <button type="button" className={topbarIconBtnClass} title={t('hookSelection.choose')} aria-label={t('hookSelection.choose')} onClick={openHookPicker}><SlidersHorizontal className="h-4 w-4" /></button>}
-              {inputSourceError && <span className="text-error text-xs" role="alert">{t('topbar.sourceFailed')}</span>}
-            </>
-          ) : <button
-            type="button"
-            onClick={() =>
-              void (['connected', 'connecting'].includes(connectionStatus) ? ipc.hookerDisconnect() : ipc.hookerConnect())
-            }
-            className={`${topbarIconBtnClass} transition-colors duration-300 ${
-              nativeInput ? 'opacity-40' : connectionStatus === 'connected'
-                ? 'text-success'
-                : connectionStatus === 'error'
-                  ? 'text-error'
-                  : connectionStatus === 'connecting'
-                    ? 'text-warning'
-                    : 'opacity-40'
-            }`}
-            title={nativeInput ? t('topbar.websocketDisabled') : t('topbar.websocket', { status: connectionStatus })}
-          >
-            {!nativeInput && connectionStatus === 'connected' ? (
-              <LinkIcon className="w-4 h-4" />
-            ) : (
-              <Unlink className="w-4 h-4" />
-            )}
-          </button>}
-
-          <button
-            type="button"
-            onClick={toggleTimer}
-            className={topbarIconBtnClass}
-            title={
-              autoSession
-                ? t(autoSession.paused_by_user ? 'topbar.resume' : 'topbar.pause')
-                : isTimerActive
-                  ? t('topbar.pause')
-                  : t('topbar.resume')
-            }
-          >
-            {(autoSession ? !autoSession.paused_by_user : isTimerActive) ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setTimerError(false); setIsResetTimerConfirmOpen(true); }}
-            className={topbarIconBtnClass}
-            title={t('topbar.reset')}
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenTimerEdit}
-            className={topbarIconBtnClass}
-            title={t('topbar.setTimer')}
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDeleteLast}
-            className={`${topbarIconBtnClass} text-error`}
-            title={t('topbar.deleteLast')}
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleUndo()}
-            disabled={!canUndo}
-            className={topbarIconBtnClass}
-            title={t('topbar.undo')}
-          >
-            <Undo2 className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsStatsOpen(true)}
-            className={topbarIconBtnClass}
-            title={t('topbar.stats')}
-          >
-            <BarChart2 className="w-4 h-4" />
-          </button>
-
-          <button
-            ref={settingsButtonRef}
-            type="button"
-            onClick={() => setIsSettingsOpen((prev) => !prev)}
-            className={topbarIconBtnClass}
-            title={t('topbar.settings')}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-
-          {readingOverlay?.target?.content_id === contentId && <button
-            type="button" className={topbarIconBtnClass} aria-pressed={readingOverlay.visible}
-            title={t(readingOverlay.visible ? 'readingOverlay:hide' : 'readingOverlay:open')}
-            aria-label={t(readingOverlay.visible ? 'readingOverlay:hide' : 'readingOverlay:open')}
-            onClick={() => void ipc.readingOverlayAction(readingOverlay.visible ? 'hide' : 'show')}>
-            <PanelTop className="w-4 h-4" />
-          </button>}
-
-          <button
-            type="button"
-            onClick={() => setIsSessionPickerOpen(true)}
-            className={topbarIconBtnClass}
-            title={hooker?.content_title ?? totals?.mediaTitle ?? t('sessions.free')}
-          >
-            <BookOpen className="w-4 h-4" />
-          </button>
-
-          <div
-            className={`bg-base-content/20 ${
-              effectiveTopbarVertical ? 'w-full h-px my-1' : 'w-px h-4 mx-1'
-            }`}
-          ></div>
-
-          <button
-            type="button"
-            onClick={() => getCurrentWindow().label === 'texthooker' ? void getCurrentWindow().hide() : navigate('/')}
-            className={topbarIconBtnClass}
-            title={getCurrentWindow().label === 'texthooker' ? t('topbar.hideWindow') : t('topbar.back')}
-          >
-            <Home className="w-4 h-4" />
-          </button>
-
-          {roomConnected && (
-            <div className="dropdown dropdown-end">
-              <button
-                type="button"
-                tabIndex={0}
-                className={`${topbarIconBtnClass} relative`}
-                title={t('room.members')}
-              >
-                <Users className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 badge badge-xs badge-primary scale-75">
-                  {roomMembers.length}
-                </span>
-              </button>
-              <ul
-                tabIndex={0}
-                className="dropdown-content menu menu-sm surface-raised mt-2 p-2 min-w-52 z-50"
-              >
-                <li className="menu-title px-2 py-1 text-xs opacity-70">
-                  {t('room.membersCount', { count: roomMembers.length })}
-                </li>
-                {roomMembers.map((member) => (
-                  <li key={member.id}>
-                    <span className="flex justify-between items-center text-xs cursor-default">
-                      <span className="flex items-center gap-2">
-                        {member.role === 'host' && <Crown className="w-3 h-3 text-warning" />}
-                        <span className="font-medium">
-                          {member.username ?? t('room.anonymous')}
-                        </span>
-                      </span>
-                      <span className="badge badge-xs capitalize opacity-70">
-                        {member.role === 'host' ? t('room.host') : t('room.guest')}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      <TopBar
+        settingsButtonRef={settingsButtonRef}
+        clock={clock}
+        contentId={contentId}
+        sessionTitle={hooker?.content_title ?? totals?.mediaTitle ?? t('sessions.free')}
+        currentSessionChars={currentSessionChars}
+        currentSessionLines={currentSessionLines}
+        charsNumber={charsNumber}
+        linesNumber={linesNumber}
+        nativeHook={nativeHook}
+        nativeSession={nativeSession}
+        nativeSelected={nativeSelected}
+        nativeInput={Boolean(nativeInput)}
+        changingInput={changingInput}
+        inputSourceError={inputSourceError}
+        autoPausedByUser={autoSession ? autoSession.paused_by_user : null}
+        isTimerActive={isTimerActive}
+        canUndo={canUndo}
+        roomConnected={roomConnected}
+        roomMembers={roomMembers}
+        onChangeInputSource={(source) => void changeInputSource(source)}
+        onOpenHookPicker={openHookPicker}
+        onToggleTimer={toggleTimer}
+        onResetTimer={() => { setTimerError(false); setIsResetTimerConfirmOpen(true); }}
+        onEditTimer={handleOpenTimerEdit}
+        onDeleteLast={handleDeleteLast}
+        onUndo={() => void handleUndo()}
+        onOpenStats={() => setIsStatsOpen(true)}
+        onToggleSettings={() => setIsSettingsOpen((prev) => !prev)}
+        onOpenSessions={() => setIsSessionPickerOpen(true)}
+      />
 
       {/* Timer Edit Modal */}
       <dialog
