@@ -5,12 +5,24 @@
 //! resolves them against the database (see `protocol`).
 
 pub mod archive;
+pub mod library;
 pub mod mokuro;
 pub mod protocol;
 pub mod store;
 pub mod thumbs;
 
 use std::cmp::Ordering;
+use std::sync::atomic::AtomicBool;
+use std::sync::Mutex;
+use std::time::Instant;
+
+/// What the manga reader keeps in memory, in `AppState`.
+#[derive(Default)]
+pub struct Runtime {
+    /// A library scan is running: a second one would only redo its work.
+    pub scanning: AtomicBool,
+    pub last_scan: Mutex<Option<Instant>>,
+}
 
 /// Extensions the webview can show as a page.
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "avif", "bmp"];

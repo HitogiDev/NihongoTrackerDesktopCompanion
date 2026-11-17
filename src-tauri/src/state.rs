@@ -340,6 +340,7 @@ pub struct AppState {
     /// Last `auth/verify` outcome and when it was taken, so every window that
     /// opens does not send its own request (see `connection::cached`).
     pub connection_last: std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>>,
+    pub manga: crate::manga::Runtime,
 }
 
 impl AppState {

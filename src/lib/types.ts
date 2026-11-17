@@ -15,6 +15,13 @@ import type { FilterPreview } from './bindings/FilterPreview';
 import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
 import type { MediaMatch } from './bindings/MediaMatch';
+import type { MangaContinue } from './bindings/MangaContinue';
+import type { MangaSeries } from './bindings/MangaSeries';
+import type { MangaSource } from './bindings/MangaSource';
+import type { MangaVolume } from './bindings/MangaVolume';
+import type { MokuroBlock } from './bindings/MokuroBlock';
+import type { MokuroPage } from './bindings/MokuroPage';
+import type { ScanSummary } from './bindings/ScanSummary';
 import type { MinedSentence } from './bindings/MinedSentence';
 import type { MpvSetup } from './bindings/MpvSetup';
 import type { NativeGameHookPhase } from './bindings/NativeGameHookPhase';
@@ -48,6 +55,13 @@ export type {
   HookerState,
   HookerStatus,
   MediaMatch,
+  MangaContinue,
+  MangaSeries,
+  MangaSource,
+  MangaVolume,
+  MokuroBlock,
+  MokuroPage,
+  ScanSummary,
   MinedSentence,
   MpvSetup,
   NativeGameHookPhase,

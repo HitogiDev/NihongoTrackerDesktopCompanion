@@ -15,6 +15,8 @@ import type {
   LogPayload,
   MediaHit,
   MediaMatch,
+  MangaSource,
+  ScanSummary,
   MinedSentence,
   MpvSetup,
   OutboxItem,
@@ -219,6 +221,14 @@ export const ipc = {
   remoteTextSession: (contentId: string) =>
     invoke<Record<string, unknown>>('remote_text_session', { contentId }),
 
+  // manga library
+  mangaSources: () => invoke<MangaSource[]>('manga_sources'),
+  /** Rejects with `not-a-folder` or `already-added` (see `mangaErrorKey`). */
+  mangaAddLocalRoot: (path: string) => invoke<ScanSummary>('manga_add_local_root', { path }),
+  mangaRemoveSource: (id: string) => invoke<void>('manga_remove_source', { id }),
+  /** `force` for the user's button; without it a scan from the last minute is enough. */
+  mangaRescan: (force = false) => invoke<ScanSummary>('manga_rescan', { force }),
+
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
   dictionaryImport: (path: string) =>
@@ -256,4 +266,5 @@ export const events = {
   updateProgress: 'updater://progress',
   streakAuthRequired: 'streak://auth-required',
   discordStatus: 'discord://status',
+  mangaLibrary: 'manga://library-changed',
 } as const;

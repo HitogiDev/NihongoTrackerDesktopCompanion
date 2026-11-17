@@ -319,6 +319,23 @@ impl Db {
         })
     }
 
+    /// `volume id → (signature, pages)` for a source's volumes, so a rescan
+    /// does not reopen archives that did not change.
+    pub fn manga_known_volumes(&self, source_id: &str) -> Result<HashMap<String, (String, Vec<String>)>> {
+        self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT v.id, v.signature, v.pages_json FROM manga_volumes v
+                 JOIN manga_series s ON s.id = v.series_id
+                 WHERE s.source_id = ?1 AND v.signature IS NOT NULL",
+            )?;
+            let rows = stmt.query_map(params![source_id], |r| {
+                let pages: String = r.get(2)?;
+                Ok((r.get::<_, String>(0)?, (r.get::<_, String>(1)?, serde_json::from_str(&pages).unwrap_or_default())))
+            })?;
+            rows.collect()
+        })
+    }
+
     // ── library ────────────────────────────────────────────────────────
 
     fn query_manga_series(&self, filter: Option<&str>) -> Result<Vec<MangaSeries>> {

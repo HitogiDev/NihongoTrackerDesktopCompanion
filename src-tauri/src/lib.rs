@@ -122,6 +122,7 @@ pub fn run() {
                 outbox_flush: Default::default(),
                 main_intent: Default::default(),
                 connection_last: Default::default(),
+                manga: Default::default(),
             });
 
             // Started minimized, the main window is not built at all until the
@@ -348,6 +349,10 @@ pub fn run() {
             commands::install_update,
             commands::request_window_titles_permission,
             commands::parse_release_name,
+            commands::manga_sources,
+            commands::manga_add_local_root,
+            commands::manga_remove_source,
+            commands::manga_rescan,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

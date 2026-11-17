@@ -1497,3 +1497,54 @@ pub fn request_window_titles_permission() -> bool {
 pub fn parse_release_name(name: String) -> Value {
     serde_json::to_value(crate::parser::parse(&name)).unwrap_or(Value::Null)
 }
+
+// ── manga ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn manga_sources(state: State<'_, AppState>) -> CmdResult<Vec<crate::manga::store::MangaSource>> {
+    state.db.manga_sources().map_err(err)
+}
+
+/// Adds a folder to the manga library and scans it. Errors are codes the UI
+/// translates: `not-a-folder`, `already-added`.
+#[tauri::command]
+pub async fn manga_add_local_root(app: AppHandle, path: String) -> CmdResult<crate::manga::library::ScanSummary> {
+    let root = std::path::PathBuf::from(&path);
+    {
+        let state = app.state::<AppState>();
+        let existing: Vec<std::path::PathBuf> = state
+            .db
+            .manga_sources()
+            .map_err(err)?
+            .into_iter()
+            .filter(|source| source.kind == crate::manga::store::SOURCE_LOCAL)
+            .map(|source| source.url.into())
+            .collect();
+        crate::manga::library::check_new_root(&root, &existing).map_err(str::to_string)?;
+        let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+        state
+            .db
+            .add_manga_source(&uuid::Uuid::new_v4().to_string(), crate::manga::store::SOURCE_LOCAL, &name, &path)
+            .map_err(err)?;
+    }
+    crate::manga::library::rescan(&app, true).await
+}
+
+/// Forgets a library root and its series. The files are not touched.
+#[tauri::command]
+pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let volumes = state.db.delete_manga_source(&id).map_err(err)?;
+    if let Ok(cache_dir) = app.path().app_cache_dir() {
+        crate::manga::thumbs::purge(&cache_dir, &volumes);
+    }
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+/// Rescans the local roots. `force` is the user's button; opening the screen
+/// passes `false` and is skipped if a scan ran a moment ago.
+#[tauri::command]
+pub async fn manga_rescan(app: AppHandle, force: Option<bool>) -> CmdResult<crate::manga::library::ScanSummary> {
+    crate::manga::library::rescan(&app, force.unwrap_or(false)).await
+}
