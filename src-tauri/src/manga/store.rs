@@ -26,10 +26,9 @@ pub const SOURCE_LOCAL: &str = "local";
 pub const FORMAT_FOLDER: &str = "folder";
 pub const FORMAT_ARCHIVE: &str = "archive";
 
-/// `manga_volumes.ocr_state`: no text at all, or text from a `.mokuro` file.
-/// The OCR states of a later phase (processing, done) join these.
-pub const TEXT_NONE: &str = "none";
-pub const TEXT_MOKURO: &str = "mokuro";
+// `manga_volumes.ocr_state` is `none` (no text) or `mokuro` (a `.mokuro` file
+// next to the volume), set by `apply_manga_scan`. The OCR states of a later
+// phase (processing, done) join these.
 
 /// A library root as the UI lists it. Never with its credentials.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
