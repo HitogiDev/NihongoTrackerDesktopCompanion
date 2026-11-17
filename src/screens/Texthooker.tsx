@@ -67,12 +67,8 @@ import { useAppStore } from '../store/useAppStore';
 import { useManualTimer } from './texthooker/useManualTimer';
 import { SessionClock, SessionSpeed } from './texthooker/SessionClock';
 import { useHookerLines } from './texthooker/useHookerLines';
-import {
-  RoomConnection,
-  randomRoomId,
-  type RoomLine,
-  type RoomMember,
-} from '../lib/room';
+import { useRoom } from './texthooker/useRoom';
+import { randomRoomId } from '../lib/room';
 import type {
   DictionaryEntry,
   TextLine,
@@ -251,13 +247,6 @@ export default function TexthookerScreen() {
   const [timerEditMinutes, setTimerEditMinutes] = useState(0);
   const [timerEditSeconds, setTimerEditSeconds] = useState(0);
 
-  // ── shared room ─────────────────────────────────────────────────────
-  const [roomConnected, setRoomConnected] = useState(false);
-  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
-  const [roomError, setRoomError] = useState<string | null>(null);
-  const [inviteCopied, setInviteCopied] = useState(false);
-  const roomRef = useRef<RoomConnection | null>(null);
-
   const listContainerRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const lastScrollExtentRef = useRef<number | null>(null);
@@ -407,15 +396,13 @@ export default function TexthookerScreen() {
       lastActivityRef.current = Date.now();
     },
   });
+  const {
+    roomMode, roomId, inviteLink, roomConnected, roomMembers, roomError, inviteCopied,
+    copyInvite, connectRoom, disconnectRoom,
+  } = useRoom({ settings, contentId, reload });
   const dictionaryPopupDelay = Math.max(0, Math.min(2000, settings?.dictionary_popup_delay_ms ?? 75));
   const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
   const connectionStatus = hooker?.status ?? 'disconnected';
-  const roomMode = (settings?.texthooker_room_mode ?? 'local') as 'local' | 'host' | 'guest';
-  const roomId = settings?.texthooker_room_id ?? '';
-  const inviteLink =
-    roomId && settings?.api_base_url
-      ? `${settings.api_base_url.replace(/\/+$/, '')}/texthooker/session?mode=guest&roomId=${roomId}`
-      : '';
 
   const lookupDictionary = useCallback(async (request: LookupRequest) => {
     setDictionaryLoading(true);
@@ -499,24 +486,6 @@ export default function TexthookerScreen() {
     return () => document.removeEventListener('keydown', lookupOnModifierPress);
   }, [scheduleDictionaryLookup]);
 
-  // A line produced locally is mirrored to the room when hosting.
-  useEffect(() => {
-    const unlisten = listen<{ line: TextLine }>(events.hookerLine, (event) => {
-      const room = roomRef.current;
-      if (!room?.connected || roomMode !== 'host') return;
-      if (event.payload.line.content_id !== contentId) return;
-      room.sendLine({
-        id: event.payload.line.id,
-        text: event.payload.line.text,
-        japaneseCount: event.payload.line.chars,
-        createdAt: event.payload.line.created_at,
-      });
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [contentId, roomMode]);
-
   // Closing the game ends the detected session and its counters drop to zero
   // right away; without saying where it went, the session looks lost.
   useEffect(() => {
@@ -532,54 +501,6 @@ export default function TexthookerScreen() {
 
   useEffect(() => { if (hasAutoSession) setEndedSession(null); }, [hasAutoSession]);
   useEffect(() => { setEndedSession(null); }, [contentId]);
-
-  // ── room ────────────────────────────────────────────────────────────
-
-  const disconnectRoom = useCallback(() => {
-    roomRef.current?.disconnect();
-    roomRef.current = null;
-    setRoomConnected(false);
-    setRoomMembers([]);
-  }, []);
-
-  const connectRoom = useCallback(() => {
-    if (!settings || roomMode === 'local' || !roomId.trim()) return;
-    disconnectRoom();
-    setRoomError(null);
-
-    const room = new RoomConnection(
-      {
-        baseUrl: settings.api_base_url,
-        roomId: roomId.trim(),
-        role: roomMode,
-        username: settings.username,
-        // Same key the web client uses, so hosting the same room from either
-        // client reclaims it instead of being rejected.
-        hostToken: localStorage.getItem(`hostToken_${roomId.trim()}`),
-      },
-      {
-        onStatus: setRoomConnected,
-        onCreated: ({ roomId: id, hostToken }) =>
-          localStorage.setItem(`hostToken_${id}`, hostToken),
-        onJoined: () => setRoomError(null),
-        onHistory: (history) => {
-          void Promise.all(history.map((line) => ipc.hookerIngest(line.text))).then(reload);
-        },
-        onLine: (line: RoomLine) => {
-          void ipc.hookerIngest(line.text);
-        },
-        onLinesDeleted: () => void reload(),
-        onLinesRestored: () => void reload(),
-        onMembers: setRoomMembers,
-        onError: setRoomError,
-      }
-    );
-    room.connect();
-    roomRef.current = room;
-  }, [settings, roomMode, roomId, disconnectRoom, reload]);
-
-  // Leave the room when the screen goes away.
-  useEffect(() => () => disconnectRoom(), [disconnectRoom]);
 
   const toggleTimer = useCallback(() => {
     if (autoSession) {
@@ -1959,12 +1880,7 @@ export default function TexthookerScreen() {
                       <button
                         type="button"
                         className={`btn btn-sm ${inviteCopied ? 'btn-success' : 'btn-outline'}`}
-                        onClick={() => {
-                          void navigator.clipboard.writeText(inviteLink).then(() => {
-                            setInviteCopied(true);
-                            setTimeout(() => setInviteCopied(false), 2000);
-                          });
-                        }}
+                        onClick={copyInvite}
                       >
                         {inviteCopied ? (
                           t('room.copied')
