@@ -2,7 +2,7 @@
   "title": "Activity feed",
   "subtitle": "Catch up with friends, clubs, and the wider NihongoTracker community.",
   "friendActivity": "Friends are learning",
-  "immersing": { "title": "Friends immersing now", "hint": "Live sessions shared by mutual followers.", "empty": "No friends are sharing an active session.", "elapsed": "{{time}} so far" },
+  "immersing": { "title": "Friends immersing now", "hint": "Live sessions shared by mutual followers.", "empty": "No friends are sharing an active session.", "elapsed": "{{time}} so far", "loadFailed": "Friends' sessions could not be loaded." },
   "openSocial": "View all",
   "ranking": "View ranking",
   "openProfile": "Open {{username}}’s profile",

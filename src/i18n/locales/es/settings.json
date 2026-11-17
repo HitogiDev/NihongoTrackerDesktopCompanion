@@ -1,14 +1,6 @@
 {
   "title": "Ajustes",
   "subtitle": "Cómo se detecta, cuándo se registra y a dónde se envía.",
-  "tabs": {
-    "label": "Secciones de ajustes",
-    "account": "Cuenta",
-    "tracking": "Seguimiento",
-    "discord": "Discord",
-    "anki": "Anki",
-    "app": "App"
-  },
   "anki": {
     "url": "Dirección de AnkiConnect",
     "urlHint": "La misma que \"AnkiConnect server address\" en Yomitan. Cámbiala solo si cambiaste la dirección o el puerto de AnkiConnect.",
@@ -136,7 +128,10 @@
     "entries": "entradas",
     "none": "Todavía no hay diccionarios importados.",
     "remove": "Eliminar diccionario",
-    "fileFilter": "Diccionario de Yomitan"
+    "fileFilter": "Diccionario de Yomitan",
+    "imported": "Diccionario importado.",
+    "importedMany": "{{count}} diccionarios importados.",
+    "removed": "Diccionario eliminado."
   },
   "filters": {
     "title": "Filtros de texto",
@@ -213,5 +208,24 @@
     "confirmTitle": "¿Restaurar esta copia?",
     "confirmBody": "Todo lo guardado en local se sustituye por la copia y la app se reinicia. Los logs que esperan en la cola también se sustituyen. La base de datos actual se guarda como companion.before-restore.sqlite3 en la carpeta de datos de la app.",
     "confirm": "Restaurar y reiniciar"
+  },
+  "sections": {
+    "label": "Secciones de ajustes",
+    "account": "Cuenta",
+    "anime": "Anime",
+    "novels": "Novelas visuales y juegos",
+    "readingOverlay": "Overlay de lectura",
+    "dictionaries": "Diccionarios",
+    "anki": "Anki",
+    "discord": "Discord",
+    "app": "Apariencia y app",
+    "backup": "Copias y actualizaciones",
+    "advanced": "Avanzado",
+    "detectionLoop": "Detección"
+  },
+  "search": {
+    "label": "Buscar en los ajustes",
+    "placeholder": "Buscar ajustes…",
+    "empty": "Ningún ajuste coincide."
   }
 }

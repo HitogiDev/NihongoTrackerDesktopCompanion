@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { listen } from '@tauri-apps/api/event';
+import { replaceEqualDeep } from '@tanstack/react-query';
 import { ipc, events } from '../lib/ipc';
 import { setAppLanguage } from '../i18n';
 import { detectLanguage } from '../i18n/languages';
@@ -59,16 +60,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     if (!listenersAttached) {
       listenersAttached = true;
-      // Every window gets the snapshot each second. A hidden one keeps only the
-      // latest and renders it when shown, instead of re-rendering unseen.
+      // A hidden window keeps only the latest snapshot and renders it when
+      // shown, instead of re-rendering unseen. Each snapshot is merged into the
+      // previous one so the parts that did not change (`game_hook`,
+      // `capabilities`, a paused `anime`…) keep their reference and the
+      // selectors that read them do not fire.
+      const applyTracker = (next: TrackerSnapshot) =>
+        set({ tracker: replaceEqualDeep(get().tracker, next) });
       let hiddenTracker: TrackerSnapshot | null = null;
       await listen<TrackerSnapshot>(events.tracker, (event) => {
         if (document.hidden) hiddenTracker = event.payload;
-        else set({ tracker: event.payload });
+        else applyTracker(event.payload);
       });
       document.addEventListener('visibilitychange', () => {
         if (document.hidden || !hiddenTracker) return;
-        set({ tracker: hiddenTracker });
+        applyTracker(hiddenTracker);
         hiddenTracker = null;
       });
       await listen<HookerState>(events.hookerStatus, (event) => set({ hooker: event.payload }));

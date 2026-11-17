@@ -27,15 +27,25 @@
   "search": "Buscar",
   "refresh": "Actualizar",
   "connect": "Conectar",
+  "loading": "Cargando…",
   "retry": "Reintentar",
   "add": "Añadir",
   "back": "Volver",
   "patreonTiers": { "consumer": "Consumidor", "donator": "Donante", "enthusiast": "Entusiasta" },
   "none": "—",
   "minutesShort": "{{count}} min",
-  "charsShort": "{{count}} car.",
+  "charsShort": "{{count, number}} car.",
   "episodesShort": "{{count}} ep.",
   "linesShort": "{{count}} líneas",
+  "xp": "XP",
+  "xpValue": "{{value}} XP",
+  "levelShort": "Nv. {{level}}",
+  "language": "Idioma",
+  "duration": {
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "minutes": "{{minutes}} min",
+    "seconds": "{{seconds}} s"
+  },
   "relative": {
     "now": "ahora",
     "minutes": "hace {{count}} min",
@@ -56,7 +66,8 @@
     "other": "Otro"
   },
   "levelUp": {
-    "title": "¡Enhorabuena! ¡Has subido de nivel!"
+    "title": "¡Enhorabuena! ¡Has subido de nivel!",
+    "progressIn": "Progreso en el Nv. {{level}}"
   },
   "media": {
     "title": "Buscar media",

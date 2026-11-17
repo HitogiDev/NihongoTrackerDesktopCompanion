@@ -2,8 +2,9 @@
 //! texthooker line buffer. Everything the app needs to keep working with no
 //! network, and to catch up once it comes back.
 
+use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,17 @@ pub type Result<T> = std::result::Result<T, rusqlite::Error>;
 
 pub struct Db {
     conn: Mutex<Connection>,
+    /// `vn_apps` as the detector reads it on every tick. Filled and cleared
+    /// only while `conn` is held (lock order: `conn`, then this), so a reader
+    /// can never store a list older than the last write. Every write to the
+    /// table goes through [`Db::writing_vn_apps`], which clears it.
+    vn_apps: Mutex<Option<Arc<[VnApp]>>>,
+    /// `(lines, chars)` per content id, kept in step by the line writes
+    /// (write-through) so the tick does not re-aggregate a whole work every
+    /// second. Same locking rule as `vn_apps`.
+    text_totals: Mutex<HashMap<String, (i64, i64)>>,
+    /// `text_state` rows as last read or written. Same locking rule.
+    text_states: Mutex<HashMap<String, TextState>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -265,15 +277,33 @@ pub enum RestoreError {
 fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(SCHEMA)?;
     for statement in MIGRATIONS {
-        let _ = conn.execute(statement, []);
+        add_column(conn, statement);
     }
-    if conn.execute("ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0", []).is_ok() {
+    if add_column(conn, "ALTER TABLE vn_apps ADD COLUMN browser_texthooker INTEGER NOT NULL DEFAULT 0") {
         conn.execute("UPDATE vn_apps SET browser_texthooker = 1 WHERE texthooker_url IS NOT NULL AND TRIM(texthooker_url) != ''", [])?;
     }
-    if conn.execute("ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'", []).is_ok() {
+    if add_column(conn, "ALTER TABLE vn_apps ADD COLUMN reader_mode TEXT NOT NULL DEFAULT 'integrated'") {
         conn.execute("UPDATE vn_apps SET reader_mode = CASE WHEN browser_texthooker = 1 THEN 'browser' ELSE 'integrated' END", [])?;
     }
     Ok(())
+}
+
+/// Runs one `ADD COLUMN`; `true` when the column is new. A duplicate column is
+/// the expected answer on an up-to-date database; anything else is logged
+/// rather than hidden, and the app carries on as before.
+fn add_column(conn: &Connection, statement: &str) -> bool {
+    match conn.execute(statement, []) {
+        Ok(_) => true,
+        Err(error) if is_duplicate_column(&error) => false,
+        Err(error) => {
+            log::warn!("database migration failed: {statement}: {error}");
+            false
+        }
+    }
+}
+
+fn is_duplicate_column(error: &rusqlite::Error) -> bool {
+    matches!(error, rusqlite::Error::SqliteFailure(_, Some(message)) if message.starts_with("duplicate column name"))
 }
 
 impl Db {
@@ -283,10 +313,16 @@ impl Db {
         }
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        // Safe with WAL (a crash can lose the last commits, never corrupt the
+        // file) and one fsync less per ingested line.
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
+            vn_apps: Mutex::new(None),
+            text_totals: Mutex::new(HashMap::new()),
+            text_states: Mutex::new(HashMap::new()),
         })
     }
 
@@ -322,13 +358,39 @@ impl Db {
         let mut conn = self.conn.lock().expect("db mutex poisoned");
         rusqlite::backup::Backup::new(&backup, &mut conn)?
             .run_to_completion(256, std::time::Duration::ZERO, None)?;
-        migrate(&conn)?;
+        let migrated = migrate(&conn);
+        self.invalidate_caches();
+        migrated?;
         Ok(())
     }
 
     fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         let guard = self.conn.lock().expect("db mutex poisoned");
         f(&guard)
+    }
+
+    /// Like [`Db::with`], for anything that writes to `vn_apps`: the cached
+    /// list is dropped before the connection is released.
+    fn writing_vn_apps<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        let guard = self.conn.lock().expect("db mutex poisoned");
+        let result = f(&guard);
+        *self.vn_apps.lock().expect("vn_apps cache poisoned") = None;
+        result
+    }
+
+    /// Drops every in-memory copy of the tables. The caller holds `conn`.
+    fn invalidate_caches(&self) {
+        *self.vn_apps.lock().expect("vn_apps cache poisoned") = None;
+        self.totals_cache().clear();
+        self.states_cache().clear();
+    }
+
+    fn totals_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, (i64, i64)>> {
+        self.text_totals.lock().expect("text totals cache poisoned")
+    }
+
+    fn states_cache(&self) -> std::sync::MutexGuard<'_, HashMap<String, TextState>> {
+        self.text_states.lock().expect("text state cache poisoned")
     }
 
     // ── settings ───────────────────────────────────────────────────────
@@ -405,40 +467,31 @@ impl Db {
 
     // ── VN registry ────────────────────────────────────────────────────
 
+    /// Straight from the table, for the UI. The detector uses
+    /// [`Db::vn_apps_cached`].
     pub fn list_vn_apps(&self) -> Result<Vec<VnApp>> {
-        self.with(|c| {
-            let mut stmt = c.prepare(
-                "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese
-                 FROM vn_apps ORDER BY media_title COLLATE NOCASE",
-            )?;
-            let rows = stmt.query_map([], |r| {
-                Ok(VnApp {
-                    exe: r.get(0)?,
-                    media_id: r.get(1)?,
-                    media_type: r.get(2)?,
-                    media_title: r.get(3)?,
-                    image: r.get(4)?,
-                    reader_mode: match r.get::<_, String>(5)?.as_str() {
-                        "browser" => ReaderMode::Browser,
-                        "overlay" => ReaderMode::Overlay,
-                        _ => ReaderMode::Integrated,
-                    },
-                    enabled: r.get::<_, i64>(6)? != 0,
-                    is_adult: r.get::<_, i64>(7)? != 0,
-                    is_adult_image: r.get::<_, Option<i64>>(12)?.map(|value| value != 0),
-                    launch_path: r.get(8)?,
-                    hooker_path: r.get(9)?,
-                    native_hook_enabled: r.get::<_, i64>(10)? != 0,
-                    native_hook_code: r.get(11)?,
-                    filter_chinese: r.get::<_, Option<i64>>(13)?.map(|value| value != 0),
-                })
-            })?;
-            rows.collect()
-        })
+        self.with(query_vn_apps)
+    }
+
+    /// The same list as [`Db::list_vn_apps`], kept in memory until something
+    /// writes to `vn_apps`: the detector asks for it on every tick and the
+    /// texthooker on every line.
+    pub fn vn_apps_cached(&self) -> Result<Arc<[VnApp]>> {
+        if let Some(apps) = self.vn_apps.lock().expect("vn_apps cache poisoned").as_ref() {
+            return Ok(apps.clone());
+        }
+        let guard = self.conn.lock().expect("db mutex poisoned");
+        let mut cache = self.vn_apps.lock().expect("vn_apps cache poisoned");
+        if let Some(apps) = cache.as_ref() {
+            return Ok(apps.clone());
+        }
+        let apps: Arc<[VnApp]> = query_vn_apps(&guard)?.into();
+        *cache = Some(apps.clone());
+        Ok(apps)
     }
 
     pub fn upsert_vn_app(&self, app: &VnApp) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute(
                 "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
@@ -477,24 +530,21 @@ impl Db {
         })
     }
 
-    /// The per-work Chinese filter, if any executable of `content_id` sets one.
+    /// The per-work Chinese filter, if any executable of `content_id` sets
+    /// one; an enabled executable wins over a disabled one. Read on every
+    /// ingested line, so it comes from the cached list.
     pub fn chinese_filter_for(&self, content_id: &str) -> Option<bool> {
-        self.with(|c| {
-            c.query_row(
-                "SELECT filter_chinese FROM vn_apps WHERE media_id = ?1 AND filter_chinese IS NOT NULL
-                 ORDER BY enabled DESC LIMIT 1",
-                params![content_id],
-                |r| r.get::<_, i64>(0),
-            )
-            .optional()
-        })
-        .ok()
-        .flatten()
-        .map(|value| value != 0)
+        let apps = self.vn_apps_cached().ok()?;
+        let setting = |enabled: bool| {
+            apps.iter()
+                .filter(|app| app.media_id == content_id && app.enabled == enabled)
+                .find_map(|app| app.filter_chinese)
+        };
+        setting(true).or_else(|| setting(false))
     }
 
     pub fn set_native_hook_code(&self, exe: &str, hook_code: &str) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute(
                 "UPDATE vn_apps SET native_hook_code = ?2 WHERE exe = ?1",
                 params![exe.to_lowercase(), hook_code],
@@ -504,7 +554,7 @@ impl Db {
     }
 
     pub fn set_vn_image_rating(&self, content_id: &str, is_adult_image: bool) -> Result<()> {
-        self.with(|connection| connection.execute(
+        self.writing_vn_apps(|connection| connection.execute(
             "UPDATE vn_apps SET is_adult_image = ?2 WHERE media_id = ?1 AND media_type = 'vn'",
             params![content_id, i64::from(is_adult_image)],
         ).map(|_| ()))
@@ -550,7 +600,7 @@ impl Db {
     }
 
     pub fn delete_vn_app(&self, exe: &str) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute("DELETE FROM vn_apps WHERE exe = ?1", params![exe.to_lowercase()])
                 .map(|_| ())
         })
@@ -639,15 +689,31 @@ impl Db {
         })
     }
 
+    /// `(payload, created_at)` of the logs queued or delivered since `since`
+    /// (RFC 3339, UTC). Failed rows never reached the site, so they are left out.
+    pub fn outbox_logs_since(&self, since: &str) -> Result<Vec<(String, String)>> {
+        self.with(|c| {
+            let mut stmt = c.prepare_cached(
+                "SELECT payload, created_at FROM outbox
+                 WHERE kind = 'log' AND status IN ('queued', 'sent') AND created_at >= ?1",
+            )?;
+            let rows = stmt.query_map(params![since], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })
+    }
+
     pub fn queued_count(&self) -> i64 {
         self.with(|c| {
-            c.query_row(
-                "SELECT COUNT(*) FROM outbox WHERE status = 'queued'",
-                [],
-                |r| r.get(0),
-            )
+            c.prepare_cached("SELECT COUNT(*) FROM outbox WHERE status = 'queued'")?
+                .query_row([], |r| r.get(0))
         })
         .unwrap_or(0)
+    }
+
+    /// Logs waiting for the user to confirm them.
+    pub fn pending_count(&self) -> i64 {
+        self.with(|c| c.prepare_cached("SELECT COUNT(*) FROM pending_logs")?.query_row([], |r| r.get(0)))
+            .unwrap_or(0)
     }
 
     /// Drop delivered outbox rows and stale dedup keys so the file stays small.
@@ -756,18 +822,23 @@ impl Db {
 
     pub fn insert_line(&self, line: &TextLine) -> Result<bool> {
         self.with(|c| {
-            let changed = c.execute(
+            let changed = c.prepare_cached(
                 "INSERT OR IGNORE INTO text_lines (id, content_id, text, chars, created_at, synced)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    line.id,
-                    line.content_id,
-                    line.text,
-                    line.chars,
-                    line.created_at,
-                    line.synced as i64
-                ],
-            )?;
+            )?.execute(params![
+                line.id,
+                line.content_id,
+                line.text,
+                line.chars,
+                line.created_at,
+                line.synced as i64
+            ])?;
+            if changed > 0 {
+                if let Some((lines, chars)) = self.totals_cache().get_mut(&line.content_id) {
+                    *lines += 1;
+                    *chars += line.chars;
+                }
+            }
             Ok(changed > 0)
         })
     }
@@ -775,8 +846,13 @@ impl Db {
     pub fn lines_for(&self, content_id: &str, limit: i64) -> Result<Vec<TextLine>> {
         self.with(|c| {
             let mut stmt = c.prepare(
-                "SELECT id, content_id, text, chars, created_at, synced FROM text_lines
-                 WHERE content_id = ?1 ORDER BY created_at LIMIT ?2",
+                // The newest `limit` lines, returned oldest first: a reader with
+                // more history than the limit must still show what just came in.
+                "SELECT id, content_id, text, chars, created_at, synced FROM (
+                     SELECT rowid AS rid, id, content_id, text, chars, created_at, synced
+                     FROM text_lines WHERE content_id = ?1
+                     ORDER BY created_at DESC, rowid DESC LIMIT ?2
+                 ) ORDER BY created_at, rid",
             )?;
             let rows = stmt.query_map(params![content_id, limit], map_line)?;
             rows.collect()
@@ -791,10 +867,9 @@ impl Db {
     }
 
     pub fn latest_line(&self, content_id: &str) -> Result<Option<TextLine>> {
-        self.with(|c| c.query_row(
+        self.with(|c| c.prepare_cached(
             "SELECT id, content_id, text, chars, created_at, synced FROM text_lines WHERE content_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            params![content_id], map_line,
-        ).optional())
+        )?.query_row(params![content_id], map_line).optional())
     }
 
     pub fn mine_line(&self, line: &TextLine, media_title: Option<&str>) -> Result<MinedSentence> {
@@ -867,54 +942,70 @@ impl Db {
 
     pub fn delete_line(&self, id: &str) -> Result<()> {
         self.with(|c| {
-            c.execute("DELETE FROM text_lines WHERE id = ?1", params![id])
-                .map(|_| ())
+            let result = c.execute("DELETE FROM text_lines WHERE id = ?1", params![id]).map(|_| ());
+            // Which work the line belonged to is not known here, and deleting
+            // is rare: start the totals over.
+            self.totals_cache().clear();
+            result
         })
     }
 
     pub fn clear_lines(&self, content_id: &str) -> Result<()> {
         self.with(|c| {
-            c.execute(
-                "DELETE FROM text_lines WHERE content_id = ?1",
-                params![content_id],
-            )
-            .map(|_| ())
+            let result = c
+                .execute("DELETE FROM text_lines WHERE content_id = ?1", params![content_id])
+                .map(|_| ());
+            self.totals_cache().remove(content_id);
+            result
         })
     }
 
     /// `(lines, chars)` currently stored for a session.
     pub fn text_totals(&self, content_id: &str) -> (i64, i64) {
         self.with(|c| {
-            c.query_row(
+            if let Some(totals) = self.totals_cache().get(content_id) {
+                return Ok(*totals);
+            }
+            let totals: (i64, i64) = c.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(chars), 0) FROM text_lines WHERE content_id = ?1",
                 params![content_id],
                 |r| Ok((r.get(0)?, r.get(1)?)),
-            )
+            )?;
+            self.totals_cache().insert(content_id.to_string(), totals);
+            Ok(totals)
         })
         .unwrap_or((0, 0))
     }
 
     pub fn get_text_state(&self, content_id: &str) -> TextState {
         self.with(|c| {
-            c.query_row(
-                "SELECT content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title
-                 FROM text_state WHERE content_id = ?1",
-                params![content_id],
-                |r| {
-                    Ok(TextState {
-                        content_id: r.get(0)?,
-                        timer_seconds: r.get(1)?,
-                        baseline_chars: r.get(2)?,
-                        baseline_lines: r.get(3)?,
-                        media_type: r.get(4)?,
-                        media_title: r.get(5)?,
-                    })
-                },
-            )
-            .optional()
+            if let Some(state) = self.states_cache().get(content_id) {
+                return Ok(state.clone());
+            }
+            let state = c
+                .query_row(
+                    "SELECT content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title
+                     FROM text_state WHERE content_id = ?1",
+                    params![content_id],
+                    |r| {
+                        Ok(TextState {
+                            content_id: r.get(0)?,
+                            timer_seconds: r.get(1)?,
+                            baseline_chars: r.get(2)?,
+                            baseline_lines: r.get(3)?,
+                            media_type: r.get(4)?,
+                            media_title: r.get(5)?,
+                        })
+                    },
+                )
+                .optional()?
+                .unwrap_or(TextState {
+                    content_id: content_id.to_string(),
+                    ..Default::default()
+                });
+            self.states_cache().insert(content_id.to_string(), state.clone());
+            Ok(state)
         })
-        .ok()
-        .flatten()
         .unwrap_or(TextState {
             content_id: content_id.to_string(),
             ..Default::default()
@@ -923,7 +1014,7 @@ impl Db {
 
     pub fn save_text_state(&self, state: &TextState) -> Result<()> {
         self.with(|c| {
-            c.execute(
+            let result = c.execute(
                 "INSERT INTO text_state (content_id, timer_seconds, baseline_chars, baseline_lines, media_type, media_title)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT(content_id) DO UPDATE SET
@@ -940,8 +1031,23 @@ impl Db {
                     state.media_type,
                     state.media_title
                 ],
-            )
-            .map(|_| ())
+            );
+            let mut cache = self.states_cache();
+            match (&result, cache.get_mut(&state.content_id)) {
+                // The same COALESCE as the statement: a missing title keeps the stored one.
+                (Ok(_), Some(cached)) => {
+                    *cached = TextState {
+                        media_type: state.media_type.clone().or_else(|| cached.media_type.take()),
+                        media_title: state.media_title.clone().or_else(|| cached.media_title.take()),
+                        ..state.clone()
+                    };
+                }
+                (Ok(_), None) => {}
+                (Err(_), _) => {
+                    cache.remove(&state.content_id);
+                }
+            }
+            result.map(|_| ())
         })
     }
 
@@ -1025,6 +1131,36 @@ impl Db {
             rows.collect()
         })
     }
+}
+
+fn query_vn_apps(c: &Connection) -> Result<Vec<VnApp>> {
+    let mut stmt = c.prepare(
+        "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese
+         FROM vn_apps ORDER BY media_title COLLATE NOCASE",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(VnApp {
+            exe: r.get(0)?,
+            media_id: r.get(1)?,
+            media_type: r.get(2)?,
+            media_title: r.get(3)?,
+            image: r.get(4)?,
+            reader_mode: match r.get::<_, String>(5)?.as_str() {
+                "browser" => ReaderMode::Browser,
+                "overlay" => ReaderMode::Overlay,
+                _ => ReaderMode::Integrated,
+            },
+            enabled: r.get::<_, i64>(6)? != 0,
+            is_adult: r.get::<_, i64>(7)? != 0,
+            is_adult_image: r.get::<_, Option<i64>>(12)?.map(|value| value != 0),
+            launch_path: r.get(8)?,
+            hooker_path: r.get(9)?,
+            native_hook_enabled: r.get::<_, i64>(10)? != 0,
+            native_hook_code: r.get(11)?,
+            filter_chinese: r.get::<_, Option<i64>>(13)?.map(|value| value != 0),
+        })
+    })?;
+    rows.collect()
 }
 
 fn map_outbox(r: &rusqlite::Row<'_>) -> Result<OutboxItem> {
@@ -1146,6 +1282,22 @@ mod mining_tests {
     }
 
     #[test]
+    fn outbox_logs_since_skips_failed_rows_and_other_kinds() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        db.enqueue("queued", "log", "{\"chars\":1}").unwrap();
+        db.enqueue("sent", "log", "{\"chars\":2}").unwrap();
+        db.mark_sent("sent").unwrap();
+        db.enqueue("failed", "log", "{\"chars\":3}").unwrap();
+        db.mark_failed("failed", "rejected", true).unwrap();
+        db.enqueue("lines", "texthooker_lines", "{}").unwrap();
+        let mut payloads: Vec<String> = db.outbox_logs_since("2000-01-01T00:00:00+00:00").unwrap()
+            .into_iter().map(|(payload, _)| payload).collect();
+        payloads.sort();
+        assert_eq!(payloads, vec!["{\"chars\":1}", "{\"chars\":2}"]);
+        assert!(db.outbox_logs_since("2999-01-01T00:00:00+00:00").unwrap().is_empty());
+    }
+
+    #[test]
     fn chinese_filter_is_per_work_and_falls_back_to_global() {
         let db = Db::open(Path::new(":memory:")).unwrap();
         let mut app = VnApp {
@@ -1176,6 +1328,145 @@ mod mining_tests {
         db.upsert_vn_app(&app).unwrap();
         assert_eq!(db.chinese_filter_for("v36"), Some(false), "off overrides a global on");
         assert_eq!(db.chinese_filter_for("v1"), None);
+    }
+
+    #[test]
+    fn every_write_to_the_library_refreshes_the_cached_list() {
+        let dir = std::env::temp_dir().join(format!("ntdc-vn-cache-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::open(&dir.join("db.sqlite3")).unwrap();
+        let mut app: VnApp = serde_json::from_value(serde_json::json!({
+            "exe": "air.exe", "media_id": "v36", "media_type": "vn",
+            "media_title": "AIR", "enabled": true
+        })).unwrap();
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap().len(), 1);
+        assert_eq!(db.chinese_filter_for("v36"), None);
+
+        // Editing a work while the cached list is warm.
+        app.filter_chinese = Some(true);
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.chinese_filter_for("v36"), Some(true));
+        assert_eq!(db.vn_apps_cached().unwrap()[0].filter_chinese, Some(true));
+
+        db.set_native_hook_code("AIR.EXE", "/HSN-4@1234").unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap()[0].native_hook_code.as_deref(), Some("/HSN-4@1234"));
+
+        db.set_vn_image_rating("v36", true).unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap()[0].is_adult_image, Some(true));
+
+        let backup = dir.join("backup.sqlite3");
+        db.export_to(&backup).unwrap();
+
+        db.delete_vn_app("air.exe").unwrap();
+        assert!(db.vn_apps_cached().unwrap().is_empty());
+        assert_eq!(db.chinese_filter_for("v36"), None);
+
+        db.restore_from(&backup).unwrap();
+        let restored = db.vn_apps_cached().unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].filter_chinese, Some(true));
+        assert_eq!(restored.to_vec().len(), db.list_vn_apps().unwrap().len());
+
+        drop(db);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lines_for_returns_the_newest_lines_oldest_first() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        for index in 0..10 {
+            db.insert_line(&TextLine {
+                id: format!("l{index}"), content_id: "v1".into(), text: "日本語".into(), chars: 3,
+                created_at: format!("2026-01-01T00:00:{index:02}Z"), synced: false,
+            }).unwrap();
+        }
+        // Same instant: insertion order decides, as in `latest_line`.
+        db.insert_line(&TextLine {
+            id: "tie".into(), content_id: "v1".into(), text: "日本語".into(), chars: 3,
+            created_at: "2026-01-01T00:00:09Z".into(), synced: false,
+        }).unwrap();
+        db.insert_line(&TextLine {
+            id: "other".into(), content_id: "v2".into(), text: "日本語".into(), chars: 3,
+            created_at: "2026-01-01T00:00:30Z".into(), synced: false,
+        }).unwrap();
+
+        let ids = |limit| db.lines_for("v1", limit).unwrap().into_iter().map(|line| line.id).collect::<Vec<_>>();
+        assert_eq!(ids(3), vec!["l8", "l9", "tie"]);
+        assert_eq!(ids(100).len(), 11);
+        assert_eq!(ids(100).first().map(String::as_str), Some("l0"));
+        assert_eq!(db.latest_line("v1").unwrap().map(|line| line.id), Some("tie".into()));
+    }
+
+    #[test]
+    fn cached_text_totals_and_state_match_the_tables() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        let direct = |db: &Db, content_id: &str| -> (i64, i64) {
+            db.with(|c| c.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(chars), 0) FROM text_lines WHERE content_id = ?1",
+                rusqlite::params![content_id], |r| Ok((r.get(0)?, r.get(1)?)),
+            )).unwrap()
+        };
+        let line = |id: &str, content_id: &str, chars: i64| TextLine {
+            id: id.into(), content_id: content_id.into(), text: "日本語".into(), chars,
+            created_at: super::now_iso(), synced: false,
+        };
+        let check = |db: &Db| for id in ["v1", "v2"] {
+            assert_eq!(db.text_totals(id), direct(db, id), "{id}");
+        };
+
+        check(&db);
+        db.insert_line(&line("a", "v1", 3)).unwrap();
+        db.insert_line(&line("b", "v1", 5)).unwrap();
+        db.insert_line(&line("c", "v2", 7)).unwrap();
+        check(&db);
+        // A repeated id is ignored by the table, and by the totals.
+        assert!(!db.insert_line(&line("a", "v1", 3)).unwrap());
+        check(&db);
+        assert_eq!(db.text_totals("v1"), (2, 8));
+
+        db.delete_line("a").unwrap();
+        check(&db);
+        // The reader's undo puts it back.
+        db.insert_line(&line("a", "v1", 3)).unwrap();
+        check(&db);
+        db.clear_lines("v1").unwrap();
+        check(&db);
+        assert_eq!(db.text_totals("v1"), (0, 0));
+        assert_eq!(db.text_totals("v2"), (1, 7));
+
+        // The state cache follows the statement's COALESCE on the title.
+        let stored = |db: &Db| db.with(|c| c.query_row(
+            "SELECT timer_seconds, baseline_chars, media_title FROM text_state WHERE content_id = 'v1'",
+            [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?)),
+        )).unwrap();
+        assert_eq!(db.get_text_state("v1").timer_seconds, 0);
+        db.save_text_state(&super::TextState {
+            content_id: "v1".into(), timer_seconds: 60, baseline_chars: 8,
+            media_title: Some("AIR".into()), ..Default::default()
+        }).unwrap();
+        db.save_text_state(&super::TextState {
+            content_id: "v1".into(), timer_seconds: 90, baseline_chars: 8, ..Default::default()
+        }).unwrap();
+        let cached = db.get_text_state("v1");
+        assert_eq!((cached.timer_seconds, cached.baseline_chars, cached.media_title), stored(&db));
+        assert_eq!(stored(&db), (90, 8, Some("AIR".into())));
+    }
+
+    #[test]
+    fn only_a_duplicate_column_counts_as_already_migrated() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(super::SCHEMA).unwrap();
+        let statement = "ALTER TABLE vn_apps ADD COLUMN filter_chinese INTEGER";
+        assert!(super::add_column(&conn, statement));
+        let again = conn.execute(statement, []).unwrap_err();
+        assert!(super::is_duplicate_column(&again), "{again}");
+        assert!(!super::add_column(&conn, statement));
+        let missing = conn.execute("ALTER TABLE nope ADD COLUMN x INTEGER", []).unwrap_err();
+        assert!(!super::is_duplicate_column(&missing), "{missing}");
+        // Migrating twice is a no-op.
+        super::migrate(&conn).unwrap();
+        super::migrate(&conn).unwrap();
     }
 
     #[test]
@@ -1225,6 +1516,19 @@ mod mining_tests {
         entry.media_id = "v2".into();
         db.upsert_vn_app(&entry).unwrap();
         assert!(db.list_vn_apps().unwrap()[0].is_adult_image.is_none());
+    }
+
+    #[test]
+    fn pending_count_matches_the_pending_rows() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        assert_eq!(db.pending_count(), 0);
+        db.add_pending("a", "{}", "anime").unwrap();
+        db.add_pending("b", "{}", "vn").unwrap();
+        db.add_pending("b", "{}", "vn").unwrap();
+        assert_eq!(db.pending_count(), 2);
+        db.delete_pending("a").unwrap();
+        assert_eq!(db.pending_count(), db.list_pending().unwrap().len() as i64);
+        assert_eq!(db.pending_count(), 1);
     }
 
     #[test]

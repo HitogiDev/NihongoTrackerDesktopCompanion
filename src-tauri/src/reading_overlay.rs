@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 use crate::config::Settings;
-use crate::db::{ReaderMode, TextLine};
+use crate::db::{ReaderMode, TextLine, VnApp};
 use crate::state::{AppState, NativeGameHookPhase, NativeGameHookStatus, TrackerSnapshot, VnSession};
 
 pub const EVT_STATE: &str = "reading-overlay://state";
@@ -157,7 +157,7 @@ fn publish(app: &AppHandle) {
     let _ = app.emit(EVT_STATE, snapshot(app));
 }
 
-pub fn sync_session(app: &AppHandle, tracker: &TrackerSnapshot, settings: &Settings) {
+pub fn sync_session(app: &AppHandle, tracker: &TrackerSnapshot, vn_apps: &[VnApp], settings: &Settings) {
     let target = tracker.vn.as_ref().filter(|vn| vn.media_type == "vn").map(|vn| Target {
         pid: vn.pid,
         exe: vn.exe.clone(),
@@ -166,7 +166,7 @@ pub fn sync_session(app: &AppHandle, tracker: &TrackerSnapshot, settings: &Setti
         started_at: vn.started_at.clone(),
     });
     let automatic = target.as_ref().is_some_and(|target| {
-        settings.vn_open_texthooker && app.state::<AppState>().db.list_vn_apps().unwrap_or_default()
+        settings.vn_open_texthooker && vn_apps
             .iter().any(|entry| entry.exe == target.exe && entry.reader_mode == ReaderMode::Overlay)
     });
     let mut overlay = runtime(app).lock().unwrap();

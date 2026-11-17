@@ -12,7 +12,10 @@ import { useAppStore } from '../store/useAppStore';
 
 export function SessionOverlay() {
   const { t } = useTranslation('overlay');
-  const tracker = useAppStore((s) => s.tracker);
+  // Only the two sessions: queue counts, capabilities and the hook phase change
+  // without anything here depending on them.
+  const session = useAppStore((s) => s.tracker?.vn ?? null);
+  const anime = useAppStore((s) => s.tracker?.anime ?? null);
   const hooker = useAppStore((s) => s.hooker);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const queryClient = useQueryClient();
@@ -31,8 +34,6 @@ export function SessionOverlay() {
     return () => { void unlisten.then((fn) => fn()); void mined.then((fn) => fn()); };
   }, [queryClient, t]);
 
-  const session = tracker?.vn;
-  const anime = tracker?.anime;
   const title = session?.media_title ?? anime?.media?.title ?? anime?.parsed.title ?? t('idle');
   const time = session?.elapsed_secs ?? anime?.elapsed_secs ?? 0;
 

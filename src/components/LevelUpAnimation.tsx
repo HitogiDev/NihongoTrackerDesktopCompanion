@@ -143,7 +143,7 @@ function LevelUpAnimation({
             className="inline-block"
             style={{ opacity: 0 }}
           >
-            Lv.{initialLevel}
+            {t('levelShort', { level: initialLevel })}
           </span>
           <span ref={arrowRef} className="inline-block" style={{ opacity: 0 }}>
             &gt;
@@ -153,14 +153,14 @@ function LevelUpAnimation({
             className="text-success inline-block"
             style={{ opacity: 0 }}
           >
-            Lv.{finalLevel}
+            {t('levelShort', { level: finalLevel })}
           </span>
         </div>
 
         {/* XP progress in the new level */}
         <div ref={xpBlockRef} className="mt-4" style={{ opacity: 0 }}>
           <div className="mb-2 text-base sm:text-lg opacity-90">
-            Progress in Lv.{finalLevel}
+            {t('levelUp.progressIn', { level: finalLevel })}
           </div>
           <progress
             ref={progressRef}
@@ -174,7 +174,7 @@ function LevelUpAnimation({
             style={{ opacity: 0 }}
           >
             {Math.max(0, finalXp - xpCurrentLevel).toLocaleString()} /{' '}
-            {Math.max(1, xpNextLevel - xpCurrentLevel).toLocaleString()} XP
+            {t('xpValue', { value: Math.max(1, xpNextLevel - xpCurrentLevel).toLocaleString() })}
           </div>
         </div>
       </div>

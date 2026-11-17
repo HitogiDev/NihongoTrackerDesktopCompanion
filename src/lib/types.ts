@@ -28,6 +28,7 @@ import type { ReadingOverlayState } from './bindings/ReadingOverlayState';
 import type { Settings } from './bindings/Settings';
 import type { StreakStatus } from './bindings/StreakStatus';
 import type { TextLine } from './bindings/TextLine';
+import type { TodaySummary } from './bindings/TodaySummary';
 import type { TrackerSnapshot } from './bindings/TrackerSnapshot';
 import type { UpdateInfo } from './bindings/UpdateInfo';
 import type { VnApp } from './bindings/VnApp';
@@ -60,6 +61,7 @@ export type {
   Settings,
   StreakStatus,
   TextLine,
+  TodaySummary,
   TrackerSnapshot,
   UpdateInfo,
   VnApp,

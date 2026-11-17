@@ -18,5 +18,7 @@
     "saveAndSend": "Guardar y enviar",
     "rejected": "El servidor lo rechazó: {{error}}"
   },
-  "retry": "Volver a enviar"
+  "retry": "Volver a enviar",
+  "loadFailed": "No se pudieron cargar los logs pendientes.",
+  "outboxLoadFailed": "No se pudo cargar la cola de envío."
 }

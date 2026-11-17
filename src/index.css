@@ -288,3 +288,27 @@ textarea,
 .recording-dot {
   animation: pulse-ring 2s infinite;
 }
+
+/* A settings row reached from the search box: a ring that fades out. */
+.setting-highlight {
+  border-radius: var(--radius-field);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .setting-highlight {
+    animation: setting-highlight 2.4s ease-out forwards;
+  }
+}
+@keyframes setting-highlight {
+  0%, 60% { outline-color: var(--color-primary); }
+  100% { outline-color: transparent; }
+}
+
+/* One focus ring for everything reached with the keyboard: daisyUI buttons
+   draw theirs in the button's own colour, plain buttons and tabs got the
+   engine's default. Unlayered, so it wins over both; fields keep daisyUI's. */
+:where(a, button, summary, [role='tab'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
