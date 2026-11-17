@@ -45,7 +45,8 @@ src-tauri/src/
   i18n.rs        Los pocos textos que muestra Rust (bandeja y notificaciones)
   sync.rs        Outbox con reintentos + push de líneas
   commands.rs    Superficie IPC
-  manga/         Lector de manga: biblioteca local, CBZ, .mokuro, protocolo manga://
+  manga/         Lector de manga: biblioteca local, CBZ, .mokuro, protocolo manga://,
+                 sesión de lectura, logs y minado con recorte (session.rs, crop.rs)
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -281,7 +282,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0 y M1.
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1 y M2.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -338,8 +339,50 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   permiso de portapapeles de cada webview.
 - Los fondos del lector (`.manga-bg-*`) son colores propios en `index.css`, no
   tokens del tema: el papel sigue siendo papel en tema oscuro.
-- Sin hacer todavía (M2+): conteo de páginas y caracteres, cronómetro, logs,
-  minado con recorte, Discord, WebDAV, OCR y extensiones.
+- **Seguimiento** (`manga/session.rs`): el lector solo dice qué tomo enseña
+  (`manga_session_open`) y qué páginas hay en pantalla
+  (`manga_session_pages`; las dos de una doble página, ninguna en la tarjeta
+  final). El resto lo decide Rust en el tick del watcher
+  (`session::tick`, sin red): una página cuenta tras
+  `manga_page_dwell_secs` (3 s) en pantalla, con `count_japanese` de sus
+  bloques, y **una sola vez** (`manga_page_read`, `INSERT OR IGNORE`). Sin
+  texto cuenta la página pero no caracteres.
+- **Cronómetro** como el de una VN: corre solo con la ventana del lector con
+  foco (`Runtime::reader_focused`, de `WindowEvent::Focused` en `lib.rs`) y
+  sin inactividad (`afk_timeout_secs`); el tiempo de permanencia de una página
+  se para con él. La sesión (`MangaSession`) viaja en `TrackerSnapshot.manga`
+  y por `manga://session`; la pintan la barra del lector (`SessionIndicator`)
+  y la tarjeta del Dashboard. La sesión no existe hasta el primer tick de
+  lectura.
+- **Log** al cerrar el lector (`WindowEvent::Destroyed`), al pasar a otro tomo,
+  al salir de la app (`RunEvent::Exit`) o tras `manga_idle_log_minutes` (10)
+  con el reloj parado; al volver empieza otra sesión. `log_payload` es puro y
+  cumple `logRules.ts` (`pages`/`chars`/`time`, `time` en minutos redondeados,
+  `description` = "<serie> — <tomo>"); menos de medio minuto sin páginas nuevas
+  se descarta. Va a Pendientes (`add_pending`, fuente `manga`) si
+  `manga_confirm_before_log` (por defecto) **o si la serie no está vinculada**
+  (sin `mediaId`); si no, al outbox. Vincular la serie mientras se lee
+  actualiza la sesión (`session::series_linked`). `manga://session-ended`
+  dice adónde fue. Los ajustes están en Ajustes → Lector de manga.
+- **Líneas**: los bloques de una página que cuenta van a `text_lines` con
+  `content_id` = el `mediaId` o `manga:<serie>`, id
+  `manga:<tomo>:<página>:<bloque>` (el mismo bloque es siempre la misma
+  línea) y `synced = 1`: son contexto local, **nunca** se empujan a la API del
+  texthooker. No pasan por `texthooker::ingest`.
+- **Minado** (`manga_mine_block`, botón sobre el bloque o Ctrl+M): guarda la
+  línea, la mina y recorta en Rust la viñeta alrededor del bloque
+  (`crop.rs`: caja escalada de `img_width` a la imagen real, margen del 60 %
+  del lado mayor, mínimo 48 px) como PNG en `app_data_dir/mined/` con
+  `set_mined_screenshot`. Una búsqueda en el diccionario desde un bloque lleva
+  ese id de línea; `mine_dictionary_entry` la crea si la página aún no contó
+  (`session::ensure_line`).
+- **Discord**: tras la VN y antes del vídeo, misma política de `decide`. La
+  lista negra mira el `mediaId` y `manga:<serie>`; una serie sin vincular es
+  `Unresolved` (su título es el nombre de una carpeta) y `is_adult` viaja en
+  la sesión desde `manga_series.is_adult`. Nunca se publica la portada local.
+  Cuando haya fuentes con NSFW (M6), la serie se marca `is_adult` al añadirla.
+- Sin hacer todavía (M3+): WebDAV, OCR, extensiones. El `share_activity`
+  (amigos inmersos) aún no incluye el manga.
 
 ### Copia de seguridad
 
@@ -358,7 +401,8 @@ capturas no van dentro.
 `pending://changed`, `settings://changed`, `log://celebration`,
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
 `discord://status`, `updater://available`, `updater://progress`,
-`manga://library-changed`, `manga://reader-open`. Están
+`manga://library-changed`, `manga://reader-open`, `manga://session`,
+`manga://session-ended`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve
