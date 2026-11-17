@@ -2,15 +2,11 @@ import { NativeHookTextFilters } from '../components/NativeHookTextFilters';
 import { useReadingOverlay } from '../hooks/useReadingOverlay';
 import {
   Fragment,
-  memo,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +18,6 @@ import {
   Activity,
   BarChart2,
   BookOpen,
-  BookmarkPlus,
   Brain,
   ChevronLeft,
   ChevronRight,
@@ -68,6 +63,12 @@ import { SessionClock, SessionSpeed } from './texthooker/SessionClock';
 import { useHookerLines } from './texthooker/useHookerLines';
 import { useRoom } from './texthooker/useRoom';
 import { useDictionaryHover } from './texthooker/useDictionaryHover';
+import { LineList } from './texthooker/LineList';
+import {
+  FONT_FAMILY_OPTIONS,
+  HOOKER_THEME_OPTIONS,
+  LOCAL_SESSION,
+} from './texthooker/constants';
 import { randomRoomId } from '../lib/room';
 import type {
   TextLine,
@@ -75,9 +76,7 @@ import type {
   TextSessionSummary,
 } from '../lib/types';
 
-const LOCAL_SESSION = 'local';
 
-// Same options and stacks as NihongoTracker/Frontend/src/screens/HookerScreen.tsx.
 /** `vn://ended`: where a detected session went once the game closed. */
 interface EndedSession {
   minutes: number;
@@ -85,29 +84,6 @@ interface EndedSession {
   outcome: 'pending' | 'logged' | 'discarded';
 }
 
-const HOOKER_THEME_OPTIONS: Array<{ value: string; label?: string; labelKey?: string }> = [
-  { value: '', labelKey: 'settings.useAppTheme' },
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'cupcake', label: 'Cupcake' },
-  { value: 'bumblebee', label: 'Bumblebee' },
-  { value: 'emerald', label: 'Emerald' },
-  { value: 'corporate', label: 'Corporate' },
-  { value: 'synthwave', label: 'Synthwave' },
-  { value: 'retro', label: 'Retro' },
-  { value: 'valentine', label: 'Valentine' },
-  { value: 'halloween', label: 'Halloween' },
-  { value: 'garden', label: 'Garden' },
-  { value: 'forest', label: 'Forest' },
-  { value: 'dracula', label: 'Dracula' },
-  { value: 'cmyk', label: 'CMYK' },
-  { value: 'night', label: 'Night' },
-  { value: 'winter', label: 'Winter' },
-  { value: 'dim', label: 'Dim' },
-  { value: 'sunset', label: 'Sunset' },
-  { value: 'abyss', label: 'Abyss' },
-];
 
 function analyzeSession(
   lines: TextLine[],
@@ -171,27 +147,8 @@ function durationLabel(seconds: number) {
   return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }
 
-const FONT_FAMILY_OPTIONS = [
-  { value: 'Noto Sans JP', label: 'Noto Sans JP' },
-  { value: 'Noto Serif JP', label: 'Noto Serif JP' },
-  { value: 'Sawarabi Gothic', label: 'Sawarabi Gothic' },
-  { value: 'Ackaisyo', label: 'Ackaisyo' },
-  { value: 'Hyoukinna Pop', label: 'Hyoukinna Pop' },
-  { value: 'Humour Original', label: 'Humour Original' },
-  { value: 'sans-serif', label: 'Sans Serif' },
-];
 
-const FONT_FAMILY_STACKS: Record<string, string> = {
-  'Noto Sans JP': '"Noto Sans JP Local", "Noto Sans JP", "Noto Sans CJK JP", sans-serif',
-  'Noto Serif JP': '"Noto Serif JP Local", "Noto Serif JP", serif',
-  'Sawarabi Gothic': '"Sawarabi Gothic", "Noto Sans JP Local", "Noto Sans JP", sans-serif',
-  Ackaisyo: '"Ackaisyo", "Noto Sans JP Local", "Noto Sans JP", sans-serif',
-  'Hyoukinna Pop': '"Hyoukinna Pop", "Noto Sans JP Local", "Noto Sans JP", sans-serif',
-  'Humour Original': '"Humour Original", "Noto Sans JP Local", "Noto Sans JP", sans-serif',
-  'sans-serif': 'sans-serif',
-};
 
-const COLUMN_HEIGHT = 'calc(100vh - 160px)';
 
 export default function TexthookerScreen() {
   const { t } = useTranslation(['texthooker', 'common']);
@@ -236,9 +193,6 @@ export default function TexthookerScreen() {
   const [timerEditMinutes, setTimerEditMinutes] = useState(0);
   const [timerEditSeconds, setTimerEditSeconds] = useState(0);
 
-  const listContainerRef = useRef<HTMLDivElement>(null);
-  const followLatestRef = useRef(true);
-  const lastScrollExtentRef = useRef<number | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -528,21 +482,6 @@ export default function TexthookerScreen() {
       settings?.texthooker_intelligence_manual_threshold_seconds, settings?.texthooker_intelligence_mode]
   );
 
-  useLayoutEffect(() => {
-    followLatestRef.current = true;
-    lastScrollExtentRef.current = null;
-  }, [contentId, vertical]);
-
-  useLayoutEffect(() => {
-    const el = listContainerRef.current;
-    if (!el) return;
-    if (followLatestRef.current) {
-      if (vertical) el.scrollLeft = Math.min(0, el.clientWidth - el.scrollWidth);
-      else el.scrollTop = el.scrollHeight;
-    }
-    lastScrollExtentRef.current = vertical ? el.scrollWidth : el.scrollHeight;
-  }, [lines, vertical]);
-
   // Close the settings panel on an outside click or Escape, like the web one.
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -588,25 +527,6 @@ export default function TexthookerScreen() {
       clearInterval(interval);
     };
   }, []);
-
-  const listStyles: CSSProperties = vertical
-    ? { columnGap: lineGap, rowGap: lineGap, direction: 'rtl' }
-    : { rowGap: lineGap };
-
-  // Memoized, like the handlers below, so `LineItem` can skip the lines that did
-  // not change: this screen re-renders every second while a session counts.
-  const lineTextStyle = useMemo<CSSProperties>(() => {
-    const base: CSSProperties = {
-      lineHeight: lineSpacing,
-      fontSize,
-      fontFamily:
-        FONT_FAMILY_STACKS[fontFamily] ||
-        `"${fontFamily}", "Noto Sans JP Local", "Noto Sans JP", sans-serif`,
-    };
-    return vertical
-      ? { ...base, writingMode: 'vertical-rl', textOrientation: 'mixed', flexShrink: 0, height: '100%', direction: 'ltr' }
-      : { ...base, display: 'block' };
-  }, [lineSpacing, fontSize, fontFamily, vertical]);
 
   const topbarMetrics: Array<{ key: string; title: string; content: ReactNode }> = [];
   if (settings?.texthooker_show_timer) {
@@ -663,10 +583,6 @@ export default function TexthookerScreen() {
       ),
     });
   }
-
-  const listContainerClasses = vertical
-    ? 'pt-20 px-4 flex flex-row overflow-x-auto overflow-y-hidden h-screen items-start pb-6'
-    : 'pt-20 px-4 flex flex-col overflow-y-auto h-screen pb-6';
 
   const topbarIconBtnClass = effectiveTopbarVertical
     ? 'btn btn-xs btn-ghost w-full justify-center'
@@ -1936,37 +1852,22 @@ export default function TexthookerScreen() {
         </form>
       </dialog>
 
-      <div
-        ref={listContainerRef}
-        className={`${listContainerClasses} th-line-list`}
-        style={listStyles}
-        onScroll={(event) => {
-          const el = event.currentTarget;
-          const extent = vertical ? el.scrollWidth : el.scrollHeight;
-          if (lastScrollExtentRef.current !== extent) {
-            lastScrollExtentRef.current = extent;
-            return;
-          }
-          followLatestRef.current = vertical
-            ? Math.abs(el.scrollLeft - Math.min(0, el.clientWidth - el.scrollWidth)) < 48
-            : el.scrollHeight - el.clientHeight - el.scrollTop < 48;
-        }}
-      >
-        {lines.map((line) => (
-          <LineItem
-            key={line.id}
-            line={line}
-            vertical={vertical}
-            textStyle={lineTextStyle}
-            saveLabel={t('mining.saveLine')}
-            deleteLabel={t('deleteLine')}
-            onPointer={openDictionaryAtPointer}
-            onLeave={cancelDictionaryHover}
-            onSave={saveLine}
-            onDelete={deleteLine}
-          />
-        ))}
-      </div>
+
+      <LineList
+        lines={lines}
+        contentId={contentId}
+        vertical={vertical}
+        lineGap={lineGap}
+        lineSpacing={lineSpacing}
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        saveLabel={t('mining.saveLine')}
+        deleteLabel={t('deleteLine')}
+        onPointer={openDictionaryAtPointer}
+        onLeave={cancelDictionaryHover}
+        onSave={saveLine}
+        onDelete={deleteLine}
+      />
 
       {dictionaryRequest ? (
         <DictionaryPopup
@@ -2068,90 +1969,6 @@ export default function TexthookerScreen() {
 }
 
 /** Every session stored locally, plus the free-form one. */
-interface LineItemProps {
-  line: TextLine;
-  vertical: boolean;
-  textStyle: CSSProperties;
-  saveLabel: string;
-  deleteLabel: string;
-  onPointer: (event: ReactMouseEvent<HTMLElement>, line: TextLine) => void;
-  onLeave: () => void;
-  onSave: (id: string) => void;
-  onDelete: (id: string) => void;
-}
-
-/** One reader line. Memoized: a long session holds thousands of them, and the
- *  screen around them re-renders with the session timer every second. */
-const LineItem = memo(function LineItem({
-  line, vertical, textStyle, saveLabel, deleteLabel, onPointer, onLeave, onSave, onDelete,
-}: LineItemProps) {
-  if (vertical) {
-    return (
-      <div
-        className="group relative flex flex-col items-end justify-start px-2 pt-6 text-base-content shrink-0 th-line-item"
-        style={{ minHeight: COLUMN_HEIGHT, height: COLUMN_HEIGHT }}
-      >
-        <span
-          lang="ja"
-          className="block text-lg whitespace-pre-wrap wrap-break-word th-line-text selectable cursor-text"
-          style={textStyle}
-          onMouseMove={(event) => onPointer(event, line)}
-          onMouseLeave={onLeave}
-        >
-          {line.text}
-          <button
-            type="button"
-            className="inline-flex justify-center items-center text-primary text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-            aria-label={saveLabel}
-            onClick={() => onSave(line.id)}
-            style={{ writingMode: 'horizontal-tb', display: 'inline-flex', marginTop: '0.5rem', direction: 'ltr' }}
-          >
-            <BookmarkPlus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            className="inline-flex justify-center items-center text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-            aria-label={deleteLabel}
-            onClick={() => onDelete(line.id)}
-            style={{
-              writingMode: 'horizontal-tb',
-              display: 'inline-flex',
-              marginTop: '0.5rem',
-              direction: 'ltr',
-            }}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="group relative px-2 py-2 text-base-content shrink-0 th-line-item">
-      <p
-        className="whitespace-pre-wrap wrap-break-word th-line-text selectable cursor-text"
-        style={textStyle}
-        onMouseMove={(event) => onPointer(event, line)}
-        onMouseLeave={onLeave}
-      >
-        {line.text}
-        <button type="button" className="ml-2 align-baseline text-primary text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" aria-label={saveLabel} onClick={() => onSave(line.id)}>
-          <BookmarkPlus className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          className="ml-2 align-baseline text-error text-sm bg-base-100/80 rounded px-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-          aria-label={deleteLabel}
-          onClick={() => onDelete(line.id)}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </p>
-    </div>
-  );
-});
-
 function SessionPickerModal({
   open,
   currentId,
