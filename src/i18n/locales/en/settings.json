@@ -222,5 +222,10 @@
     "backup": "Backups and updates",
     "advanced": "Advanced",
     "detectionLoop": "Detection"
+  },
+  "search": {
+    "label": "Search settings",
+    "placeholder": "Search settings…",
+    "empty": "No setting matches."
   }
 }

@@ -222,5 +222,10 @@
     "backup": "Copias y actualizaciones",
     "advanced": "Avanzado",
     "detectionLoop": "Detección"
+  },
+  "search": {
+    "label": "Buscar en los ajustes",
+    "placeholder": "Buscar ajustes…",
+    "empty": "Ningún ajuste coincide."
   }
 }

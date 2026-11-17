@@ -12,7 +12,9 @@ import { DictionariesSection } from './settings/DictionariesSection';
 import { DiscordSection } from './settings/DiscordSection';
 import { NovelsSection } from './settings/NovelsSection';
 import { ReadingOverlaySection } from './settings/ReadingOverlaySection';
+import { SettingsSearch } from './settings/SettingsSearch';
 import { SECTION_ICONS, SECTION_IDS, isSectionId, type SectionId } from './settings/sections';
+import { useSettingHighlight } from './settings/useSettingHighlight';
 
 const SECTION_KEY = 'settings:section';
 
@@ -30,6 +32,8 @@ export default function SettingsScreen() {
   const settings = useAppStore((s) => s.settings);
   const [section, setSection] = useState<SectionId>(storedSection);
   const tabs = useRef<Partial<Record<SectionId, HTMLButtonElement | null>>>({});
+  const panel = useRef<HTMLElement>(null);
+  const request = useSettingHighlight(panel);
 
   useEffect(() => {
     try {
@@ -67,6 +71,12 @@ export default function SettingsScreen() {
     <Page title={t('title')} description={t('subtitle')}>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <nav className="shrink-0 space-y-3 sm:sticky sm:top-20 sm:w-52" aria-label={t('sections.label')}>
+          <SettingsSearch
+            onPick={(target, label) => {
+              setSection(target);
+              request(label);
+            }}
+          />
           <div
             role="tablist"
             aria-orientation="vertical"
@@ -103,6 +113,7 @@ export default function SettingsScreen() {
         </nav>
 
         <section
+          ref={panel}
           id="settings-panel"
           role="tabpanel"
           aria-labelledby={`settings-tab-${section}`}
