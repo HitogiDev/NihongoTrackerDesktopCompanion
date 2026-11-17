@@ -7,6 +7,7 @@ mod dictionary;
 mod discord;
 mod fushi;
 mod i18n;
+mod manga;
 mod mining;
 mod mpv_config;
 mod native_hook;

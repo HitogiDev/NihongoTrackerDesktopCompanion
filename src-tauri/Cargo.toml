@@ -49,11 +49,12 @@ uuid = { version = "1", features = ["v4", "serde"] }
 base64 = "0.22"
 chrono-tz = "0.10"
 discord-rich-presence = "1.1.0"
+# Manga volumes packed as CBZ/ZIP (see `manga::archive`).
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 # `cargo test` writes src/lib/bindings/*.ts from the types the UI receives.
 ts-rs = { version = "12", features = ["serde-json-impl", "chrono-impl", "no-serde-warnings"] }
-zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
