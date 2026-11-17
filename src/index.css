@@ -304,3 +304,11 @@ textarea,
   0%, 60% { outline-color: var(--color-primary); }
   100% { outline-color: transparent; }
 }
+
+/* One focus ring for everything reached with the keyboard: daisyUI buttons
+   draw theirs in the button's own colour, plain buttons and tabs got the
+   engine's default. Unlayered, so it wins over both; fields keep daisyUI's. */
+:where(a, button, summary, [role='tab'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

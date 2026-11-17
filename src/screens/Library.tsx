@@ -13,13 +13,32 @@ import { toast } from '../store/useToastStore';
 import i18n from '../i18n';
 import type { VnApp } from '../lib/types';
 
+type LibraryView = 'grid' | 'list';
+const VIEW_KEY = 'library:view';
+
+function storedView(): LibraryView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
+function rememberView(view: LibraryView) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Without storage the grid comes back next time; nothing else depends on it.
+  }
+}
+
 export default function LibraryScreen() {
   const { t } = useTranslation(['library', 'common']);
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<VnApp | null>(null);
   const [deleting, setDeleting] = useState<VnApp | null>(null);
-  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [view, setView] = useState<LibraryView>(storedView);
   const [mediaFilter, setMediaFilter] = useState<'all' | 'vn' | 'game'>('all');
   const [search, setSearch] = useState('');
 
@@ -63,7 +82,7 @@ export default function LibraryScreen() {
       <div className="flex flex-wrap items-center gap-2">
         <label className="input input-sm min-w-40 flex-1"><Search className="h-4 w-4 opacity-60" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('filter.search')} /></label>
         <select className="select select-sm" value={mediaFilter} onChange={(event) => setMediaFilter(event.target.value as typeof mediaFilter)}><option value="all">{t('filter.all')}</option><option value="vn">{t('common:logType.vn')}</option><option value="game">{t('common:logType.game')}</option></select>
-        <div className="join"><button type="button" className={`join-item btn btn-sm ${view === 'grid' ? 'btn-active' : ''}`} aria-label={t('view.grid')} onClick={() => setView('grid')}><Grid2X2 className="h-4 w-4" /></button><button type="button" className={`join-item btn btn-sm ${view === 'list' ? 'btn-active' : ''}`} aria-label={t('view.list')} onClick={() => setView('list')}><List className="h-4 w-4" /></button></div>
+        <div className="join"><button type="button" className={`join-item btn btn-sm ${view === 'grid' ? 'btn-active' : ''}`} aria-label={t('view.grid')} aria-pressed={view === 'grid'} onClick={() => { setView('grid'); rememberView('grid'); }}><Grid2X2 className="h-4 w-4" /></button><button type="button" className={`join-item btn btn-sm ${view === 'list' ? 'btn-active' : ''}`} aria-label={t('view.list')} aria-pressed={view === 'list'} onClick={() => { setView('list'); rememberView('list'); }}><List className="h-4 w-4" /></button></div>
       </div>
       <SectionTitle aside={<span className="text-xs text-base-content/50">{list.length}</span>}>
         {t('works')}

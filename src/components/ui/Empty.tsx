@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from './Spinner';
 
 export function EmptyState({
   icon: Icon,
@@ -65,7 +66,7 @@ export function ErrorState({
       ) : null}
       {onRetry ? (
         <button type="button" className="btn btn-outline btn-sm mt-4" disabled={retrying} onClick={onRetry}>
-          {retrying ? <span className="loading loading-spinner loading-xs" /> : <RefreshCw className="h-4 w-4" />}
+          {retrying ? <Spinner size="xs" /> : <RefreshCw className="h-4 w-4" />}
           {t('retry')}
         </button>
       ) : null}
