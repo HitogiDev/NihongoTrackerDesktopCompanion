@@ -66,6 +66,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store/useAppStore';
 import { useManualTimer } from './texthooker/useManualTimer';
 import { SessionClock, SessionSpeed } from './texthooker/SessionClock';
+import { useHookerLines } from './texthooker/useHookerLines';
 import {
   RoomConnection,
   randomRoomId,
@@ -74,7 +75,6 @@ import {
 } from '../lib/room';
 import type {
   DictionaryEntry,
-  HookerTotals,
   TextLine,
   SessionIntelligence,
   TextSessionSummary,
@@ -210,14 +210,6 @@ export default function TexthookerScreen() {
   const online = useAppStore((s) => s.online);
 
   const contentId = hooker?.content_id ?? LOCAL_SESSION;
-  const contentIdRef = useRef(contentId);
-  contentIdRef.current = contentId;
-  const reloadRequestRef = useRef(0);
-  const displayedContentIdRef = useRef(contentId);
-
-  const [lines, setLines] = useState<TextLine[]>([]);
-  const [totals, setTotals] = useState<HookerTotals | null>(null);
-  const [undoStack, setUndoStack] = useState<TextLine[][]>([]);
   const [miningFeedback, setMiningFeedback] = useState<string | null>(null);
   const [endedSession, setEndedSession] = useState<EndedSession | null>(null);
 
@@ -402,6 +394,19 @@ export default function TexthookerScreen() {
   const {
     isTimerActive, setIsTimerActive, secondsRef, lastActivityRef, anchorTimer, setSeconds, clock,
   } = useManualTimer({ contentId, hasAutoSession, autoPauseTimeout });
+  const {
+    contentIdRef, lines, totals, canUndo, reload,
+    handleDelete, handleDeleteLast, handleUndo, pushUndo, handleCopyAll,
+  } = useHookerLines({
+    contentId,
+    hasAutoSession,
+    onTimerLoaded: setSeconds,
+    onSwitch: () => setIsTimerActive(false),
+    onLine: () => {
+      void queryClient.invalidateQueries({ queryKey: ['text-context'] });
+      lastActivityRef.current = Date.now();
+    },
+  });
   const dictionaryPopupDelay = Math.max(0, Math.min(2000, settings?.dictionary_popup_delay_ms ?? 75));
   const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
   const connectionStatus = hooker?.status ?? 'disconnected';
@@ -493,65 +498,6 @@ export default function TexthookerScreen() {
     document.addEventListener('keydown', lookupOnModifierPress);
     return () => document.removeEventListener('keydown', lookupOnModifierPress);
   }, [scheduleDictionaryLookup]);
-
-  // ── data ────────────────────────────────────────────────────────────
-
-  const reload = useCallback(async () => {
-    if (contentIdRef.current !== contentId) return;
-    const requestId = ++reloadRequestRef.current;
-    const [nextLines, nextTotals] = await Promise.all([
-      ipc.hookerLines(contentId, 5000),
-      ipc.hookerTotals(contentId),
-    ]);
-    if (
-      requestId !== reloadRequestRef.current ||
-      contentIdRef.current !== contentId
-    ) return;
-    setLines(nextLines);
-    setTotals(nextTotals);
-    if (!hasAutoSession) setSeconds(nextTotals.timerSeconds);
-  }, [contentId, hasAutoSession, setSeconds]);
-
-  useEffect(() => {
-    if (displayedContentIdRef.current !== contentId) {
-      displayedContentIdRef.current = contentId;
-      setLines([]);
-      setTotals(null);
-      setIsTimerActive(false);
-      setUndoStack([]);
-    }
-    void reload();
-  }, [contentId, reload, setIsTimerActive]);
-
-  useEffect(() => {
-    let disposed = false;
-    const unlisten = listen<{ line: TextLine; totals: { lines: number; chars: number } }>(
-      events.hookerLine,
-      (event) => {
-        if (disposed) return;
-        if (event.payload.line.content_id !== contentId) return;
-        void queryClient.invalidateQueries({ queryKey: ['text-context'] });
-        lastActivityRef.current = Date.now();
-        setLines((prev) => prev.some((line) => line.id === event.payload.line.id)
-          ? prev : [...prev, event.payload.line]);
-        setTotals((prev) =>
-          prev
-            ? {
-                ...prev,
-                lines: event.payload.totals.lines,
-                chars: event.payload.totals.chars,
-                sessionChars: Math.max(0, event.payload.totals.chars - prev.baselineChars),
-                sessionLines: Math.max(0, event.payload.totals.lines - prev.baselineLines),
-              }
-            : prev
-        );
-      }
-    );
-    return () => {
-      disposed = true;
-      void unlisten.then((fn) => fn());
-    };
-  }, [contentId, queryClient, lastActivityRef]);
 
   // A line produced locally is mirrored to the room when hosting.
   useEffect(() => {
@@ -688,33 +634,6 @@ export default function TexthookerScreen() {
 
   // ── lines ───────────────────────────────────────────────────────────
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      const removed = lines.find((line) => line.id === id);
-      if (!removed) return;
-      setUndoStack((prev) => [...prev, [removed]]);
-      setLines((prev) => prev.filter((line) => line.id !== id));
-      await ipc.hookerDeleteLine(id);
-      setTotals(await ipc.hookerTotals(contentId));
-    },
-    [lines, contentId]
-  );
-
-  const handleDeleteLast = useCallback(() => {
-    const last = lines[lines.length - 1];
-    if (last) void handleDelete(last.id);
-  }, [lines, handleDelete]);
-
-  const handleUndo = useCallback(async () => {
-    const batch = undoStack[undoStack.length - 1];
-    if (!batch) return;
-    setUndoStack((prev) => prev.slice(0, -1));
-    for (const line of batch) {
-      await ipc.hookerRestoreLine(line);
-    }
-    await reload();
-  }, [undoStack, reload]);
-
   const handleClearAll = useCallback(async () => {
     if (lines.length === 0 || clearTarget !== contentId || clearingLines) return;
     setClearingLines(true);
@@ -722,7 +641,7 @@ export default function TexthookerScreen() {
     try {
       await ipc.hookerClear(contentId);
       if (contentIdRef.current !== contentId) return;
-      setUndoStack((prev) => [...prev, lines]);
+      pushUndo(lines);
       setClearTarget(null);
       await reload();
     } catch {
@@ -730,15 +649,9 @@ export default function TexthookerScreen() {
     } finally {
       setClearingLines(false);
     }
-  }, [lines, contentId, clearTarget, clearingLines, reload]);
+  }, [lines, contentId, contentIdRef, clearTarget, clearingLines, reload, pushUndo]);
 
   useEffect(() => { setClearTarget(null); setClearError(false); }, [contentId]);
-
-  const handleCopyAll = useCallback(async () => {
-    const combined = lines.map((line) => line.text).join('\n');
-    if (!combined) return;
-    await navigator.clipboard.writeText(combined).catch(() => undefined);
-  }, [lines]);
 
   // ── derived ─────────────────────────────────────────────────────────
 
@@ -1155,7 +1068,7 @@ export default function TexthookerScreen() {
           <button
             type="button"
             onClick={() => void handleUndo()}
-            disabled={undoStack.length === 0}
+            disabled={!canUndo}
             className={topbarIconBtnClass}
             title={t('topbar.undo')}
           >
