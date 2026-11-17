@@ -244,7 +244,7 @@ async fn tick(
     crate::reading_overlay::sync_hook(app, &snapshot.game_hook);
 
     snapshot.queued_count = state.db.queued_count();
-    snapshot.pending_count = state.db.list_pending().map(|p| p.len() as i64).unwrap_or(0);
+    snapshot.pending_count = state.db.pending_count();
 
     let mut current = state.tracker.write().await;
     apply_vn_timer_edit(&state, &mut snapshot);

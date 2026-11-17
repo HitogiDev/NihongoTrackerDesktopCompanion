@@ -650,6 +650,12 @@ impl Db {
         .unwrap_or(0)
     }
 
+    /// Logs waiting for the user to confirm them.
+    pub fn pending_count(&self) -> i64 {
+        self.with(|c| c.query_row("SELECT COUNT(*) FROM pending_logs", [], |r| r.get(0)))
+            .unwrap_or(0)
+    }
+
     /// Drop delivered outbox rows and stale dedup keys so the file stays small.
     pub fn prune(&self, days: i64) -> Result<()> {
         let cutoff = (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339();
@@ -1225,6 +1231,19 @@ mod mining_tests {
         entry.media_id = "v2".into();
         db.upsert_vn_app(&entry).unwrap();
         assert!(db.list_vn_apps().unwrap()[0].is_adult_image.is_none());
+    }
+
+    #[test]
+    fn pending_count_matches_the_pending_rows() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        assert_eq!(db.pending_count(), 0);
+        db.add_pending("a", "{}", "anime").unwrap();
+        db.add_pending("b", "{}", "vn").unwrap();
+        db.add_pending("b", "{}", "vn").unwrap();
+        assert_eq!(db.pending_count(), 2);
+        db.delete_pending("a").unwrap();
+        assert_eq!(db.pending_count(), db.list_pending().unwrap().len() as i64);
+        assert_eq!(db.pending_count(), 1);
     }
 
     #[test]
