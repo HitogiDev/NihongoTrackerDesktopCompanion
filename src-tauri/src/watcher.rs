@@ -244,7 +244,7 @@ async fn tick(
         finish_vn(app, &mut snapshot, settings).await;
     }
 
-    crate::manga::session::tick(app, settings, elapsed);
+    snapshot.manga = crate::manga::session::tick(app, settings, elapsed, observed.idle_seconds);
 
     crate::reading_overlay::sync_session(app, &snapshot, &vn_apps, settings);
     update_native_game_hook(app, &mut snapshot, &observed, &vn_apps);

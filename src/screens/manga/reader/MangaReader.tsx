@@ -19,6 +19,8 @@ import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
 import { BACKGROUND_CLASS } from './styles';
 import { TextLayer } from './TextLayer';
 import { useAutoHide } from './useAutoHide';
+import { useMangaSession } from '../useMangaSession';
+import { SessionIndicator } from './SessionIndicator';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 
 /** Progress is saved this long after the last page turn, and when closing. */
@@ -209,6 +211,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   // ── counting ───────────────────────────────────────────────────────
   // Rust times the pages and counts them (`manga::session`); the reader only
   // says which ones are on screen.
+  const session = useMangaSession();
+  const ownSession = session?.volume_id === volume.id ? session : null;
   const [tracked, setTracked] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -411,7 +415,9 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
         onHover={(hovering) => chrome.pin('top', hovering)}
-        extra={hasText ? (
+        extra={<>
+          {ownSession ? <SessionIndicator session={ownSession} /> : null}
+          {hasText ? (
           <Button
             appearance="ghost"
             size="sm"
@@ -422,7 +428,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           >
             <TextModeIcon className="h-4 w-4" />
           </Button>
-        ) : null}
+          ) : null}
+        </>}
       />
       {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={volume.ocr_state !== 'none'} /> : null}
       <BottomBar

@@ -57,5 +57,14 @@
     "last": "That was the last volume in your library.",
     "readNext": "Read {{volume}}",
     "restart": "From the start"
+  },
+  "session": {
+    "counting": "Counting",
+    "pausedIdle": "Paused: no activity",
+    "pausedUnfocused": "Paused: window in the background",
+    "summary": "{{time}} · {{pages}} pages · {{chars}} characters",
+    "pages": "{{count}} pg",
+    "pagesHint": "Pages read for the first time in this session",
+    "chars": "{{count, number}} chars"
   }
 }

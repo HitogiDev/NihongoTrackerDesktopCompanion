@@ -152,6 +152,9 @@ pub struct TrackerSnapshot {
     pub idle_seconds: u64,
     pub anime: Option<AnimeSession>,
     pub vn: Option<VnSession>,
+    /// Reading in the manga reader (see `manga::session`).
+    #[serde(default)]
+    pub manga: Option<crate::manga::session::MangaSession>,
     pub queued_count: i64,
     pub pending_count: i64,
     #[serde(default)]

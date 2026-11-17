@@ -202,8 +202,10 @@ pub fn run() {
                 return;
             }
             if window.label() == manga::reader::LABEL {
-                if let WindowEvent::Destroyed = event {
-                    manga::session::reader_closed(window.app_handle());
+                match event {
+                    WindowEvent::Focused(focused) => manga::session::set_focused(window.app_handle(), *focused),
+                    WindowEvent::Destroyed => manga::session::reader_closed(window.app_handle()),
+                    _ => {}
                 }
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -374,6 +376,7 @@ pub fn run() {
             commands::manga_volume_text,
             commands::manga_session_open,
             commands::manga_session_pages,
+            commands::manga_session_state,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

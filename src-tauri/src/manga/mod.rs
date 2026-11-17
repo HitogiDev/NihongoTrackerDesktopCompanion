@@ -29,6 +29,8 @@ pub struct Runtime {
     /// What is being read and counted (see `session`). Never held across an
     /// `.await`.
     pub tracking: Mutex<session::Tracking>,
+    /// The reader window has the focus (from its window events).
+    pub reader_focused: AtomicBool,
 }
 
 /// Extensions the webview can show as a page.

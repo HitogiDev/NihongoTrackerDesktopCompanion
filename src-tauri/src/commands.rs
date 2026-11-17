@@ -1630,7 +1630,7 @@ pub fn manga_save_reader_prefs(
 /// The reader shows this volume now: Rust starts counting its pages. Loads
 /// its text off the async runtime, like `manga_volume_text`.
 #[tauri::command]
-pub async fn manga_session_open(state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
+pub async fn manga_session_open(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
     let db = state.db.clone();
     let id = volume_id.clone();
     let loaded = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
@@ -1642,11 +1642,22 @@ pub async fn manga_session_open(state: State<'_, AppState>, volume_id: String) -
     })
     .await
     .map_err(err)??;
+    // The window may have been focused before its page asked.
+    if let Some(window) = app.get_webview_window(crate::manga::reader::LABEL) {
+        crate::manga::session::set_focused(&app, window.is_focused().unwrap_or(false));
+    }
     let mut tracking = state.manga.tracking.lock().unwrap();
     if tracking.open.as_ref().is_none_or(|open| open.volume_id != volume_id) {
         tracking.open = Some(loaded);
+        tracking.session = None;
     }
     Ok(())
+}
+
+/// The reading session, for a window that opens after it started.
+#[tauri::command]
+pub fn manga_session_state(state: State<'_, AppState>) -> Option<crate::manga::session::MangaSession> {
+    state.manga.tracking.lock().unwrap().session.clone()
 }
 
 /// The pages the reader has on screen (two in a spread, none past the end).

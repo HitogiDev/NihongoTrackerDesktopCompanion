@@ -16,6 +16,7 @@ import type {
   MediaHit,
   MediaMatch,
   MangaLibrary,
+  MangaSession,
   MangaSeriesDetail,
   MangaSource,
   MokuroPage,
@@ -254,6 +255,7 @@ export const ipc = {
   mangaSessionOpen: (volumeId: string) => invoke<void>('manga_session_open', { volumeId }),
   /** The pages on screen now; none past the last page. */
   mangaSessionPages: (volumeId: string, pages: number[]) => invoke<void>('manga_session_pages', { volumeId, pages }),
+  mangaSessionState: () => invoke<MangaSession | null>('manga_session_state'),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -295,4 +297,6 @@ export const events = {
   mangaLibrary: 'manga://library-changed',
   /** To the reader window: show another volume. */
   mangaReaderOpen: 'manga://reader-open',
+  /** The reading session (`MangaSession | null`) whenever it changes. */
+  mangaSession: 'manga://session',
 } as const;

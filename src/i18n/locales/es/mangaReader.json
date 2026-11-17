@@ -57,5 +57,14 @@
     "last": "Era el último tomo de tu biblioteca.",
     "readNext": "Leer {{volume}}",
     "restart": "Desde el principio"
+  },
+  "session": {
+    "counting": "Contando",
+    "pausedIdle": "En pausa: sin actividad",
+    "pausedUnfocused": "En pausa: ventana en segundo plano",
+    "summary": "{{time}} · {{pages}} páginas · {{chars}} caracteres",
+    "pages": "{{count}} pág.",
+    "pagesHint": "Páginas leídas por primera vez en esta sesión",
+    "chars": "{{count, number}} car."
   }
 }
