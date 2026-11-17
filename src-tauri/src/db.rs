@@ -295,6 +295,9 @@ impl Db {
         }
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        // Safe with WAL (a crash can lose the last commits, never corrupt the
+        // file) and one fsync less per ingested line.
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         migrate(&conn)?;
         Ok(Self {
@@ -670,18 +673,15 @@ impl Db {
 
     pub fn queued_count(&self) -> i64 {
         self.with(|c| {
-            c.query_row(
-                "SELECT COUNT(*) FROM outbox WHERE status = 'queued'",
-                [],
-                |r| r.get(0),
-            )
+            c.prepare_cached("SELECT COUNT(*) FROM outbox WHERE status = 'queued'")?
+                .query_row([], |r| r.get(0))
         })
         .unwrap_or(0)
     }
 
     /// Logs waiting for the user to confirm them.
     pub fn pending_count(&self) -> i64 {
-        self.with(|c| c.query_row("SELECT COUNT(*) FROM pending_logs", [], |r| r.get(0)))
+        self.with(|c| c.prepare_cached("SELECT COUNT(*) FROM pending_logs")?.query_row([], |r| r.get(0)))
             .unwrap_or(0)
     }
 
@@ -791,18 +791,17 @@ impl Db {
 
     pub fn insert_line(&self, line: &TextLine) -> Result<bool> {
         self.with(|c| {
-            let changed = c.execute(
+            let changed = c.prepare_cached(
                 "INSERT OR IGNORE INTO text_lines (id, content_id, text, chars, created_at, synced)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    line.id,
-                    line.content_id,
-                    line.text,
-                    line.chars,
-                    line.created_at,
-                    line.synced as i64
-                ],
-            )?;
+            )?.execute(params![
+                line.id,
+                line.content_id,
+                line.text,
+                line.chars,
+                line.created_at,
+                line.synced as i64
+            ])?;
             if changed > 0 {
                 if let Some((lines, chars)) = self.totals_cache().get_mut(&line.content_id) {
                     *lines += 1;
@@ -832,10 +831,9 @@ impl Db {
     }
 
     pub fn latest_line(&self, content_id: &str) -> Result<Option<TextLine>> {
-        self.with(|c| c.query_row(
+        self.with(|c| c.prepare_cached(
             "SELECT id, content_id, text, chars, created_at, synced FROM text_lines WHERE content_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            params![content_id], map_line,
-        ).optional())
+        )?.query_row(params![content_id], map_line).optional())
     }
 
     pub fn mine_line(&self, line: &TextLine, media_title: Option<&str>) -> Result<MinedSentence> {
