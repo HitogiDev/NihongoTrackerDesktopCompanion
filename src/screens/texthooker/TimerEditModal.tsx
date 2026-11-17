@@ -4,6 +4,7 @@ import { Clock, X } from 'lucide-react';
 import { Field } from '../../components/ui/Field';
 import type { SessionClockSource } from './useManualTimer';
 import { useModalPresence } from './useModalPresence';
+import { ModalBackdrop } from '../../components/ui/Modal';
 
 /** Set the session clock by hand. */
 export const TimerEditModal = memo(function TimerEditModal({
@@ -24,9 +25,7 @@ export const TimerEditModal = memo(function TimerEditModal({
       className={`modal modal-bottom sm:modal-middle ${shown ? 'modal-open' : ''}`}
     >
       {mounted ? <TimerEditContent clock={clock} onClose={onClose} onSave={onSave} /> : null}
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
+      <ModalBackdrop onClose={onClose} />
     </dialog>
   );
 });
@@ -144,9 +143,7 @@ export const TimerResetModal = memo(function TimerResetModal({
       }`}
     >
       {mounted ? <TimerResetContent onClose={onClose} onReset={onReset} /> : null}
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
+      <ModalBackdrop onClose={onClose} />
     </dialog>
   );
 });

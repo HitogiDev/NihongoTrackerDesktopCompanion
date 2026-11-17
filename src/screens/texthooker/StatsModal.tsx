@@ -9,6 +9,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { SessionClock, SessionSpeed } from './SessionClock';
 import type { SessionClockSource } from './useManualTimer';
 import { useModalPresence } from './useModalPresence';
+import { ModalBackdrop } from '../../components/ui/Modal';
 
 function analyzeSession(
   lines: TextLine[],
@@ -118,9 +119,7 @@ export const StatsModal = memo(function StatsModal(props: StatsModalProps) {
           setIsLogAnimating={setIsLogAnimating}
         />
       ) : null}
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
+      <ModalBackdrop onClose={onClose} />
     </dialog>
   );
 });

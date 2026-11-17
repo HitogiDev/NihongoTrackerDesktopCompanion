@@ -32,6 +32,7 @@ import { StatsModal } from './texthooker/StatsModal';
 import { SettingsPanel, type SettingsTab } from './texthooker/SettingsPanel';
 import { LOCAL_SESSION } from './texthooker/constants';
 import { SessionPickerModal } from './texthooker/SessionPickerModal';
+import { ModalBackdrop } from '../components/ui/Modal';
 
 /** `vn://ended`: where a detected session went once the game closed. */
 interface EndedSession {
@@ -499,9 +500,7 @@ export default function TexthookerScreen() {
             </button>
           </div>
         </div>
-        <form method="dialog" className="modal-backdrop">
-          <button onClick={() => setIsClassHelpOpen(false)}>close</button>
-        </form>
+        <ModalBackdrop onClose={() => setIsClassHelpOpen(false)} />
       </dialog>
 
       <LineList

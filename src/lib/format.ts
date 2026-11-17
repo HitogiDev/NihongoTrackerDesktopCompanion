@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 export function numberWithCommas(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '0';
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -17,9 +19,9 @@ export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(s / 3600);
   const minutes = Math.floor((s % 3600) / 60);
-  if (hours > 0) return `${hours} h ${minutes} min`;
-  if (minutes > 0) return `${minutes} min`;
-  return `${s} s`;
+  if (hours > 0) return i18n.t('common:duration.hoursMinutes', { hours, minutes });
+  if (minutes > 0) return i18n.t('common:duration.minutes', { minutes });
+  return i18n.t('common:duration.seconds', { seconds: s });
 }
 
 export function formatMinutes(minutes: number): string {
@@ -31,8 +33,6 @@ export function readingSpeed(chars: number, seconds: number): number {
   if (seconds <= 0) return 0;
   return Math.round((chars * 3600) / seconds);
 }
-
-import i18n from '../i18n';
 
 export function relativeDate(iso: string): string {
   const then = new Date(iso).getTime();
@@ -48,8 +48,9 @@ export function relativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString(i18n.language);
 }
 
+/** A type the app has no label for (a new one on the server) shows as sent,
+ *  rather than as the i18n key path. */
 export function logTypeLabel(type?: string | null): string {
-  const key = type ?? 'other';
-  const label = i18n.t(`common:logType.${key}`, { defaultValue: '' });
-  return label || key;
+  const key = type || 'other';
+  return i18n.exists(`common:logType.${key}`) ? i18n.t(`common:logType.${key}`) : key;
 }

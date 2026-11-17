@@ -7,6 +7,7 @@ import { ipc } from '../../lib/ipc';
 import type { TextSessionSummary } from '../../lib/types';
 import { LOCAL_SESSION } from './constants';
 import { useModalPresence } from './useModalPresence';
+import { ModalBackdrop } from '../../components/ui/Modal';
 
 interface SessionPickerProps {
   open: boolean;
@@ -23,9 +24,7 @@ export const SessionPickerModal = memo(function SessionPickerModal(props: Sessio
   return (
     <dialog className={`modal modal-bottom sm:modal-middle ${shown ? 'modal-open' : ''}`}>
       {mounted ? <SessionPickerContent {...props} /> : null}
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
+      <ModalBackdrop onClose={onClose} />
     </dialog>
   );
 });

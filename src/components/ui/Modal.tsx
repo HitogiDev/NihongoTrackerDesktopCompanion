@@ -69,13 +69,20 @@ export function Modal({
         {children}
         {actions && <div className="modal-action">{actions}</div>}
       </div>
-      {dismissable && (
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </form>
-      )}
+      {dismissable && <ModalBackdrop onClose={onClose} />}
     </dialog>
+  );
+}
+
+/** The click-outside-to-close layer of a daisyUI modal. Its button is only
+ *  reached by screen readers, so its label still has to be translated. */
+export function ModalBackdrop({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('common');
+  return (
+    <form method="dialog" className="modal-backdrop">
+      <button type="button" onClick={onClose}>
+        {t('close')}
+      </button>
+    </form>
   );
 }

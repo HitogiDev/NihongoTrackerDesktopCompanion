@@ -238,7 +238,7 @@ export default function LogCelebration({
 
             <div ref={gainedRef} style={{ opacity: 0 }}>
               <div className="text-3xl font-extrabold text-success">
-                +{xpGained.toLocaleString()} XP
+                +{t('common:xpValue', { value: xpGained.toLocaleString() })}
               </div>
               <div className="text-sm text-white/60 mt-1">{t('success')}</div>
             </div>
@@ -248,12 +248,12 @@ export default function LogCelebration({
                 <span ref={counterRef} className="text-5xl font-extrabold text-white tabular-nums">
                   {Math.max(0, xp.current - xpGained).toLocaleString()}
                 </span>
-                <span className="text-2xl font-light text-white/50">XP</span>
+                <span className="text-2xl font-light text-white/50">{t('common:xp')}</span>
               </div>
               <div className="flex justify-between text-xs font-medium text-white/60 mt-4 mb-1">
                 <span>{t('level', { level: xp.level })}</span>
                 <span>
-                  {xp.current.toLocaleString()} / {xp.toNextLevel.toLocaleString()} XP
+                  {xp.current.toLocaleString()} / {t('common:xpValue', { value: xp.toNextLevel.toLocaleString() })}
                 </span>
               </div>
               <progress

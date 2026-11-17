@@ -33,9 +33,18 @@
   "patreonTiers": { "consumer": "Consumer", "donator": "Donator", "enthusiast": "Enthusiast" },
   "none": "—",
   "minutesShort": "{{count}} min",
-  "charsShort": "{{count}} chars",
+  "charsShort": "{{count, number}} chars",
   "episodesShort": "{{count}} ep.",
   "linesShort": "{{count}} lines",
+  "xp": "XP",
+  "xpValue": "{{value}} XP",
+  "levelShort": "Lv.{{level}}",
+  "language": "Language",
+  "duration": {
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "minutes": "{{minutes}} min",
+    "seconds": "{{seconds}} s"
+  },
   "relative": {
     "now": "just now",
     "minutes": "{{count}} min ago",
@@ -56,7 +65,8 @@
     "other": "Other"
   },
   "levelUp": {
-    "title": "Congratulations! Level Up!"
+    "title": "Congratulations! Level Up!",
+    "progressIn": "Progress in Lv.{{level}}"
   },
   "media": {
     "title": "Search media",

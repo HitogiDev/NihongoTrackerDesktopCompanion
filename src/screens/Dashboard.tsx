@@ -51,6 +51,7 @@ function xpLevelProgress(xp?: number, from?: number, to?: number): number | null
 
 export default function Dashboard() {
   const { t } = useTranslation('dashboard');
+  const { t: tCommon } = useTranslation('common');
   // Primitive selectors: the snapshot changes every second while a session
   // runs, and only `ActiveSessions` needs to follow it.
   const platformSupported = useAppStore((s) => s.tracker?.platform_supported ?? false);
@@ -263,13 +264,13 @@ export default function Dashboard() {
                     {log.description && log.description !== title ? <span className="block text-xs text-base-content/70 truncate">{log.description}</span> : null}
                     <span className="block text-xs text-base-content/55">
                       {logTypeLabel(log.type)}
-                      {log.episodes ? ` · ${log.episodes} ep.` : ''}
-                      {log.time ? ` · ${log.time} min` : ''}
-                      {log.chars ? ` · ${numberWithCommas(log.chars)} car.` : ''}
+                      {log.episodes ? ` · ${tCommon('episodesShort', { count: log.episodes })}` : ''}
+                      {log.time ? ` · ${tCommon('minutesShort', { count: log.time })}` : ''}
+                      {log.chars ? ` · ${tCommon('charsShort', { count: log.chars })}` : ''}
                     </span>
                   </span>
                   <span className={`badge badge-outline badge-sm ${logType.color} shrink-0`}>
-                    {log.xp} XP
+                    {tCommon('xpValue', { value: log.xp })}
                   </span>
                   <span className="text-xs text-base-content/50 shrink-0 w-20 text-right">
                     {relativeDate(log.date)}

@@ -115,7 +115,7 @@ export default function Onboarding() {
 
 /** Available before the account exists, so the first screen is readable too. */
 function LanguagePicker() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation('common');
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const current = settings?.language || i18n.language;
@@ -123,7 +123,7 @@ function LanguagePicker() {
   return (
     <select
       className="select select-sm w-32 shrink-0"
-      aria-label="Language"
+      aria-label={t('language')}
       value={SUPPORTED_LANGUAGES.includes(current as SupportedLanguage) ? current : 'en'}
       onChange={(e) => void updateSettings({ language: e.target.value })}
     >
