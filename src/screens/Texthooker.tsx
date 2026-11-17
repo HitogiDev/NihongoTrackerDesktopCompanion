@@ -59,11 +59,13 @@ import { DictionaryPopup } from '../components/DictionaryPopup';
 import { textHitAtPoint } from '../lib/textHit';
 import { NativeHookChoices } from '../components/NativeHookChoices';
 import { MediaSearchModal } from '../components/MediaSearchModal';
-import { formatClock, numberWithCommas, readingSpeed } from '../lib/format';
+import { formatClock, numberWithCommas } from '../lib/format';
 import { events, ipc } from '../lib/ipc';
 import { miningError } from '../lib/mining';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store/useAppStore';
+import { useManualTimer } from './texthooker/useManualTimer';
+import { SessionClock, SessionSpeed } from './texthooker/SessionClock';
 import {
   RoomConnection,
   randomRoomId,
@@ -264,12 +266,6 @@ export default function TexthookerScreen() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const roomRef = useRef<RoomConnection | null>(null);
 
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const [manualSeconds, setManualSeconds] = useState(0);
-  const anchorRef = useRef({ at: Date.now(), seconds: 0 });
-  const secondsRef = useRef(0);
-  const lastActivityRef = useRef(Date.now());
-
   const listContainerRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const lastScrollExtentRef = useRef<number | null>(null);
@@ -294,8 +290,6 @@ export default function TexthookerScreen() {
         }
       : null;
   }));
-  const autoElapsed = useAppStore((s) =>
-    s.tracker?.vn && s.tracker.vn.content_id === contentId ? s.tracker.vn.elapsed_secs : null);
   const hasAutoSession = Boolean(autoSession);
   const detectedVn = useAppStore(useShallow((s) => s.tracker?.vn
     ? { exe: s.tracker.vn.exe, media_title: s.tracker.vn.media_title }
@@ -366,7 +360,6 @@ export default function TexthookerScreen() {
       hookPickerOpenedForPidRef.current = nativeHook.pid;
     }
   }, [nativeHook?.pid, nativeHook?.selected_hook_code, nativeInput]);
-  const seconds = autoElapsed ?? manualSeconds;
 
   const enableNativeHook = async () => {
     if (!hookApp) return;
@@ -406,6 +399,9 @@ export default function TexthookerScreen() {
   const isTopbarHidden = settings?.texthooker_topbar_hidden ?? false;
   const forceTopbarVertical = settings?.texthooker_force_topbar_vertical ?? false;
   const autoPauseTimeout = settings?.texthooker_auto_pause_timeout ?? 120;
+  const {
+    isTimerActive, setIsTimerActive, secondsRef, lastActivityRef, anchorTimer, setSeconds, clock,
+  } = useManualTimer({ contentId, hasAutoSession, autoPauseTimeout });
   const dictionaryPopupDelay = Math.max(0, Math.min(2000, settings?.dictionary_popup_delay_ms ?? 75));
   const effectiveTopbarVertical = forceTopbarVertical || isTopbarVertical;
   const connectionStatus = hooker?.status ?? 'disconnected';
@@ -513,12 +509,8 @@ export default function TexthookerScreen() {
     ) return;
     setLines(nextLines);
     setTotals(nextTotals);
-    if (!hasAutoSession) {
-      setManualSeconds(nextTotals.timerSeconds);
-      secondsRef.current = nextTotals.timerSeconds;
-      anchorRef.current = { at: Date.now(), seconds: nextTotals.timerSeconds };
-    }
-  }, [contentId, hasAutoSession]);
+    if (!hasAutoSession) setSeconds(nextTotals.timerSeconds);
+  }, [contentId, hasAutoSession, setSeconds]);
 
   useEffect(() => {
     if (displayedContentIdRef.current !== contentId) {
@@ -529,7 +521,7 @@ export default function TexthookerScreen() {
       setUndoStack([]);
     }
     void reload();
-  }, [contentId, reload]);
+  }, [contentId, reload, setIsTimerActive]);
 
   useEffect(() => {
     let disposed = false;
@@ -559,7 +551,7 @@ export default function TexthookerScreen() {
       disposed = true;
       void unlisten.then((fn) => fn());
     };
-  }, [contentId, queryClient]);
+  }, [contentId, queryClient, lastActivityRef]);
 
   // A line produced locally is mirrored to the room when hosting.
   useEffect(() => {
@@ -594,71 +586,6 @@ export default function TexthookerScreen() {
 
   useEffect(() => { if (hasAutoSession) setEndedSession(null); }, [hasAutoSession]);
   useEffect(() => { setEndedSession(null); }, [contentId]);
-
-  // Rust starts the clock when a line arrives and autostart is on.
-  useEffect(() => {
-    const unlisten = listen<{ active: boolean }>(events.hookerTimer, (event) => {
-      setIsTimerActive(event.payload.active);
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, []);
-
-  useEffect(() => {
-    void ipc.hookerSetTimerActive(isTimerActive);
-  }, [isTimerActive]);
-
-  // ── timer ───────────────────────────────────────────────────────────
-
-  const anchorTimer = useCallback((value: number) => {
-    anchorRef.current = { at: Date.now(), seconds: value };
-  }, []);
-
-  // Wall-clock anchored, exactly like the web client: a throttled render loop
-  // must never lose time, and the auto-pause deadline caps how much of a gap
-  // can be banked.
-  useEffect(() => {
-    if (hasAutoSession || !isTimerActive) return;
-    anchorTimer(secondsRef.current);
-
-    const tick = () => {
-      const now = Date.now();
-      const pauseAt =
-        autoPauseTimeout > 0 ? lastActivityRef.current + autoPauseTimeout * 1000 : Infinity;
-      const countedUntil = Math.min(now, pauseAt);
-      const { at, seconds: banked } = anchorRef.current;
-      const next = banked + Math.max(0, Math.floor((countedUntil - at) / 1000));
-
-      if (next !== secondsRef.current) {
-        secondsRef.current = next;
-        setManualSeconds(next);
-      }
-      if (now >= pauseAt) {
-        anchorTimer(next);
-        setIsTimerActive(false);
-      }
-    };
-
-    const interval = setInterval(tick, 1000);
-    document.addEventListener('visibilitychange', tick);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', tick);
-    };
-  }, [isTimerActive, autoPauseTimeout, hasAutoSession, anchorTimer]);
-
-  // Persist the manual clock so a restart doesn't lose the sitting.
-  useEffect(() => {
-    if (hasAutoSession) return;
-    const id = setInterval(() => {
-      void ipc.hookerSetTimer(contentId, secondsRef.current);
-    }, 15000);
-    return () => {
-      clearInterval(id);
-      void ipc.hookerSetTimer(contentId, secondsRef.current);
-    };
-  }, [contentId, hasAutoSession]);
 
   // ── room ────────────────────────────────────────────────────────────
 
@@ -720,15 +647,16 @@ export default function TexthookerScreen() {
       }
       return !prev;
     });
-  }, [autoSession, anchorTimer]);
+  }, [autoSession, anchorTimer, setIsTimerActive, lastActivityRef, secondsRef]);
 
   const handleOpenTimerEdit = useCallback(() => {
+    const seconds = clock.current();
     setTimerEditHours(Math.floor(seconds / 3600));
     setTimerEditMinutes(Math.floor((seconds % 3600) / 60));
     setTimerEditSeconds(seconds % 60);
     setTimerError(false);
     setIsTimerEditOpen(true);
-  }, [seconds]);
+  }, [clock]);
 
   const handleSaveTimerEdit = useCallback(async () => {
     const total = timerEditHours * 3600 + timerEditMinutes * 60 + timerEditSeconds;
@@ -736,14 +664,12 @@ export default function TexthookerScreen() {
     try {
       await ipc.hookerSetTimer(contentId, total, true);
       if (contentIdRef.current !== contentId) return;
-      secondsRef.current = total;
-      setManualSeconds(total);
-      anchorTimer(total);
+      setSeconds(total);
       lastActivityRef.current = Date.now();
       setIsTimerEditOpen(false);
     } catch { setTimerError(true); }
     finally { setSavingTimer(false); }
-  }, [timerEditHours, timerEditMinutes, timerEditSeconds, contentId, anchorTimer]);
+  }, [timerEditHours, timerEditMinutes, timerEditSeconds, contentId, setSeconds, lastActivityRef]);
 
   const handleResetTimer = useCallback(async () => {
     setSavingTimer(true); setTimerError(false);
@@ -751,14 +677,12 @@ export default function TexthookerScreen() {
       if (hasAutoSession) await ipc.setSessionPaused(true);
       await ipc.hookerSetTimer(contentId, 0, true);
       if (contentIdRef.current !== contentId) return;
-      secondsRef.current = 0;
-      setManualSeconds(0);
-      anchorTimer(0);
+      setSeconds(0);
       setIsTimerActive(false);
       setIsResetTimerConfirmOpen(false);
     } catch { setTimerError(true); }
     finally { setSavingTimer(false); }
-  }, [contentId, hasAutoSession, anchorTimer]);
+  }, [contentId, hasAutoSession, setSeconds, setIsTimerActive]);
 
   useEffect(() => { setIsTimerEditOpen(false); setIsResetTimerConfirmOpen(false); setTimerError(false); }, [contentId]);
 
@@ -946,7 +870,7 @@ export default function TexthookerScreen() {
       content: (
         <>
           <Clock className="w-4 h-4 opacity-70" />
-          {formatClock(seconds)}
+          <SessionClock clock={clock} />
         </>
       ),
     });
@@ -958,7 +882,7 @@ export default function TexthookerScreen() {
       content: (
         <>
           <Activity className="w-4 h-4 opacity-70" />
-          {numberWithCommas(readingSpeed(currentSessionChars, seconds))}/h
+          <SessionSpeed clock={clock} chars={currentSessionChars} suffix="/h" />
         </>
       ),
     });
@@ -1019,15 +943,13 @@ export default function TexthookerScreen() {
         description: totals.mediaTitle ?? hooker?.content_title ?? t('sessions.free'),
         comment: logComment.trim(),
         chars: currentSessionChars,
-        seconds,
+        seconds: clock.current(),
         intelligence: sessionIntelligence,
       });
       setIsLogAnimating(true);
       setLogComment('');
       setTimeout(() => setIsLogAnimating(false), 2000);
-      secondsRef.current = 0;
-      setManualSeconds(0);
-      anchorTimer(0);
+      setSeconds(0);
       setIsTimerActive(false);
       await reload();
       void queryClient.invalidateQueries({ queryKey: ['outbox'] });
@@ -1491,12 +1413,12 @@ export default function TexthookerScreen() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="surface-muted p-3">
                     <div className="text-xs opacity-70 mb-1">{t('stats.time')}</div>
-                    <div className="text-xl font-mono font-bold">{formatClock(seconds)}</div>
+                    <div className="text-xl font-mono font-bold"><SessionClock clock={clock} /></div>
                   </div>
                   <div className="surface-muted p-3">
                     <div className="text-xs opacity-70 mb-1">{t('stats.speed')}</div>
                     <div className="text-xl font-bold">
-                      {numberWithCommas(readingSpeed(currentSessionChars, seconds))}
+                      <SessionSpeed clock={clock} chars={currentSessionChars} />
                       <span className="text-xs font-normal opacity-60 ml-1">{t('stats.speedUnit')}</span>
                     </div>
                   </div>
