@@ -281,6 +281,7 @@ pub fn run() {
             commands::activity_feed,
             commands::friends_immersion_presence,
             commands::streak_status,
+            commands::today_summary,
             commands::discord_preview,
             commands::discord_blacklist,
             commands::add_discord_blacklist,

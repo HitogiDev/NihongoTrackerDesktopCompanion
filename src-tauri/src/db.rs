@@ -689,6 +689,19 @@ impl Db {
         })
     }
 
+    /// `(payload, created_at)` of the logs queued or delivered since `since`
+    /// (RFC 3339, UTC). Failed rows never reached the site, so they are left out.
+    pub fn outbox_logs_since(&self, since: &str) -> Result<Vec<(String, String)>> {
+        self.with(|c| {
+            let mut stmt = c.prepare_cached(
+                "SELECT payload, created_at FROM outbox
+                 WHERE kind = 'log' AND status IN ('queued', 'sent') AND created_at >= ?1",
+            )?;
+            let rows = stmt.query_map(params![since], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })
+    }
+
     pub fn queued_count(&self) -> i64 {
         self.with(|c| {
             c.prepare_cached("SELECT COUNT(*) FROM outbox WHERE status = 'queued'")?
@@ -1266,6 +1279,22 @@ mod mining_tests {
 
         drop((source, target));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn outbox_logs_since_skips_failed_rows_and_other_kinds() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        db.enqueue("queued", "log", "{\"chars\":1}").unwrap();
+        db.enqueue("sent", "log", "{\"chars\":2}").unwrap();
+        db.mark_sent("sent").unwrap();
+        db.enqueue("failed", "log", "{\"chars\":3}").unwrap();
+        db.mark_failed("failed", "rejected", true).unwrap();
+        db.enqueue("lines", "texthooker_lines", "{}").unwrap();
+        let mut payloads: Vec<String> = db.outbox_logs_since("2000-01-01T00:00:00+00:00").unwrap()
+            .into_iter().map(|(payload, _)| payload).collect();
+        payloads.sort();
+        assert_eq!(payloads, vec!["{\"chars\":1}", "{\"chars\":2}"]);
+        assert!(db.outbox_logs_since("2999-01-01T00:00:00+00:00").unwrap().is_empty());
     }
 
     #[test]

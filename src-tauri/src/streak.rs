@@ -180,6 +180,62 @@ pub fn status_from_verify(body: &Value, now: DateTime<Utc>) -> StreakStatus {
     }
 }
 
+// ── today on this computer ─────────────────────────────────────────────
+
+/// What the logs sent from this computer add up to today, in the user's day.
+/// Logs made on the web or the phone are not in the outbox, so this is a lower
+/// bound, and the UI says so.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct TodaySummary {
+    /// `YYYY-MM-DD` in `timezone`.
+    pub day: String,
+    pub timezone: String,
+    pub logs: i64,
+    pub minutes: i64,
+    pub chars: i64,
+    pub episodes: i64,
+    pub pages: i64,
+    /// Current streak, when the server has answered at least once.
+    pub streak: Option<i64>,
+    /// Today already counts for the streak (from `lastStreakDate`, not from the
+    /// logs above: a log with `unknownDate` does not count).
+    pub streak_today: bool,
+}
+
+/// The day a queued log belongs to: its `date`, or when it was queued. `None`
+/// for a log without a date (`unknownDate`), which belongs to no day.
+pub fn log_day_key(payload: &Value, created_at: &str, tz: Tz) -> Option<String> {
+    if payload.get("unknownDate").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let when = payload
+        .get("date")
+        .and_then(Value::as_str)
+        .and_then(|date| DateTime::parse_from_rfc3339(date).ok())
+        .or_else(|| DateTime::parse_from_rfc3339(created_at).ok())?;
+    Some(day_key(when.with_timezone(&Utc), tz))
+}
+
+/// Add up the outbox rows `(payload, created_at)` that fall on `now`'s day.
+pub fn summarize_today(rows: &[(String, String)], now: DateTime<Utc>, tz: Tz) -> TodaySummary {
+    let today = day_key(now, tz);
+    let mut summary = TodaySummary { day: today.clone(), timezone: tz.name().to_string(), ..Default::default() };
+    let number = |payload: &Value, key: &str| payload.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+    for (raw, created_at) in rows {
+        let Ok(payload) = serde_json::from_str::<Value>(raw) else { continue };
+        if log_day_key(&payload, created_at, tz).as_deref() != Some(today.as_str()) {
+            continue;
+        }
+        summary.logs += 1;
+        summary.minutes += number(&payload, "time").round() as i64;
+        summary.chars += number(&payload, "chars").round() as i64;
+        summary.episodes += number(&payload, "episodes").round() as i64;
+        summary.pages += number(&payload, "pages").round() as i64;
+    }
+    summary
+}
+
 // ── fetching ───────────────────────────────────────────────────────────
 
 /// Return the streak status, hitting the network only when the cached answer is
@@ -378,6 +434,42 @@ mod tests {
 
     fn at(iso: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(iso).unwrap().with_timezone(&Utc)
+    }
+
+    fn row(payload: Value, created_at: &str) -> (String, String) {
+        (payload.to_string(), created_at.to_string())
+    }
+
+    #[test]
+    fn today_summary_uses_the_users_day_across_utc_midnight() {
+        // 01:00 on the 17th in Los Angeles is 09:00 UTC: everything after
+        // 08:00 UTC is today there, and 07:30 UTC was still the 16th.
+        let now = at("2026-11-17T09:00:00Z");
+        let tz = parse_tz("America/Los_Angeles");
+        let rows = vec![
+            row(json!({ "type": "vn", "chars": 1200, "time": 30, "date": "2026-11-17T08:30:00Z" }), "2026-11-17T08:31:00+00:00"),
+            row(json!({ "type": "anime", "episodes": 2, "date": "2026-11-17T07:30:00Z" }), "2026-11-17T07:31:00+00:00"),
+            row(json!({ "type": "reading", "pages": 12, "time": 15.4 }), "2026-11-17T08:45:00+00:00"),
+            row(json!({ "type": "vn", "chars": 999, "unknownDate": true }), "2026-11-17T08:50:00+00:00"),
+            row(json!({ "type": "vn", "chars": 50, "date": "2026-11-16T20:00:00Z" }), "2026-11-16T20:00:00+00:00"),
+            ("not json".to_string(), "2026-11-17T08:55:00+00:00".to_string()),
+        ];
+        let summary = summarize_today(&rows, now, tz);
+        assert_eq!(summary.day, "2026-11-17");
+        assert_eq!(summary.timezone, "America/Los_Angeles");
+        assert_eq!((summary.logs, summary.minutes, summary.chars, summary.episodes, summary.pages), (2, 45, 1200, 0, 12));
+
+        // In UTC the 07:30 episode is today too: the zone is what decides.
+        let utc = summarize_today(&rows, now, UTC);
+        assert_eq!((utc.logs, utc.episodes), (3, 2));
+    }
+
+    #[test]
+    fn log_day_key_falls_back_to_when_it_was_queued() {
+        let tz = parse_tz("America/Los_Angeles");
+        assert_eq!(log_day_key(&json!({}), "2026-11-17T07:30:00+00:00", tz).as_deref(), Some("2026-11-16"));
+        assert_eq!(log_day_key(&json!({ "date": "garbage" }), "2026-11-17T09:00:00+00:00", tz).as_deref(), Some("2026-11-17"));
+        assert_eq!(log_day_key(&json!({ "unknownDate": true }), "2026-11-17T09:00:00+00:00", tz), None);
     }
 
     #[test]
