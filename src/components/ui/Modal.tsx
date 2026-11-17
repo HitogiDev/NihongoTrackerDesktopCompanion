@@ -11,6 +11,7 @@ export function Modal({
   title,
   size = 'md',
   dismissable = true,
+  hideClose = false,
   actions,
   className = '',
   children,
@@ -20,6 +21,8 @@ export function Modal({
   title?: ReactNode;
   size?: keyof typeof MODAL_SIZE;
   dismissable?: boolean;
+  /** Keep Escape and the backdrop but drop the X (a palette has no header). */
+  hideClose?: boolean;
   actions?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -50,10 +53,10 @@ export function Modal({
       {/* The dialog sits in the top layer but still inherits text styles from
           where it is mounted: inside an alert it would take the alert's colour. */}
       <div className={`modal-box text-base-content text-base font-normal text-start ${MODAL_SIZE[size]} ${className}`}>
-        {(title || dismissable) && (
+        {(title || (dismissable && !hideClose)) && (
           <div className="flex items-start justify-between gap-4 mb-4">
             {title ? <h3 className="text-lg font-bold">{title}</h3> : <span />}
-            {dismissable && (
+            {dismissable && !hideClose && (
               <Button
                 appearance="ghost"
                 size="sm"

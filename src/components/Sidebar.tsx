@@ -1,40 +1,24 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity,
   BookOpenText,
   CloudOff,
   Cloud,
-  Inbox,
-  Library,
-  BookmarkPlus,
+  Search,
   Settings as SettingsIcon,
   Plug,
   Target,
-  Trophy,
-  UsersRound,
-  type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { ipc } from '../lib/ipc';
 import { shortcutLabel } from '../lib/desktop';
 import { useQuickLogStore } from '../store/useQuickLogStore';
 import { UpdateNotice } from './UpdateSettings';
+import { COMMUNITY_NAV, TRACKER_NAV, type NavItem } from './navItems';
 
-type NavItem = { to: string; labelKey: string; icon: LucideIcon; shortcut: string; end?: boolean; badge?: 'pending' };
-
-const TRACKER_NAV: NavItem[] = [
-  { to: '/', labelKey: 'activity', icon: Activity, shortcut: '1', end: true },
-  { to: '/queue', labelKey: 'pending', icon: Inbox, shortcut: '2', badge: 'pending' },
-  { to: '/library', labelKey: 'library', icon: Library, shortcut: '3' },
-  { to: '/mining', labelKey: 'mining', icon: BookmarkPlus, shortcut: '4' },
-];
-
-const COMMUNITY_NAV: NavItem[] = [
-  { to: '/social', labelKey: 'social', icon: UsersRound, shortcut: '5' },
-  { to: '/ranking', labelKey: 'ranking', icon: Trophy, shortcut: '6' },
-];
+// Its own chunk: every window loads this bundle, and only `main` has a palette.
+const CommandPalette = lazy(() => import('./CommandPalette'));
 
 const NAV_BY_SHORTCUT = new Map([...TRACKER_NAV, ...COMMUNITY_NAV].map((item) => [item.shortcut, item.to]));
 
@@ -54,9 +38,17 @@ export function Sidebar() {
     && (nativePhase === 'starting' || nativePhase === 'attached' || nativePhase === 'receiving');
   const navigate = useNavigate();
   const openQuickLog = useQuickLogStore((s) => s.openForm);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Mounted on first use and kept, so reopening it is instant.
+  const [paletteUsed, setPaletteUsed] = useState(false);
+  const openPalette = () => {
+    setPaletteUsed(true);
+    setPaletteOpen(true);
+  };
 
   // Window shortcuts, live wherever the sidebar is: Ctrl/⌘+1…6 for the
-  // sections, +, for settings, +L for the log form, +T for the texthooker.
+  // sections, +, for settings, +L for the log form, +T for the texthooker,
+  // +K for the command palette.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
@@ -66,7 +58,10 @@ export function Sidebar() {
       else if (key === ',') void ipc.openAuxWindow('settings');
       else if (key === 'l') openQuickLog('manual');
       else if (key === 't') void ipc.openWorkTexthooker();
-      else return;
+      else if (key === 'k') {
+        setPaletteUsed(true);
+        setPaletteOpen((open) => !open);
+      } else return;
       event.preventDefault();
     };
     window.addEventListener('keydown', onKeyDown);
@@ -99,6 +94,16 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar flex w-56 shrink-0 flex-col border-r border-base-300/70 bg-base-100">
       <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <button
+          type="button"
+          title={t('shortcutHint', { label: t('palette.title'), keys: shortcutLabel('K') })}
+          className="btn btn-ghost btn-sm mb-4 w-full justify-start gap-3 border border-base-300/70 font-normal text-base-content/60"
+          onClick={openPalette}
+        >
+          <Search className="h-4 w-4" />
+          <span className="min-w-0 flex-1 truncate text-left">{t('palette.open')}</span>
+          <kbd className="kbd kbd-xs">{shortcutLabel('K')}</kbd>
+        </button>
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-base-content/45">{t('trackerGroup')}</p>
         <ul className="menu menu-sm w-full gap-1 p-0">
           {TRACKER_NAV.map(renderNavItem)}
@@ -146,6 +151,11 @@ export function Sidebar() {
         </div>
         {pending > 0 && <span className="sr-only">{t('pendingCount', { count: pending })}</span>}
       </div>
+      {paletteUsed ? (
+        <Suspense fallback={null}>
+          <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        </Suspense>
+      ) : null}
     </aside>
   );
 }
