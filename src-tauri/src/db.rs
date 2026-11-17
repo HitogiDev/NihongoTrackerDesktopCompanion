@@ -3,7 +3,7 @@
 //! network, and to catch up once it comes back.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,11 @@ pub type Result<T> = std::result::Result<T, rusqlite::Error>;
 
 pub struct Db {
     conn: Mutex<Connection>,
+    /// `vn_apps` as the detector reads it on every tick. Filled and cleared
+    /// only while `conn` is held (lock order: `conn`, then this), so a reader
+    /// can never store a list older than the last write. Every write to the
+    /// table goes through [`Db::writing_vn_apps`], which clears it.
+    vn_apps: Mutex<Option<Arc<[VnApp]>>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -287,6 +292,7 @@ impl Db {
         migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
+            vn_apps: Mutex::new(None),
         })
     }
 
@@ -322,13 +328,29 @@ impl Db {
         let mut conn = self.conn.lock().expect("db mutex poisoned");
         rusqlite::backup::Backup::new(&backup, &mut conn)?
             .run_to_completion(256, std::time::Duration::ZERO, None)?;
-        migrate(&conn)?;
+        let migrated = migrate(&conn);
+        self.invalidate_caches();
+        migrated?;
         Ok(())
     }
 
     fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         let guard = self.conn.lock().expect("db mutex poisoned");
         f(&guard)
+    }
+
+    /// Like [`Db::with`], for anything that writes to `vn_apps`: the cached
+    /// list is dropped before the connection is released.
+    fn writing_vn_apps<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        let guard = self.conn.lock().expect("db mutex poisoned");
+        let result = f(&guard);
+        *self.vn_apps.lock().expect("vn_apps cache poisoned") = None;
+        result
+    }
+
+    /// Drops every in-memory copy of the tables. The caller holds `conn`.
+    fn invalidate_caches(&self) {
+        *self.vn_apps.lock().expect("vn_apps cache poisoned") = None;
     }
 
     // ── settings ───────────────────────────────────────────────────────
@@ -405,40 +427,31 @@ impl Db {
 
     // ── VN registry ────────────────────────────────────────────────────
 
+    /// Straight from the table, for the UI. The detector uses
+    /// [`Db::vn_apps_cached`].
     pub fn list_vn_apps(&self) -> Result<Vec<VnApp>> {
-        self.with(|c| {
-            let mut stmt = c.prepare(
-                "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese
-                 FROM vn_apps ORDER BY media_title COLLATE NOCASE",
-            )?;
-            let rows = stmt.query_map([], |r| {
-                Ok(VnApp {
-                    exe: r.get(0)?,
-                    media_id: r.get(1)?,
-                    media_type: r.get(2)?,
-                    media_title: r.get(3)?,
-                    image: r.get(4)?,
-                    reader_mode: match r.get::<_, String>(5)?.as_str() {
-                        "browser" => ReaderMode::Browser,
-                        "overlay" => ReaderMode::Overlay,
-                        _ => ReaderMode::Integrated,
-                    },
-                    enabled: r.get::<_, i64>(6)? != 0,
-                    is_adult: r.get::<_, i64>(7)? != 0,
-                    is_adult_image: r.get::<_, Option<i64>>(12)?.map(|value| value != 0),
-                    launch_path: r.get(8)?,
-                    hooker_path: r.get(9)?,
-                    native_hook_enabled: r.get::<_, i64>(10)? != 0,
-                    native_hook_code: r.get(11)?,
-                    filter_chinese: r.get::<_, Option<i64>>(13)?.map(|value| value != 0),
-                })
-            })?;
-            rows.collect()
-        })
+        self.with(query_vn_apps)
+    }
+
+    /// The same list as [`Db::list_vn_apps`], kept in memory until something
+    /// writes to `vn_apps`: the detector asks for it on every tick and the
+    /// texthooker on every line.
+    pub fn vn_apps_cached(&self) -> Result<Arc<[VnApp]>> {
+        if let Some(apps) = self.vn_apps.lock().expect("vn_apps cache poisoned").as_ref() {
+            return Ok(apps.clone());
+        }
+        let guard = self.conn.lock().expect("db mutex poisoned");
+        let mut cache = self.vn_apps.lock().expect("vn_apps cache poisoned");
+        if let Some(apps) = cache.as_ref() {
+            return Ok(apps.clone());
+        }
+        let apps: Arc<[VnApp]> = query_vn_apps(&guard)?.into();
+        *cache = Some(apps.clone());
+        Ok(apps)
     }
 
     pub fn upsert_vn_app(&self, app: &VnApp) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute(
                 "INSERT INTO vn_apps (exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
@@ -477,24 +490,21 @@ impl Db {
         })
     }
 
-    /// The per-work Chinese filter, if any executable of `content_id` sets one.
+    /// The per-work Chinese filter, if any executable of `content_id` sets
+    /// one; an enabled executable wins over a disabled one. Read on every
+    /// ingested line, so it comes from the cached list.
     pub fn chinese_filter_for(&self, content_id: &str) -> Option<bool> {
-        self.with(|c| {
-            c.query_row(
-                "SELECT filter_chinese FROM vn_apps WHERE media_id = ?1 AND filter_chinese IS NOT NULL
-                 ORDER BY enabled DESC LIMIT 1",
-                params![content_id],
-                |r| r.get::<_, i64>(0),
-            )
-            .optional()
-        })
-        .ok()
-        .flatten()
-        .map(|value| value != 0)
+        let apps = self.vn_apps_cached().ok()?;
+        let setting = |enabled: bool| {
+            apps.iter()
+                .filter(|app| app.media_id == content_id && app.enabled == enabled)
+                .find_map(|app| app.filter_chinese)
+        };
+        setting(true).or_else(|| setting(false))
     }
 
     pub fn set_native_hook_code(&self, exe: &str, hook_code: &str) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute(
                 "UPDATE vn_apps SET native_hook_code = ?2 WHERE exe = ?1",
                 params![exe.to_lowercase(), hook_code],
@@ -504,7 +514,7 @@ impl Db {
     }
 
     pub fn set_vn_image_rating(&self, content_id: &str, is_adult_image: bool) -> Result<()> {
-        self.with(|connection| connection.execute(
+        self.writing_vn_apps(|connection| connection.execute(
             "UPDATE vn_apps SET is_adult_image = ?2 WHERE media_id = ?1 AND media_type = 'vn'",
             params![content_id, i64::from(is_adult_image)],
         ).map(|_| ()))
@@ -550,7 +560,7 @@ impl Db {
     }
 
     pub fn delete_vn_app(&self, exe: &str) -> Result<()> {
-        self.with(|c| {
+        self.writing_vn_apps(|c| {
             c.execute("DELETE FROM vn_apps WHERE exe = ?1", params![exe.to_lowercase()])
                 .map(|_| ())
         })
@@ -1033,6 +1043,36 @@ impl Db {
     }
 }
 
+fn query_vn_apps(c: &Connection) -> Result<Vec<VnApp>> {
+    let mut stmt = c.prepare(
+        "SELECT exe, media_id, media_type, media_title, image, reader_mode, enabled, is_adult, launch_path, hooker_path, native_hook_enabled, native_hook_code, is_adult_image, filter_chinese
+         FROM vn_apps ORDER BY media_title COLLATE NOCASE",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(VnApp {
+            exe: r.get(0)?,
+            media_id: r.get(1)?,
+            media_type: r.get(2)?,
+            media_title: r.get(3)?,
+            image: r.get(4)?,
+            reader_mode: match r.get::<_, String>(5)?.as_str() {
+                "browser" => ReaderMode::Browser,
+                "overlay" => ReaderMode::Overlay,
+                _ => ReaderMode::Integrated,
+            },
+            enabled: r.get::<_, i64>(6)? != 0,
+            is_adult: r.get::<_, i64>(7)? != 0,
+            is_adult_image: r.get::<_, Option<i64>>(12)?.map(|value| value != 0),
+            launch_path: r.get(8)?,
+            hooker_path: r.get(9)?,
+            native_hook_enabled: r.get::<_, i64>(10)? != 0,
+            native_hook_code: r.get(11)?,
+            filter_chinese: r.get::<_, Option<i64>>(13)?.map(|value| value != 0),
+        })
+    })?;
+    rows.collect()
+}
+
 fn map_outbox(r: &rusqlite::Row<'_>) -> Result<OutboxItem> {
     Ok(OutboxItem {
         id: r.get(0)?,
@@ -1182,6 +1222,48 @@ mod mining_tests {
         db.upsert_vn_app(&app).unwrap();
         assert_eq!(db.chinese_filter_for("v36"), Some(false), "off overrides a global on");
         assert_eq!(db.chinese_filter_for("v1"), None);
+    }
+
+    #[test]
+    fn every_write_to_the_library_refreshes_the_cached_list() {
+        let dir = std::env::temp_dir().join(format!("ntdc-vn-cache-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::open(&dir.join("db.sqlite3")).unwrap();
+        let mut app: VnApp = serde_json::from_value(serde_json::json!({
+            "exe": "air.exe", "media_id": "v36", "media_type": "vn",
+            "media_title": "AIR", "enabled": true
+        })).unwrap();
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap().len(), 1);
+        assert_eq!(db.chinese_filter_for("v36"), None);
+
+        // Editing a work while the cached list is warm.
+        app.filter_chinese = Some(true);
+        db.upsert_vn_app(&app).unwrap();
+        assert_eq!(db.chinese_filter_for("v36"), Some(true));
+        assert_eq!(db.vn_apps_cached().unwrap()[0].filter_chinese, Some(true));
+
+        db.set_native_hook_code("AIR.EXE", "/HSN-4@1234").unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap()[0].native_hook_code.as_deref(), Some("/HSN-4@1234"));
+
+        db.set_vn_image_rating("v36", true).unwrap();
+        assert_eq!(db.vn_apps_cached().unwrap()[0].is_adult_image, Some(true));
+
+        let backup = dir.join("backup.sqlite3");
+        db.export_to(&backup).unwrap();
+
+        db.delete_vn_app("air.exe").unwrap();
+        assert!(db.vn_apps_cached().unwrap().is_empty());
+        assert_eq!(db.chinese_filter_for("v36"), None);
+
+        db.restore_from(&backup).unwrap();
+        let restored = db.vn_apps_cached().unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].filter_chinese, Some(true));
+        assert_eq!(restored.to_vec().len(), db.list_vn_apps().unwrap().len());
+
+        drop(db);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

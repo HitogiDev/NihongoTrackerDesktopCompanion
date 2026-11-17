@@ -12,7 +12,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::Settings;
-use crate::db::TextState;
+use crate::db::{TextState, VnApp};
 use crate::parser;
 use crate::platform;
 use crate::players;
@@ -227,6 +227,9 @@ async fn tick(
     (snapshot.active_process, snapshot.active_window) = observed.active_window_summary();
     snapshot.idle_seconds = observed.idle_seconds;
 
+    // Read once per tick; the list only changes when the library is edited.
+    let vn_apps = state.db.vn_apps_cached().unwrap_or_else(|_| Arc::from(Vec::new()));
+
     if settings.detect_players {
         update_anime(app, &mut snapshot, &observed, settings, elapsed).await;
     } else {
@@ -234,13 +237,13 @@ async fn tick(
     }
 
     if settings.detect_visual_novels || settings.detect_games {
-        update_vn(app, &mut snapshot, &observed, settings, elapsed, persist_countdown).await;
+        update_vn(app, &mut snapshot, &observed, &vn_apps, settings, elapsed, persist_countdown).await;
     } else if snapshot.vn.is_some() {
         finish_vn(app, &mut snapshot, settings).await;
     }
 
-    crate::reading_overlay::sync_session(app, &snapshot, settings);
-    update_native_game_hook(app, &mut snapshot, &observed);
+    crate::reading_overlay::sync_session(app, &snapshot, &vn_apps, settings);
+    update_native_game_hook(app, &mut snapshot, &observed, &vn_apps);
     crate::reading_overlay::sync_hook(app, &snapshot.game_hook);
 
     snapshot.queued_count = state.db.queued_count();
@@ -266,17 +269,19 @@ fn apply_vn_timer_edit(state: &AppState, snapshot: &mut TrackerSnapshot) {
     let _ = state.db.save_text_state(&stored);
 }
 
-fn update_native_game_hook(app: &AppHandle, snapshot: &mut TrackerSnapshot, observed: &Observed) {
+fn update_native_game_hook(
+    app: &AppHandle,
+    snapshot: &mut TrackerSnapshot,
+    observed: &Observed,
+    vn_apps: &[VnApp],
+) {
     let state = app.state::<AppState>();
     let target = snapshot.vn.as_ref().and_then(|session| {
         if session.media_type != "game" && session.media_type != "vn" {
             return None;
         }
-        let entry = state
-            .db
-            .list_vn_apps()
-            .ok()?
-            .into_iter()
+        let entry = vn_apps
+            .iter()
             .find(|entry| entry.enabled && entry.native_hook_enabled && entry.exe == session.exe)?;
         let processes = observed.running.get(&entry.exe)?;
         let process = processes
@@ -285,10 +290,10 @@ fn update_native_game_hook(app: &AppHandle, snapshot: &mut TrackerSnapshot, obse
             .or_else(|| processes.first())?;
         Some(crate::native_hook::GameHookTarget {
             content_id: session.content_id.clone(),
-            exe: entry.exe,
+            exe: entry.exe.clone(),
             pid: process.pid,
             image_path: process.image_path.clone(),
-            selected_hook_code: entry.native_hook_code,
+            selected_hook_code: entry.native_hook_code.clone(),
         })
     });
     state.game_hook.reconcile(app, target);
@@ -558,12 +563,12 @@ async fn update_vn(
     app: &AppHandle,
     snapshot: &mut TrackerSnapshot,
     observed: &Observed,
+    apps: &[VnApp],
     settings: &Settings,
     elapsed: Duration,
     persist_countdown: &mut u64,
 ) {
     let state = app.state::<AppState>();
-    let apps = state.db.list_vn_apps().unwrap_or_default();
 
     let eligible = apps
         .iter()
