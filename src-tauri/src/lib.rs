@@ -74,6 +74,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
+        // Manga pages, thumbnails and covers by opaque id (see `manga::protocol`).
+        .register_asynchronous_uri_scheme_protocol(manga::protocol::SCHEME, |ctx, request, responder| {
+            manga::protocol::handle(ctx.app_handle(), request, responder);
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let db = Arc::new(Db::open(&data_dir.join("companion.sqlite3"))?);

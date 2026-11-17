@@ -51,6 +51,9 @@ chrono-tz = "0.10"
 discord-rich-presence = "1.1.0"
 # Manga volumes packed as CBZ/ZIP (see `manga::archive`).
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
+# Manga thumbnails and covers (`manga::thumbs`), and the X11 screenshots of
+# `platform::linux_impl`. Only the formats pages come in.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 
 [dev-dependencies]
 # `cargo test` writes src/lib/bindings/*.ts from the types the UI receives.
@@ -88,7 +91,6 @@ xcap = "0.9"
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["screensaver"] }
 zbus = "5"
-image = { version = "0.25", default-features = false, features = ["png"] }
 notify-rust = "4"
 
 [target.'cfg(target_os = "macos")'.dependencies]

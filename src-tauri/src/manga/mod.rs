@@ -6,7 +6,9 @@
 
 pub mod archive;
 pub mod mokuro;
+pub mod protocol;
 pub mod store;
+pub mod thumbs;
 
 use std::cmp::Ordering;
 
