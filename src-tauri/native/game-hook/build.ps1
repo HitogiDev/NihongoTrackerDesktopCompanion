@@ -79,7 +79,7 @@ foreach ($arch in @(
     $clDir = Split-Path -Parent $compiler.Source
     foreach ($tool in @(@{ Exe = 'link.exe'; Var = 'CMAKE_LINKER' }, @{ Exe = 'lib.exe'; Var = 'CMAKE_AR' })) {
       $path = Join-Path $clDir $tool.Exe
-      if (Test-Path -LiteralPath $path -PathType Leaf) { $configureArgs += "-D$($tool.Var)=$path" }
+      if (Test-Path -LiteralPath $path -PathType Leaf) { $configureArgs += "-D$($tool.Var)=$($path -replace '\\', '/')" }
     }
     # The resource compiler and manifest tool come from the Windows SDK that
     # VsDevCmd picked, which can be a partial preview SDK without them. Take
@@ -93,7 +93,10 @@ foreach ($arch in @(
         Where-Object { (Test-Path (Join-Path $_ 'rc.exe')) -and (Test-Path (Join-Path $_ 'mt.exe')) } |
         Select-Object -First 1
       if ($sdkTools) {
-        $configureArgs += @("-DCMAKE_RC_COMPILER=$(Join-Path $sdkTools 'rc.exe')", "-DCMAKE_MT=$(Join-Path $sdkTools 'mt.exe')")
+        # Forward slashes: CMake writes these paths into .cmake files, where
+        # a backslash starts an escape sequence.
+        $sdkTools = $sdkTools -replace '\\', '/'
+        $configureArgs += @("-DCMAKE_RC_COMPILER=$sdkTools/rc.exe", "-DCMAKE_MT=$sdkTools/mt.exe")
       }
     }
   } else {

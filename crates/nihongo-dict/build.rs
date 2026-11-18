@@ -118,15 +118,15 @@ fn msvc_command(program: &Path, target: &str, msvc: bool, configure: bool) -> Co
                 for (name, variable) in [("link.exe", "CMAKE_LINKER"), ("lib.exe", "CMAKE_AR")] {
                     let sibling = tool.path().with_file_name(name);
                     if sibling.is_file() {
-                        command.arg(format!("-D{variable}={}", sibling.display()));
+                        command.arg(format!("-D{variable}={}", cmake_path(&sibling)));
                     }
                 }
                 // rc.exe and mt.exe (used when CMake links its test program)
                 // from the newest installed Windows SDK that ships both: a
                 // partial preview SDK can be picked as the latest and lack them.
                 if let Some(bin) = sdk_tools_dir() {
-                    command.arg(format!("-DCMAKE_RC_COMPILER={}", bin.join("rc.exe").display()));
-                    command.arg(format!("-DCMAKE_MT={}", bin.join("mt.exe").display()));
+                    command.arg(format!("-DCMAKE_RC_COMPILER={}", cmake_path(&bin.join("rc.exe"))));
+                    command.arg(format!("-DCMAKE_MT={}", cmake_path(&bin.join("mt.exe"))));
                 }
             }
             for (key, value) in tool.env() {
@@ -135,6 +135,12 @@ fn msvc_command(program: &Path, target: &str, msvc: bool, configure: bool) -> Co
         }
     }
     command
+}
+
+/// A path with forward slashes: CMake writes tool paths into `.cmake` files,
+/// where a backslash starts an escape sequence (`\P` in `C:\Program Files`).
+fn cmake_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
 }
 
 /// `…\Windows Kits\10\bin\<newest version with rc.exe and mt.exe>\x64`.
