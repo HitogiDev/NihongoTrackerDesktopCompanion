@@ -549,5 +549,42 @@
     "openExtensions": "Explorar extensiones",
     "extSettings": "Ajustes de extensiones…",
     "readerSettings": "Ajustes del lector de manga…"
+  },
+  "view": {
+    "sortLabel": "Ordenar series",
+    "sort": {
+      "title-asc": "Título, A–Z",
+      "title-desc": "Título, Z–A",
+      "last-read": "Leído por última vez",
+      "added": "Añadido recientemente",
+      "volumes": "Más tomos"
+    },
+    "filters": "Filtros",
+    "activeCount_one": "{{count, number}} filtro activo",
+    "activeCount_other": "{{count, number}} filtros activos",
+    "clear": "Quitar filtros",
+    "shown": "{{shown}} de {{total}}",
+    "empty": "Ninguna serie cumple estos filtros",
+    "emptyBody": "Cambia o quita los filtros para ver el resto de la biblioteca.",
+    "status": {
+      "label": "Lectura",
+      "any": "Todas",
+      "reading": "En curso",
+      "finished": "Terminadas",
+      "unstarted": "Sin empezar"
+    },
+    "text": {
+      "label": "Texto",
+      "any": "Todas",
+      "with": "Con texto",
+      "without": "Sin texto"
+    },
+    "link": {
+      "label": "NihongoTracker",
+      "any": "Todas",
+      "linked": "Vinculadas",
+      "unlinked": "Sin vincular",
+      "suggested": "Con sugerencia"
+    }
   }
 }

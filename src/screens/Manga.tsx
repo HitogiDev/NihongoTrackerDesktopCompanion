@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, Keyboard, RefreshCw, Search, SearchX, Server } from 'lucide-react';
+import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState, ErrorState } from '../components/ui/Empty';
 import { Page, SectionTitle } from '../components/ui/Page';
@@ -18,6 +18,8 @@ import { ContinueShelf, SeriesGrid, SeriesGridSkeleton, ShelfSkeleton } from './
 import { useAddFolder, useRescan } from './manga/useAddFolder';
 import { useMangaLibrary, useMangaLibraryEvents } from './manga/useMangaLibrary';
 import { formatCount } from '../lib/manga';
+import { LibraryToolbar } from './manga/LibraryToolbar';
+import { activeFilters, applyView, DEFAULT_VIEW, loadView, saveView, type LibraryView } from './manga/libraryView';
 import type { MangaSource } from '../lib/types';
 
 const ORIGINS: Origin[] = ['all', 'local', 'webdav', 'extensions'];
@@ -34,6 +36,9 @@ export default function MangaScreen() {
   const routeState = useLocation().state as { origin?: Origin } | null;
   const [origin, setOrigin] = useState<Origin>(routeState?.origin ?? 'all');
   const [search, setSearch] = useState('');
+  // Sort and filters: one choice for every tab, remembered.
+  const [view, setViewState] = useState<LibraryView>(loadView);
+  const setView = (next: LibraryView) => { setViewState(next); saveView(next); };
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [serversOpen, setServersOpen] = useState(false);
   // `undefined`: the form is closed; `null`: a new server.
@@ -65,19 +70,23 @@ export default function MangaScreen() {
   useEffect(() => { void rescan(true); }, []);
 
   const data = library.data;
-  const filtered = useMemo(() => {
+  // The tab and the search, then the view's filters and order.
+  const searched = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const source = ORIGIN_SOURCE[origin];
     return (data?.series ?? []).filter((series) =>
       (!source || series.source === source)
       && (!needle || `${series.title} ${series.media_title ?? ''}`.toLowerCase().includes(needle)));
   }, [data, origin, search]);
+  const suggested = useMemo(() => new Set<string>(), []);
+  const filtered = useMemo(() => applyView(searched, view, suggested), [searched, view, suggested]);
+  const narrowed = activeFilters(view) > 0;
 
   // The extensions server's own rows do not make a library: only its series do.
   const hasSources = (data?.sources ?? []).some((source) => source.kind !== 'suwayomi' || source.series_count > 0) || origin === 'extensions';
   const hasSeries = (data?.series.length ?? 0) > 0;
   const servers = useMemo(() => (data?.sources ?? []).filter((source) => source.kind === 'webdav'), [data]);
-  const filtering = search.trim() !== '' || origin !== 'all';
+  const filtering = search.trim() !== '' || origin !== 'all' || narrowed;
   // A sync is background work: a ring on the WebDAV tab, whatever tab is open.
   const syncing = useWebdavSyncSummary(servers);
 
@@ -128,6 +137,7 @@ export default function MangaScreen() {
               <Search className="h-4 w-4 opacity-60" />
               <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
             </label>
+            {origin === 'extensions' ? null : <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} />}
             <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
               {ORIGINS.map((id) => (
                 <button
@@ -147,7 +157,7 @@ export default function MangaScreen() {
 
           {origin === 'webdav' && servers.length > 0 ? <ServerStrip sources={servers} onManage={() => setServersOpen(true)} /> : null}
 
-          {origin === 'extensions' ? <ExtensionsPanel series={filtered} /> : null}
+          {origin === 'extensions' ? <ExtensionsPanel series={searched} /> : null}
 
           {origin !== 'extensions' && !filtering && data && data.continue_reading.length > 0 ? (
             <section className="space-y-3" aria-label={t('shelf.title')}>
@@ -157,9 +167,18 @@ export default function MangaScreen() {
           ) : null}
 
           {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
-            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{formatCount(filtered.length, i18n.language)}</span>}>{t('grid.title')}</SectionTitle>
+            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}</span>}>{t('grid.title')}</SectionTitle>
             {filtered.length > 0 ? (
               <SeriesGrid series={filtered} />
+            ) : narrowed && searched.length > 0 ? (
+              <div className="surface">
+                <EmptyState
+                  icon={ListFilter}
+                  title={t('view.empty')}
+                  description={t('view.emptyBody')}
+                  action={<Button size="sm" appearance="outline" onClick={() => setView({ ...DEFAULT_VIEW, sort: view.sort })}>{t('view.clear')}</Button>}
+                />
+              </div>
             ) : origin === 'webdav' && servers.length === 0 ? (
               <div className="surface">
                 <EmptyState
@@ -183,7 +202,7 @@ export default function MangaScreen() {
                 <EmptyState
                   icon={SearchX}
                   title={t('grid.noMatches')}
-                  action={<Button size="sm" appearance="outline" onClick={() => { setSearch(''); setOrigin('all'); }}>{t('grid.clear')}</Button>}
+                  action={<Button size="sm" appearance="outline" onClick={() => { setSearch(''); setOrigin('all'); setView({ ...DEFAULT_VIEW, sort: view.sort }); }}>{t('grid.clear')}</Button>}
                 />
               </div>
             ) : (
