@@ -23,14 +23,26 @@
 //!   the `DirectML.dll` it needs from `Microsoft.AI.DirectML` 1.15.4. A
 //!   package holds every platform, so only the library this computer needs
 //!   is read out of it, by HTTP ranges (`Source::ZipEntry`).
+//! - **Intel Macs** get ONNX Runtime **1.23.2** instead: 1.24 dropped the
+//!   `osx-x64` build (its package has `osx-arm64` only), and 1.23.2 is the
+//!   last release that has it. That library needs macOS 13.4 or later. It
+//!   implements the C API up to version 23, which is why `ort` is built for
+//!   `api-23` (Cargo.toml): a newer runtime serves an older API, never the
+//!   other way round. 1.23 has no CPU kernel for the `ConvInteger` of the
+//!   int8 encoder (the session does not even build), so there the int8
+//!   variant pairs the fp16 encoder with the int8 decoder (see
+//!   `recognizer_for`); the detector and both decoders load as they are.
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// The ONNX Runtime version downloaded. `ort` is built for its API (`api-24`
-/// in Cargo.toml): an older library would refuse to load.
+/// The ONNX Runtime version downloaded everywhere but on Intel Macs.
 pub const RUNTIME_VERSION: &str = "1.24.4";
+/// The last ONNX Runtime with a build for Intel Macs (`osx-x64`). `ort` is
+/// built for its API (`api-23` in Cargo.toml): a runtime older than the API
+/// `ort` asks for would refuse to load.
+pub const RUNTIME_VERSION_OSX_X64: &str = "1.23.2";
 
 #[cfg(test)]
 const DETECTOR_REV: &str = "16e8a622f91fabc6b5b65c96d32d1183f8843546";
@@ -42,6 +54,7 @@ const OCR_BASE_REV: &str = "aa6573bd10b0d446cbf622e29c3e084914df9741";
 const NUGET_ORT: &str = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.24.4/microsoft.ml.onnxruntime.1.24.4.nupkg";
 const NUGET_ORT_DML: &str =
     "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/1.24.4/microsoft.ml.onnxruntime.directml.1.24.4.nupkg";
+const NUGET_ORT_1_23: &str = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.23.2/microsoft.ml.onnxruntime.1.23.2.nupkg";
 const NUGET_DIRECTML: &str = "https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/1.15.4/microsoft.ai.directml.1.15.4.nupkg";
 
 /// Where a file is downloaded from.
@@ -143,12 +156,20 @@ const DECODER_FP32: Asset = Asset {
     source: hf!("onnx-community/manga-ocr-base-ONNX", "f9023406bb2f6b17df67bc4a327c56ecd20611f0", "onnx/decoder_model.onnx"),
 };
 
-/// The encoder and decoder of a variant.
-pub fn recognizer(variant: Variant) -> [Asset; 2] {
+/// The encoder and decoder of a variant for a runtime target. ONNX Runtime
+/// 1.23 (Intel Macs) cannot run the int8 encoder: its int8 variant takes the
+/// fp16 one, with the int8 decoder.
+pub fn recognizer_for(target: Option<&str>, variant: Variant) -> [Asset; 2] {
     match variant {
+        Variant::Int8 if target == Some("osx-x64") => [ENCODER_FP16, DECODER_INT8],
         Variant::Int8 => [ENCODER_INT8, DECODER_INT8],
         Variant::Fp16 => [ENCODER_FP16, DECODER_FP32],
     }
+}
+
+/// The encoder and decoder of a variant on this computer.
+pub fn recognizer(variant: Variant) -> [Asset; 2] {
+    recognizer_for(crate::platform::ocr_runtime_target(), variant)
 }
 
 /// The models a variant needs, in the order they are downloaded.
@@ -193,6 +214,12 @@ const MACOS_ARM64: &[Asset] = &[entry(
     "libonnxruntime.dylib", 35_451_632, "0db33e160224e480c17932799d1dfaea59853b8e722b57bf61932c87e03586f0",
     NUGET_ORT, "runtimes/osx-arm64/native/libonnxruntime.dylib", 104_682_025, 9_742_969,
 )];
+/// 1.23.2: see `RUNTIME_VERSION_OSX_X64`. The same file name as on Apple
+/// silicon: one computer only ever has one of them.
+const MACOS_X64: &[Asset] = &[entry(
+    "libonnxruntime.dylib", 39_742_608, "8c9c78de65ea3786f987c0d980e9c1b13a3a5fbc6b3e2965ba05b450e6e4c054",
+    NUGET_ORT_1_23, "runtimes/osx-x64/native/libonnxruntime.dylib", 100_752_058, 11_498_106,
+)];
 
 /// The runtime files for a target (`platform::ocr_runtime_target`). The
 /// first one is the library `ort` loads; the rest are what it needs beside it.
@@ -203,14 +230,25 @@ pub fn runtime_for(target: &str) -> Option<&'static [Asset]> {
         "linux-x64" => Some(LINUX_X64),
         "linux-arm64" => Some(LINUX_ARM64),
         "osx-arm64" => Some(MACOS_ARM64),
+        "osx-x64" => Some(MACOS_X64),
         _ => None,
     }
 }
 
-/// This computer's runtime files. `None` where no build exists (Intel Macs:
-/// Microsoft stopped publishing them).
+/// The ONNX Runtime version of a target's files.
+pub fn runtime_version_for(target: &str) -> &'static str {
+    if target == "osx-x64" { RUNTIME_VERSION_OSX_X64 } else { RUNTIME_VERSION }
+}
+
+/// This computer's runtime files. `None` where no build exists (32-bit
+/// systems, other operating systems).
 pub fn runtime() -> Option<&'static [Asset]> {
     crate::platform::ocr_runtime_target().and_then(runtime_for)
+}
+
+/// The ONNX Runtime version this computer downloads.
+pub fn runtime_version() -> &'static str {
+    crate::platform::ocr_runtime_target().map_or(RUNTIME_VERSION, runtime_version_for)
 }
 
 /// Everything a variant needs here, runtime first.
@@ -222,10 +260,10 @@ pub fn all(variant: Variant) -> Option<Vec<Asset>> {
 
 /// Every file name the OCR may have written, for "delete models".
 pub fn known_files() -> Vec<&'static str> {
-    let mut files: Vec<&'static str> = [WIN_X64, WIN_ARM64, LINUX_X64, LINUX_ARM64, MACOS_ARM64]
+    let mut files: Vec<&'static str> = [WIN_X64, WIN_ARM64, LINUX_X64, LINUX_ARM64, MACOS_ARM64, MACOS_X64]
         .iter()
         .flat_map(|assets| assets.iter().map(|asset| asset.file))
-        .chain([Variant::Int8, Variant::Fp16].into_iter().flat_map(|variant| models(variant).into_iter().map(|asset| asset.file)))
+        .chain([DETECTOR, VOCAB, ENCODER_INT8, DECODER_INT8, ENCODER_FP16, DECODER_FP32].iter().map(|asset| asset.file))
         .collect();
     files.sort_unstable();
     files.dedup();
@@ -248,19 +286,42 @@ mod tests {
 
     #[test]
     fn every_target_has_a_library_from_an_official_package() {
-        for target in ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64"] {
+        for target in ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64", "osx-x64"] {
             let assets = runtime_for(target).unwrap();
             assert!(assets[0].file.contains("onnxruntime"));
+            let version = runtime_version_for(target);
             for asset in assets {
                 assert_eq!(asset.sha256.len(), 64);
+                assert!(asset.sha256.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
                 let Source::ZipEntry { url, entry, compressed, .. } = asset.source else { panic!("from a package") };
                 assert!(url.starts_with("https://api.nuget.org/v3-flatcontainer/microsoft."), "{url}");
-                assert!(url.contains("/1.24.4/") || url.contains("microsoft.ai.directml/1.15.4/"), "{url}");
+                assert!(url.contains(&format!("/{version}/")) || url.contains("microsoft.ai.directml/1.15.4/"), "{url}");
                 assert!(entry.ends_with(asset.file));
+                assert!(entry.contains(&format!("/{target}/")) || entry.contains("-win/"), "{entry} is not for {target}");
                 assert!(compressed < asset.size);
             }
         }
-        assert!(runtime_for("osx-x64").is_none());
+        assert!(runtime_for("osx-x86").is_none());
+    }
+
+    #[test]
+    fn intel_macs_get_the_last_runtime_built_for_them() {
+        let assets = runtime_for("osx-x64").expect("Intel Macs are supported");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file, "libonnxruntime.dylib");
+        assert_eq!(assets[0].sha256, "8c9c78de65ea3786f987c0d980e9c1b13a3a5fbc6b3e2965ba05b450e6e4c054");
+        assert_eq!(assets[0].size, 39_742_608);
+        let Source::ZipEntry { url, .. } = assets[0].source else { panic!("from a package") };
+        assert!(url.contains("microsoft.ml.onnxruntime/1.23.2/"), "{url}");
+        assert_eq!(runtime_version_for("osx-x64"), "1.23.2");
+        assert_eq!(runtime_version_for("osx-arm64"), RUNTIME_VERSION);
+        // `ort` asks for the C API of the oldest runtime downloaded.
+        assert_eq!(ort::MINOR_VERSION, 23);
+        // 1.23 cannot build the int8 encoder: the fp16 one goes instead.
+        assert_eq!(recognizer_for(Some("osx-x64"), Variant::Int8), [ENCODER_FP16, DECODER_INT8]);
+        assert_eq!(recognizer_for(Some("osx-x64"), Variant::Fp16), [ENCODER_FP16, DECODER_FP32]);
+        assert_eq!(recognizer_for(Some("osx-arm64"), Variant::Int8), [ENCODER_INT8, DECODER_INT8]);
+        assert_eq!(recognizer_for(Some("linux-x64"), Variant::Int8), [ENCODER_INT8, DECODER_INT8]);
     }
 
     #[test]

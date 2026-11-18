@@ -497,7 +497,7 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   comic-text-detector, que es GPL-3.0) → recorte por caja → manga-ocr
   (`onnx-community/manga-ocr-base-ONNX` + el `vocab.txt` de
   `kha-white/manga-ocr-base`). Lo corre ONNX Runtime a través de `ort`
-  (`=2.0.0-rc.15`, `load-dynamic`, `api-24`): **el runtime nunca se enlaza**;
+  (`=2.0.0-rc.15`, `load-dynamic`, `api-23`: la API del runtime más viejo que se baja): **el runtime nunca se enlaza**;
   se carga de `app_data_dir/ocr/` tras volver a comprobar su SHA-256.
   Variantes: `int8` (por defecto) y `fp16` = encoder fp16 + decoder fp32,
   porque el decoder fp16 de la conversión no carga.
@@ -535,7 +535,12 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   oficiales de Microsoft en nuget.org (`Microsoft.ML.OnnxRuntime`,
   `…DirectML` + `DirectML.dll` de `Microsoft.AI.DirectML` 1.15.4): se lee
   solo la entrada de este SO por rangos (cabecera local del zip + datos
-  deflate). Sin build para Mac Intel (`supported = false`). "Eliminar
+  deflate). **Mac Intel** usa ONNX Runtime **1.23.2** (`osx-x64`,
+  `RUNTIME_VERSION_OSX_X64`): la 1.24 ya no publica ese build. Necesita
+  macOS 13.4+. Por ella `ort` va con `api-23` (un runtime más nuevo sirve
+  una API más vieja; al revés no carga). La 1.23 no tiene kernel de CPU para
+  el `ConvInteger` del encoder int8, así que allí la variante int8 es
+  encoder fp16 + decoder int8 (`assets::recognizer_for`). "Eliminar
   modelos" borra todo; lo que siga cargado (Windows) se borra al arrancar
   (`.delete-pending`). Los modelos no van en la copia de seguridad.
 - **UX**: cada tomo dice su texto (mokuro, listo, n de N, sin texto) y

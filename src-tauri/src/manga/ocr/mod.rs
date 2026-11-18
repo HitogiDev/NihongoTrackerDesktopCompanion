@@ -302,7 +302,7 @@ impl Service {
             installed_bytes: self.installed_bytes(),
             free_bytes: download::free_space(&self.dir),
             dir: self.dir.to_string_lossy().into_owned(),
-            runtime_version: assets::RUNTIME_VERSION.to_string(),
+            runtime_version: assets::runtime_version().to_string(),
             download: self.download.lock().unwrap().clone(),
         }
     }

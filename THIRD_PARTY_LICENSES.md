@@ -44,7 +44,10 @@ each is checked against the SHA-256 pinned in
   (Linux, macOS) and
   [`Microsoft.ML.OnnxRuntime.DirectML`](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.DirectML/1.24.4)
   (Windows), built from [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)
-  `v1.24.4`. On Windows also `DirectML.dll` from
+  `v1.24.4`. On Intel Macs, which 1.24 no longer builds for, **ONNX Runtime
+  1.23.2** instead, from
+  [`Microsoft.ML.OnnxRuntime` 1.23.2](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/1.23.2)
+  (`v1.23.2`, same license). On Windows also `DirectML.dll` from
   [`Microsoft.AI.DirectML` 1.15.4](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4),
   under the license included in that package. The app talks to ONNX Runtime
   through the [`ort`](https://github.com/pykeio/ort) crate (MIT OR
