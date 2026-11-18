@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Play, ScanText } from 'lucide-react';
@@ -48,8 +49,38 @@ export function SeriesCard({ series }: { series: MangaSeries }) {
   );
 }
 
+/** Cards mounted at first, and added each time the end of the grid shows. */
+export const GRID_BATCH = 120;
+
+/**
+ * The library's series. A library of hundreds mounts them `GRID_BATCH` at a
+ * time: the next batch comes in when the end of the grid scrolls into view
+ * (or Tab reaches it), so opening the screen never builds every card.
+ */
 export function SeriesGrid({ series }: { series: MangaSeries[] }) {
-  return <ul className={GRID}>{series.map((item) => <SeriesCard key={item.id} series={item} />)}</ul>;
+  // Without IntersectionObserver nothing would ever add a batch: all of them.
+  const [shown, setShown] = useState(() => (typeof IntersectionObserver === 'undefined' ? Infinity : GRID_BATCH));
+  const end = useRef<HTMLDivElement>(null);
+  const more = series.length > shown;
+  useEffect(() => {
+    const sentinel = end.current;
+    if (!more || !sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setShown((count) => count + GRID_BATCH);
+    }, { rootMargin: '600px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [more, shown]);
+  return (
+    <>
+      <ul className={GRID}>{series.slice(0, shown).map((item) => <SeriesCard key={item.id} series={item} />)}</ul>
+      {more ? (
+        <div ref={end} className="flex justify-center py-4" aria-hidden="true">
+          <span className="loading loading-dots loading-sm text-base-content/40" />
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 export function SeriesGridSkeleton({ count = 10 }: { count?: number }) {

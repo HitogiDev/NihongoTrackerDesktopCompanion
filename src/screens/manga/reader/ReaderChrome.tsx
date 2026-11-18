@@ -238,7 +238,9 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
         <div className="overflow-hidden">
           <ol className="flex gap-2 overflow-x-auto px-4 pb-1 pt-3" dir={rtl ? 'rtl' : 'ltr'} aria-label={t('pages')}>
             {strip ? Array.from({ length: pageCount }, (_, index) => (
-              <li key={index} className="shrink-0">
+              // Thumbnails (`manga://thumb`, 240 px wide), never pages; the
+              // ones scrolled away skip layout and paint.
+              <li key={index} className="shrink-0 [contain-intrinsic-size:auto_4rem_auto_7.5rem] [content-visibility:auto]">
                 <button
                   ref={index === page ? current : undefined}
                   type="button"
