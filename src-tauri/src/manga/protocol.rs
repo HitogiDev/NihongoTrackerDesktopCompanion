@@ -18,8 +18,10 @@
 //! there, never from the URL. Anything that is not exactly one of these shapes
 //! is a 404, whatever it contains.
 
+use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::Path;
+use std::sync::{Condvar, Mutex};
 
 use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
@@ -122,6 +124,78 @@ pub fn page_bytes(remote: Option<&Remote>, location: &VolumeLocation, page: usiz
     }
 }
 
+/// How many covers are fetched from servers at once (WebDAV, extensions).
+pub const COVER_FETCHES: usize = 4;
+
+/// A queue for the covers that have to come from a server: at most `limit`
+/// at a time, in the order they were asked for. Without it every request of
+/// a grid of a thousand remote series went its own way on its own blocking
+/// thread, and the covers arrived in whatever order the server answered:
+/// the bottom of the grid before the top. The page asks in grid order (its
+/// own queue, visible covers first), so first come, first served is the
+/// grid's order. A cover already in the cache never waits here, and reading
+/// pages never does.
+pub struct FetchGate {
+    limit: usize,
+    state: Mutex<GateState>,
+    turn: Condvar,
+}
+
+#[derive(Default)]
+struct GateState {
+    next_ticket: u64,
+    waiting: BTreeSet<u64>,
+    running: usize,
+}
+
+/// A place in the gate; dropping it lets the next one in.
+pub struct GatePermit<'a> {
+    gate: &'a FetchGate,
+}
+
+impl FetchGate {
+    pub const fn new(limit: usize) -> Self {
+        FetchGate {
+            limit,
+            state: Mutex::new(GateState { next_ticket: 0, waiting: BTreeSet::new(), running: 0 }),
+            turn: Condvar::new(),
+        }
+    }
+
+    /// Blocks (a blocking thread, never the webview's) until it is this
+    /// caller's turn.
+    pub fn acquire(&self) -> GatePermit<'_> {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let ticket = state.next_ticket;
+        state.next_ticket += 1;
+        state.waiting.insert(ticket);
+        while state.running >= self.limit.max(1) || state.waiting.first() != Some(&ticket) {
+            state = self.turn.wait(state).unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        state.waiting.remove(&ticket);
+        state.running += 1;
+        // The next in line may fit too.
+        self.turn.notify_all();
+        GatePermit { gate: self }
+    }
+}
+
+impl Drop for GatePermit<'_> {
+    fn drop(&mut self) {
+        let mut state = self.gate.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.running -= 1;
+        self.gate.turn.notify_all();
+    }
+}
+
+static COVER_GATE: FetchGate = FetchGate::new(COVER_FETCHES);
+
+/// Runs a fetch from a server for a cover, in its turn.
+fn gated<T>(fetch: impl FnOnce() -> Option<T>) -> Option<T> {
+    let _permit = COVER_GATE.acquire();
+    fetch()
+}
+
 /// What the protocol answers, before it becomes an HTTP response.
 #[derive(Debug, PartialEq)]
 pub struct Reply {
@@ -179,7 +253,7 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
                 return Reply { etag: Some(etag), ..Reply::status(304) };
             }
             let body = if remote_cover {
-                thumbs::cached(cache_dir, volume, 0, thumbs::THUMB_WIDTH, || remote?.volume_cover(&location))
+                thumbs::cached(cache_dir, volume, 0, thumbs::THUMB_WIDTH, || gated(|| remote?.volume_cover(&location)))
             } else if thumb {
                 thumbs::cached(cache_dir, volume, *page, thumbs::THUMB_WIDTH, || page_bytes(remote, &location, *page))
             } else {
@@ -204,7 +278,7 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
                     if if_none_match == Some(etag.as_str()) {
                         return Reply { etag: Some(etag), ..Reply::status(304) };
                     }
-                    let body = cached_cover(cache_dir, &format!("cover-{series}"), &signature, || remote?.extension_cover(&source_id, &path));
+                    let body = cached_cover(cache_dir, &format!("cover-{series}"), &signature, || gated(|| remote?.extension_cover(&source_id, &path)));
                     return match body {
                         Some(body) => Reply { status: 200, content_type: Some(sniff(&body)), etag: Some(etag), body: if method == "HEAD" { Vec::new() } else { body } },
                         None => Reply::status(404),
@@ -224,11 +298,13 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
                     return Reply { etag: Some(etag), ..Reply::status(304) };
                 }
                 let body = cached_cover(cache_dir, &format!("cover-{series}"), &signature, || {
-                    let remote = remote?;
-                    match cover.as_deref() {
-                        Some(path) => remote.image(&first.source_id, path),
-                        None => remote.volume_cover(&first).or_else(|| page_bytes(Some(remote), &first, 0)),
-                    }
+                    gated(|| {
+                        let remote = remote?;
+                        match cover.as_deref() {
+                            Some(path) => remote.image(&first.source_id, path),
+                            None => remote.volume_cover(&first).or_else(|| page_bytes(Some(remote), &first, 0)),
+                        }
+                    })
                 });
                 return match body {
                     Some(body) => Reply { status: 200, content_type: Some(sniff(&body)), etag: Some(etag), body: if method == "HEAD" { Vec::new() } else { body } },
@@ -323,6 +399,43 @@ mod tests {
     use crate::manga::thumbs::tests::png;
 
     const VOL: &str = "0b5c7d0e-0000-4000-8000-0000000000aa";
+
+    #[test]
+    fn the_cover_gate_lets_in_a_few_at_a_time_in_the_order_asked() {
+        use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+        use std::sync::Arc;
+        let gate = Arc::new(FetchGate::new(2));
+        let running = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let order = Arc::new(Mutex::new(Vec::new()));
+        // Hold the gate full so every request below queues, in a known order.
+        let first = gate.acquire();
+        let second = gate.acquire();
+        let mut threads = Vec::new();
+        for n in 0..8 {
+            let (shared, running, peak, order) = (gate.clone(), running.clone(), peak.clone(), order.clone());
+            threads.push(std::thread::spawn(move || {
+                let _permit = shared.acquire();
+                let now = running.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+                peak.fetch_max(now, AtomicOrdering::SeqCst);
+                order.lock().unwrap().push(n);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                running.fetch_sub(1, AtomicOrdering::SeqCst);
+            }));
+            // Each thread takes its ticket before the next one starts.
+            while gate.state.lock().unwrap().waiting.len() < n + 1 {
+                std::thread::yield_now();
+            }
+        }
+        drop(first);
+        drop(second);
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert!(peak.load(AtomicOrdering::SeqCst) <= 2);
+        assert_eq!(*order.lock().unwrap(), (0..8).collect::<Vec<_>>());
+        assert_eq!(gate.state.lock().unwrap().running, 0);
+    }
 
     #[test]
     fn only_the_three_shapes_parse() {
