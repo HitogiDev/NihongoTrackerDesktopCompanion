@@ -121,6 +121,13 @@ fn msvc_command(program: &Path, target: &str, msvc: bool, configure: bool) -> Co
                         command.arg(format!("-D{variable}={}", sibling.display()));
                     }
                 }
+                // rc.exe and mt.exe (used when CMake links its test program)
+                // from the newest installed Windows SDK that ships both: a
+                // partial preview SDK can be picked as the latest and lack them.
+                if let Some(bin) = sdk_tools_dir() {
+                    command.arg(format!("-DCMAKE_RC_COMPILER={}", bin.join("rc.exe").display()));
+                    command.arg(format!("-DCMAKE_MT={}", bin.join("mt.exe").display()));
+                }
             }
             for (key, value) in tool.env() {
                 command.env(key, value);
@@ -128,6 +135,26 @@ fn msvc_command(program: &Path, target: &str, msvc: bool, configure: bool) -> Co
         }
     }
     command
+}
+
+/// `…\Windows Kits\10\bin\<newest version with rc.exe and mt.exe>\x64`.
+fn sdk_tools_dir() -> Option<PathBuf> {
+    let root = PathBuf::from(std::env::var_os("ProgramFiles(x86)")?).join("Windows Kits\\10\\bin");
+    let mut versions: Vec<(Vec<u32>, PathBuf)> = std::fs::read_dir(&root)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("10.") {
+                return None;
+            }
+            let key = name.split('.').map(|part| part.parse().unwrap_or(0)).collect();
+            Some((key, entry.path().join("x64")))
+        })
+        .filter(|(_, bin)| bin.join("rc.exe").is_file() && bin.join("mt.exe").is_file())
+        .collect();
+    versions.sort();
+    versions.pop().map(|(_, bin)| bin)
 }
 
 fn run(mut command: Command, description: &str) {
