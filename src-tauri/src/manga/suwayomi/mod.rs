@@ -22,6 +22,7 @@ pub mod assets;
 pub mod catalog;
 pub mod graphql;
 pub mod install;
+pub mod library;
 pub mod process;
 
 use std::collections::HashMap;
@@ -639,4 +640,62 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// The real thing, run by hand: the pinned jar and JRE (already
+    /// downloaded, in `NTDC_SWY_JAR` and `NTDC_SWY_JRE`) are checked and put
+    /// in `NTDC_SWY_DIR`, the server starts headless, gets the Keiyoushi
+    /// store, installs `NTDC_SWY_EXT` (a SAFE `ja` extension), searches
+    /// `NTDC_SWY_QUERY` and reads one page of its first free chapter.
+    #[test]
+    #[ignore]
+    fn runs_the_real_server() {
+        use crate::manga::ocr::engine::sha256_file;
+        let env = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name}"));
+        let dir = PathBuf::from(env("NTDC_SWY_DIR"));
+        let jar = PathBuf::from(env("NTDC_SWY_JAR"));
+        let jre = PathBuf::from(env("NTDC_SWY_JRE"));
+        let runtime = assets::runtime().unwrap();
+        assert_eq!(sha256_file(&jar).unwrap(), assets::SERVER.sha256);
+        assert_eq!(sha256_file(&jre).unwrap(), runtime.archive.sha256);
+        std::fs::create_dir_all(dir.join(install::BIN_DIR)).unwrap();
+        std::fs::copy(&jar, install::jar_path(&dir)).unwrap();
+        if install::java_path(&dir, &runtime).is_none() {
+            install::unpack_runtime(&jre, &install::runtime_dir_for_test(&dir, &runtime), runtime.zip, runtime.archive.sha256).unwrap();
+        }
+        assert!(install::installed(&dir));
+
+        let (db, db_path) = temp_db();
+        let db = Arc::new(db);
+        let service = Service::new(dir.clone(), db.clone(), None);
+        tauri::async_runtime::block_on(async {
+            let started = Instant::now();
+            let server = service.connect(ExtMode::Managed).await.unwrap();
+            println!("started in {:?}, version {:?}, store {:?}", started.elapsed(), service.version.lock().unwrap(), service.store_ready.lock().unwrap());
+            assert_eq!(*service.store_ready.lock().unwrap(), Some(true));
+            let extensions = server.fetch_extensions().await.unwrap();
+            let shown = catalog::extensions(extensions.clone(), false, &mut |_| None);
+            println!("{} extensions, {} ja shown by default", extensions.len(), shown.iter().filter(|e| e.lang == "ja").count());
+            assert!(shown.iter().all(|e| e.content == "safe"));
+            let wanted = env("NTDC_SWY_EXT");
+            assert!(shown.iter().any(|e| e.pkg_name == wanted));
+            server.update_extension(&wanted, graphql::ExtensionAction::Install).await.unwrap();
+            let sources = catalog::sources(server.sources().await.unwrap(), false, &mut |_| None);
+            let source = sources.iter().find(|s| s.pkg_name.as_deref() == Some(wanted.as_str())).unwrap();
+            let found = server.browse(&source.id, graphql::BrowseKind::Search, 1, Some(&env("NTDC_SWY_QUERY"))).await.unwrap();
+            println!("{} results", found.mangas.len());
+            let manga = &found.mangas[0];
+            let id = library::add(&db, &server, MANAGED_SOURCE, manga.id, false).await.unwrap();
+            let series = db.manga_series(&id).unwrap().unwrap();
+            assert_eq!(series.source, SOURCE_KIND);
+            let (_, chapters) = server.manga(manga.id, false).await.unwrap();
+            let free = chapters.iter().find(|c| !c.name.contains('\u{1f4b4}')).expect("a free chapter");
+            let pages = server.chapter_pages(free.id).await.unwrap();
+            println!("{} — {}: {} pages", series.title, free.name, pages.len());
+            let bytes = server.bytes(&pages[0], 64 * 1024 * 1024).await.unwrap();
+            assert_eq!(crate::manga::protocol::sniff(&bytes).split('/').next(), Some("image"));
+            println!("page 0: {} bytes, {}", bytes.len(), crate::manga::protocol::sniff(&bytes));
+        });
+        service.stop_blocking();
+        assert!(!process::pid_path(&dir).exists());
+        let _ = std::fs::remove_file(db_path);
+    }
 }

@@ -141,6 +141,7 @@ pub fn run() {
                 // The extensions server (see `manga::suwayomi`): nothing is
                 // downloaded or started here, only when extensions are used.
                 let suwayomi = Arc::new(manga::suwayomi::Service::new(data_dir.join("suwayomi"), state.db.clone(), Some(app.handle().clone())));
+                let _ = remote.suwayomi.set(suwayomi.clone());
                 let _ = state.manga.suwayomi.set(suwayomi);
                 manga::suwayomi::start_idle_watch(app.handle());
                 // The built-in OCR's runtime and models (see `manga::ocr`).
@@ -435,6 +436,11 @@ pub fn run() {
             commands::manga_ext_extensions,
             commands::manga_ext_update_extension,
             commands::manga_ext_sources,
+            commands::manga_ext_browse,
+            commands::manga_ext_manga,
+            commands::manga_ext_add_series,
+            commands::manga_ext_read,
+            commands::manga_ext_refresh_series,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

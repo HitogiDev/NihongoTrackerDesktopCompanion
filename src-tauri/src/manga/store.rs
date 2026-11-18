@@ -36,6 +36,16 @@ pub fn is_remote_format(format: &str) -> bool {
     format == FORMAT_REMOTE_ARCHIVE || format == FORMAT_REMOTE_FOLDER
 }
 
+/// A chapter of a series from an extension (`manga::suwayomi`): `source_ref`
+/// is Suwayomi's id of the chapter, `pages_json` its pages' server paths.
+pub const FORMAT_SUWAYOMI_CHAPTER: &str = "suwayomi-chapter";
+
+/// Pages that come from a server through `webdav::remote::Remote` (WebDAV or
+/// Suwayomi), not from a file on this computer.
+pub fn is_served_format(format: &str) -> bool {
+    is_remote_format(format) || format == FORMAT_SUWAYOMI_CHAPTER
+}
+
 // `manga_volumes.ocr_state` is `none` (no text), `mokuro` (a `.mokuro` file
 // next to the volume, set by `apply_manga_scan`) or `ocr` (no `.mokuro`, but
 // pages read by the built-in OCR or owocr, or written by hand: `manga_page_text`).
@@ -53,7 +63,7 @@ pub const ENGINE_MANUAL: &str = "manual";
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MangaSource {
     pub id: String,
-    /// `local` or `webdav` (`suwayomi` later).
+    /// `local`, `webdav` or `suwayomi`.
     pub kind: String,
     pub name: String,
     /// A folder for `local`, a URL (never with credentials) for the others.
@@ -786,10 +796,42 @@ impl Db {
         Ok(Some((cover, first)))
     }
 
+    /// A series from an extension, added or refreshed. `adult` comes from its
+    /// source's rating and sticks (`source_adult`): linking it to a media
+    /// that is not adult does not make it safe.
+    pub fn upsert_extension_series(&self, id: &str, source_id: &str, manga_id: &str, title: &str, cover: Option<&str>, adult: bool) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO manga_series (id, source, source_id, source_ref, title, cover, is_adult, source_adult, created_at)
+                 VALUES (?1, 'suwayomi', ?2, ?3, ?4, ?5, ?6, ?6, ?7)
+                 ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    cover = excluded.cover,
+                    source_adult = MAX(manga_series.source_adult, excluded.source_adult),
+                    is_adult = MAX(manga_series.is_adult, excluded.source_adult)",
+                params![id, source_id, manga_id, title, cover, adult as i64, now_iso()],
+            )
+            .map(|_| ())
+        })
+    }
+
+    /// `(source kind, source id, cover)` of a series. Rust only: the cover
+    /// may be a path on a server.
+    pub fn manga_series_origin(&self, id: &str) -> Result<Option<(String, String, Option<String>)>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT COALESCE(m.kind, s.source), s.source_id, s.cover FROM manga_series s LEFT JOIN manga_sources m ON m.id = s.source_id WHERE s.id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+        })
+    }
+
     pub fn link_manga_series(&self, id: &str, media_id: Option<&str>, media_title: Option<&str>, is_adult: bool) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "UPDATE manga_series SET media_id = ?2, media_title = ?3, is_adult = ?4 WHERE id = ?1",
+                "UPDATE manga_series SET media_id = ?2, media_title = ?3, is_adult = MAX(?4, source_adult) WHERE id = ?1",
                 params![id, media_id, media_title, is_adult as i64],
             )
             .map(|changed| changed > 0)

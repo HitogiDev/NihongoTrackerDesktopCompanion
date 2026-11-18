@@ -26,7 +26,10 @@ import type {
   OwocrProbe,
   ReaderPrefs,
   ExtAction,
+  ExtBrowse,
+  ExtBrowseKind,
   ExtExtension,
+  ExtMangaDetail,
   ExtSource,
   ExtStatus,
   ReaderTarget,
@@ -342,6 +345,14 @@ export const ipc = {
   mangaExtUpdateExtension: (pkgName: string, action: ExtAction) =>
     invoke<ExtExtension | null>('manga_ext_update_extension', { pkgName, action }),
   mangaExtSources: () => invoke<ExtSource[]>('manga_ext_sources'),
+  mangaExtBrowse: (sourceId: string, kind: ExtBrowseKind, page: number, query?: string) =>
+    invoke<ExtBrowse>('manga_ext_browse', { sourceId, kind, page, query }),
+  mangaExtManga: (mangaId: number, refresh = false) => invoke<ExtMangaDetail>('manga_ext_manga', { mangaId, refresh }),
+  /** Resolves with the series' id in the library. */
+  mangaExtAddSeries: (mangaId: number) => invoke<string>('manga_ext_add_series', { mangaId }),
+  /** Adds the series if needed and opens the reader on the chapter. */
+  mangaExtRead: (mangaId: number, chapterId: number) => invoke<string>('manga_ext_read', { mangaId, chapterId }),
+  mangaExtRefreshSeries: (seriesId: string) => invoke<void>('manga_ext_refresh_series', { seriesId }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

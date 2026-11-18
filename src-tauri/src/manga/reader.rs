@@ -160,7 +160,7 @@ pub fn volume(db: &Db, volume_id: &str) -> crate::db::Result<Option<ReaderVolume
         .manga_volumes(&series.id)?
         .into_iter()
         // A remote archive has no page list until it is first opened.
-        .filter(|v| v.page_count > 0 || super::store::is_remote_format(&v.format))
+        .filter(|v| v.page_count > 0 || super::store::is_served_format(&v.format))
         .collect();
     let index = siblings.iter().position(|v| v.id == volume.id);
     let previous = index.and_then(|i| i.checked_sub(1)).and_then(|i| siblings.get(i).cloned());
@@ -178,7 +178,9 @@ pub async fn open(app: &AppHandle, volume_id: &str, page: Option<i64>) -> Result
     // A remote archive opened for the first time: its central directory
     // first (a few requests). A server without ranges answers
     // `needs-download`, and the UI downloads it with progress.
-    if super::store::is_remote_format(&location.format) && location.pages.is_empty() {
+    // A chapter from an extension asks its server for its pages (starting the
+    // managed server if needed).
+    if super::store::is_served_format(&location.format) && location.pages.is_empty() {
         let remote = state.manga.remote().ok_or("error")?;
         tauri::async_runtime::spawn_blocking(move || remote.ensure_index(&location))
             .await

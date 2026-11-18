@@ -91,6 +91,9 @@ pub enum DavError {
     Status(u16),
     #[error("{0}")]
     Other(String),
+    /// From the extensions server (`manga::suwayomi::graphql::SwError::code`).
+    #[error("extensions server: {0}")]
+    Extension(&'static str),
 }
 
 impl DavError {
@@ -106,6 +109,7 @@ impl DavError {
             DavError::Changed => "changed",
             DavError::Cancelled => "cancelled",
             DavError::InvalidUrl => "invalid-url",
+            DavError::Extension(code) => code,
             DavError::Status(_) | DavError::Other(_) => "error",
         }
     }

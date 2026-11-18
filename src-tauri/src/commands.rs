@@ -1728,6 +1728,8 @@ pub fn manga_link_series(
     if !state.db.link_manga_series(&series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
         return Err("Unknown series".into());
     }
+    // A series from an adult source stays adult, whatever it is linked to.
+    let is_adult = state.db.manga_series(&series_id).map_err(err)?.map_or(is_adult, |series| series.is_adult);
     crate::manga::session::series_linked(&app, &series_id, media_id.as_deref(), media_title.as_deref(), is_adult);
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(())
@@ -2023,7 +2025,7 @@ fn remote_location(state: &AppState, volume_id: &str) -> CmdResult<crate::manga:
         .db
         .manga_volume_location(volume_id)
         .map_err(err)?
-        .filter(|location| crate::manga::store::is_remote_format(&location.format))
+        .filter(|location| crate::manga::store::is_served_format(&location.format))
         .ok_or_else(|| "not-found".to_string())
 }
 
@@ -2265,4 +2267,100 @@ pub async fn manga_ext_sources(state: State<'_, AppState>) -> CmdResult<Vec<crat
     let list = server.sources().await.map_err(ext_err)?;
     let mut icon = |path: &str| service.image_token(mode.source_id(), path);
     Ok(crate::manga::suwayomi::catalog::sources(list, show_adult, &mut icon))
+}
+
+/// A page (1-based) of a source's popular, latest or search results.
+#[tauri::command]
+pub async fn manga_ext_browse(
+    state: State<'_, AppState>,
+    source_id: String,
+    kind: crate::manga::suwayomi::graphql::BrowseKind,
+    page: u32,
+    query: Option<String>,
+) -> CmdResult<crate::manga::suwayomi::catalog::ExtBrowse> {
+    let (service, server, mode, show_adult) = ext_server(&state).await?;
+    let source = server.source(&source_id).await.map_err(ext_err)?;
+    if !crate::manga::suwayomi::catalog::visible(source.content_warning, show_adult) {
+        return Err("adult-hidden".into());
+    }
+    let query = query.map(|q| q.trim().to_string()).filter(|q| !q.is_empty());
+    let result = server.browse(&source_id, kind, page, query.as_deref()).await.map_err(ext_err)?;
+    let row = mode.source_id();
+    let mangas = result
+        .mangas
+        .into_iter()
+        .map(|manga| {
+            let series_id = crate::manga::suwayomi::library::series_id(row, manga.id);
+            let in_library = state.db.manga_series(&series_id).ok().flatten().is_some();
+            crate::manga::suwayomi::catalog::ExtManga {
+                thumb: manga.thumbnail_url.as_deref().and_then(|path| service.image_token(row, path)),
+                id: manga.id,
+                title: manga.title,
+                series_id: in_library.then_some(series_id),
+            }
+        })
+        .collect();
+    Ok(crate::manga::suwayomi::catalog::ExtBrowse { mangas, has_next: result.has_next_page })
+}
+
+/// A series of a source with its chapters. `refresh` asks the source again.
+#[tauri::command]
+pub async fn manga_ext_manga(state: State<'_, AppState>, manga_id: i64, refresh: Option<bool>) -> CmdResult<crate::manga::suwayomi::catalog::ExtMangaDetail> {
+    let (service, server, mode, show_adult) = ext_server(&state).await?;
+    let (manga, chapters) = server.manga(manga_id, refresh.unwrap_or(false)).await.map_err(ext_err)?;
+    if !show_adult && crate::manga::suwayomi::library::adult(&manga) {
+        return Err("adult-hidden".into());
+    }
+    let db = state.db.clone();
+    Ok(crate::manga::suwayomi::library::detail(&service, &db, mode.source_id(), manga, &chapters))
+}
+
+/// Adds a series of a source to the library. Returns its id there.
+#[tauri::command]
+pub async fn manga_ext_add_series(app: AppHandle, state: State<'_, AppState>, manga_id: i64) -> CmdResult<String> {
+    let (_, server, mode, show_adult) = ext_server(&state).await?;
+    let (manga, _) = server.manga(manga_id, false).await.map_err(ext_err)?;
+    if !show_adult && crate::manga::suwayomi::library::adult(&manga) {
+        return Err("adult-hidden".into());
+    }
+    let id = crate::manga::suwayomi::library::add(&state.db, &server, mode.source_id(), manga_id, false).await.map_err(ext_err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(id)
+}
+
+/// Reads a chapter: its series goes to the library first (a session needs
+/// one to log to), then the reader opens on it. Returns the series' id.
+#[tauri::command]
+pub async fn manga_ext_read(app: AppHandle, state: State<'_, AppState>, manga_id: i64, chapter_id: i64) -> CmdResult<String> {
+    let row = state.settings_snapshot().await.manga_ext_mode.source_id();
+    let series_id = crate::manga::suwayomi::library::series_id(row, manga_id);
+    let volume_id = crate::manga::suwayomi::library::volume_id(row, chapter_id);
+    if state.db.manga_volume_location(&volume_id).map_err(err)?.is_none() {
+        let (_, server, _, show_adult) = ext_server(&state).await?;
+        let (manga, _) = server.manga(manga_id, false).await.map_err(ext_err)?;
+        if !show_adult && crate::manga::suwayomi::library::adult(&manga) {
+            return Err("adult-hidden".into());
+        }
+        crate::manga::suwayomi::library::add(&state.db, &server, row, manga_id, false).await.map_err(ext_err)?;
+        let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    }
+    crate::manga::reader::open(&app, &volume_id, None).await?;
+    Ok(series_id)
+}
+
+/// Asks the source again for a library series' chapters.
+#[tauri::command]
+pub async fn manga_ext_refresh_series(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+    let (kind, source_id, _) = state.db.manga_series_origin(&series_id).map_err(err)?.ok_or("not-found")?;
+    if kind != crate::manga::suwayomi::SOURCE_KIND {
+        return Err("not-found".into());
+    }
+    let (_, server, mode, _) = ext_server(&state).await?;
+    if mode.source_id() != source_id {
+        return Err("other-server".into());
+    }
+    let manga_id: i64 = state.db.manga_series(&series_id).map_err(err)?.ok_or("not-found")?.location.parse().map_err(|_| "not-found")?;
+    crate::manga::suwayomi::library::add(&state.db, &server, &source_id, manga_id, true).await.map_err(ext_err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
 }
