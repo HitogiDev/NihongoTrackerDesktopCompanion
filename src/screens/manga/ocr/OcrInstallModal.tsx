@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, Cpu, Download, HardDrive, ScanSearch, ScanText, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, Check, Cpu, Download, Gauge, HardDrive, ScanSearch, ScanText, ShieldCheck, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
 import { ipc } from '../../../lib/ipc';
@@ -10,7 +10,7 @@ import type { OcrComponent, OcrStatus, OcrVariant } from '../../../lib/types';
 import { useAppStore } from '../../../store/useAppStore';
 import { isDownloading, OCR_QUERY, ocrErrorText, useOcrInstallStore, useOcrStatus } from './useOcr';
 
-const COMPONENT_ICON = { runtime: Cpu, detector: ScanSearch, recognizer: ScanText } as const;
+const COMPONENT_ICON = { runtime: Cpu, detector: ScanSearch, recognizer: ScanText, meikiDetector: ScanSearch, meikiRecognizer: ScanText } as const;
 const VARIANTS: OcrVariant[] = ['int8', 'fp16'];
 /** Room to spare on the disk beyond the files themselves. */
 const SPACE_MARGIN = 1.1;
@@ -83,9 +83,10 @@ function Progress({ status }: { status: OcrStatus }) {
 }
 
 /**
- * Asks before anything is downloaded: what the OCR needs, how much it is,
- * how much room there is and where it goes. Nothing leaves until the user
- * says so; then the same dialog follows the download.
+ * Asks before anything is downloaded: what the chosen built-in engine
+ * (manga-ocr or meikiocr) needs, how much it is, how much room there is and
+ * where it goes. Nothing leaves until the user says so; then the same dialog
+ * follows the download.
  */
 export function OcrInstallModal() {
   const { t, i18n } = useTranslation(['manga', 'common']);
@@ -115,6 +116,7 @@ export function OcrInstallModal() {
   }, [open, started, status, then]);
 
   if (!status || !settings) return null;
+  const meiki = status.engine === 'meiki';
   const downloading = isDownloading(status);
   const showProgress = Boolean(status.download) && (started || downloading);
   const download = Number(status.download_bytes);
@@ -165,35 +167,45 @@ export function OcrInstallModal() {
   );
 
   return (
-    <Modal open={open} onClose={close} title={t('ocr.install.title')} size="lg" actions={actions}>
+    <Modal open={open} onClose={close} title={t(meiki ? 'ocr.install.titleMeiki' : 'ocr.install.title')} size="lg" actions={actions}>
       {showProgress ? <Progress status={status} /> : !status.supported ? (
         <div role="alert" className="alert alert-warning alert-soft"><AlertTriangle className="h-4 w-4" aria-hidden="true" /><span>{t('ocr.errors.unsupported')}</span></div>
       ) : (
         <div className="space-y-5">
-          <p className="text-sm text-base-content/75">{t('ocr.install.intro')}</p>
-          <div role="radiogroup" aria-label={t('ocr.install.variant')} className="grid gap-2 sm:grid-cols-2">
-            {VARIANTS.map((variant) => {
-              const checked = settings.manga_ocr_variant === variant;
-              return (
-                <button
-                  key={variant}
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  onClick={() => void chooseVariant(variant)}
-                  className={checked
-                    ? 'rounded-box border-2 border-primary bg-primary/5 p-3 text-left motion-safe:transition-colors'
-                    : 'rounded-box border-2 border-base-300 p-3 text-left motion-safe:transition-colors hover:border-base-content/30'}
-                >
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold">{t(`ocr.variant.${variant}`)}</span>
-                    {checked ? <Check className="h-4 w-4 text-primary" aria-hidden="true" /> : null}
-                  </span>
-                  <span className="mt-1 block text-xs text-base-content/60">{t(`ocr.variant.${variant}Hint`)}</span>
-                </button>
-              );
-            })}
-          </div>
+          <p className="text-sm text-base-content/75">{t(meiki ? 'ocr.install.introMeiki' : 'ocr.install.intro')}</p>
+          {meiki ? (
+            <div className="flex items-start gap-3 rounded-box border border-warning/30 bg-warning/5 p-3 text-sm">
+              <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="font-medium">{t('ocr.install.meikiTradeoffTitle')}</p>
+                <p className="text-xs text-base-content/65">{t('ocr.install.meikiTradeoff')}</p>
+              </div>
+            </div>
+          ) : (
+            <div role="radiogroup" aria-label={t('ocr.install.variant')} className="grid gap-2 sm:grid-cols-2">
+              {VARIANTS.map((variant) => {
+                const checked = settings.manga_ocr_variant === variant;
+                return (
+                  <button
+                    key={variant}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    onClick={() => void chooseVariant(variant)}
+                    className={checked
+                      ? 'rounded-box border-2 border-primary bg-primary/5 p-3 text-left motion-safe:transition-colors'
+                      : 'rounded-box border-2 border-base-300 p-3 text-left motion-safe:transition-colors hover:border-base-content/30'}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">{t(`ocr.variant.${variant}`)}</span>
+                      {checked ? <Check className="h-4 w-4 text-primary" aria-hidden="true" /> : null}
+                    </span>
+                    <span className="mt-1 block text-xs text-base-content/60">{t(`ocr.variant.${variant}Hint`)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <ul className="surface-muted divide-y divide-base-300/60 overflow-hidden">
             {status.components.map((component) => <ComponentRow key={component.kind} component={component} status={status} />)}
           </ul>
@@ -222,6 +234,7 @@ export function OcrInstallModal() {
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             <span>{t(status.accelerator ? `ocr.install.privacy_${status.accelerator}` : 'ocr.install.privacy')}</span>
           </p>
+          {meiki ? <p className="text-xs text-base-content/55">{t('ocr.install.meikiLicense')}</p> : null}
         </div>
       )}
     </Modal>

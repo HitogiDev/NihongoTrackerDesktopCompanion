@@ -228,17 +228,26 @@
     },
     "install": {
       "title": "Download the OCR",
+      "titleMeiki": "Download meikiocr",
       "intro": "The OCR reads the text of pages that have no .mokuro. It runs on this computer: pages are never uploaded anywhere. It needs these files, downloaded once:",
+      "introMeiki": "meikiocr reads the text of pages that have no .mokuro. It runs on this computer: pages are never uploaded anywhere. It needs these files, downloaded once:",
+      "meikiTradeoffTitle": "Fast, but made for games",
+      "meikiTradeoff": "It reads a page several times faster than manga-ocr, but its models were trained on video games: on manga it misses more, and its model for vertical text is in beta. manga-ocr is still the recommended engine; you can install both and switch in Settings.",
+      "meikiLicense": "meikiocr's models (by rtr46) are published under the LGPL-3.0. They are downloaded unmodified from their author's repositories on Hugging Face, and Settings can delete them at any time.",
       "variant": "OCR model",
       "component": {
         "runtime": "ONNX Runtime {{version}}",
         "detector": "Text detector",
-        "recognizer": "Japanese recognizer (manga-ocr)"
+        "recognizer": "Japanese recognizer (manga-ocr)",
+        "meikiDetector": "Line detector (meikiocr)",
+        "meikiRecognizer": "Japanese recognizer (meikiocr)"
       },
       "componentHint": {
         "runtime": "Runs the models · Microsoft",
         "detector": "Finds bubbles and text · comic-text-and-bubble-detector",
-        "recognizer": "Reads each box · kha-white/manga-ocr"
+        "recognizer": "Reads each box · kha-white/manga-ocr",
+        "meikiDetector": "Finds each line of text · rtr46/meiki.text.detect",
+        "meikiRecognizer": "Reads rows and columns · rtr46/meiki.txt.recognition"
       },
       "present": "Ready",
       "total": "To download",

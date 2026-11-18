@@ -257,15 +257,29 @@
     "ocrDelete": "Delete models",
     "ocrDeleteConfirm": "Delete",
     "ocrDeleted": "OCR models deleted",
+    "ocrMeiki": "Built-in fast OCR",
+    "ocrMeikiHint": "meikiocr reads the text of pages without a .mokuro on this computer, much faster than manga-ocr but less accurately on manga. Its models are downloaded only when you ask, apart from manga-ocr's: you can have one, the other or both.",
+    "ocrMeikiDeleted": "meikiocr models deleted",
     "ocrAuto": "Read pages without text while reading",
-    "ocrAutoHint": "With the OCR ready (owocr chosen, or the built-in one installed), the reader reads the page on screen and the next ones as soon as they have no text.",
+    "ocrAutoHint": "With the OCR ready (owocr chosen, or a built-in engine installed), the reader reads the page on screen and the next ones as soon as they have no text.",
     "ocrEngine": "OCR engine",
-    "ocrEngineBuiltinHint": "Who reads the text of pages without a .mokuro. The built-in OCR runs inside the app.",
-    "ocrEngineOwocrHint": "Who reads the text of pages without a .mokuro. owocr is a separate program you install and start yourself.",
+    "ocrEngineHint": "Who reads the text of pages without a .mokuro. The two built-in engines run inside the app; owocr is a separate program you install and start yourself.",
     "ocrEngines": {
       "builtin": "Built-in",
+      "meiki": "Built-in fast",
       "owocr": "owocr"
     },
+    "ocrEngineModel": {
+      "builtin": "manga-ocr",
+      "meiki": "meikiocr",
+      "owocr": "AuroraWright/owocr"
+    },
+    "ocrEngineTagline": {
+      "builtin": "The most accurate on manga, bubbles and vertical text included. Slower on the CPU.",
+      "meiki": "Several times faster, but made for games: more mistakes on manga, vertical text in beta.",
+      "owocr": "A program you run yourself, with whichever engine you choose in it."
+    },
+    "ocrRecommended": "Recommended",
     "owocrIntro": "owocr (AuroraWright/owocr) is not part of the app: install it with pip, choose its engine and start it before reading. The app sends it each page over a WebSocket and turns the boxes it sends back into the reader's text.",
     "owocrCommand": "Start it with",
     "owocrConfig": "or set these in the [general] section of owocr_config.ini:",

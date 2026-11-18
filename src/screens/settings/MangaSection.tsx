@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Download, Trash2 } from 'lucide-react';
+import { Check, Download, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
 import { Field, Toggle } from '../../components/ui/Field';
@@ -82,36 +82,58 @@ function WebdavCache({ settings }: { settings: Settings }) {
   );
 }
 
-const OCR_ENGINES: OcrEngine[] = ['builtin', 'owocr'];
+const OCR_ENGINES: OcrEngine[] = ['builtin', 'meiki', 'owocr'];
 
-/** Which OCR reads pages: the built-in one or owocr, each with its settings. */
+/**
+ * Which OCR reads pages: manga-ocr or meikiocr inside the app, or owocr,
+ * each with its settings. Each option says in a line what it is good at.
+ */
 function OcrEngineSettings({ settings }: { settings: Settings }) {
   const { t } = useTranslation('settings');
   const updateSettings = useAppStore((s) => s.updateSettings);
   const queryClient = useQueryClient();
   const status = useOcrStatus().data;
   const engine = settings.manga_ocr_engine;
+  const installed = (option: OcrEngine) =>
+    option === 'builtin' ? status?.manga_ocr_installed : option === 'meiki' ? status?.meiki_installed : false;
   return (
     <>
       <div className="p-3">
-        <Field label={t('manga.ocrEngine')} hint={t(engine === 'owocr' ? 'manga.ocrEngineOwocrHint' : 'manga.ocrEngineBuiltinHint')}>
-          <div className="join flex flex-wrap" role="radiogroup" aria-label={t('manga.ocrEngine')}>
-            {OCR_ENGINES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={engine === option}
-                className={engine === option ? 'join-item btn btn-primary btn-sm' : 'join-item btn btn-outline btn-sm'}
-                onClick={async () => {
-                  if (option === engine) return;
-                  await updateSettings({ manga_ocr_engine: option });
-                  await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
-                }}
-              >
-                {t(`manga.ocrEngines.${option}`)}
-              </button>
-            ))}
+        <Field label={t('manga.ocrEngine')} hint={t('manga.ocrEngineHint')}>
+          <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={t('manga.ocrEngine')}>
+            {OCR_ENGINES.map((option) => {
+              const checked = engine === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={async () => {
+                    if (checked) return;
+                    await updateSettings({ manga_ocr_engine: option });
+                    await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
+                  }}
+                  className={checked
+                    ? 'flex flex-col items-start rounded-box border-2 border-primary bg-primary/5 p-3 text-left motion-safe:transition-colors'
+                    : 'flex flex-col items-start rounded-box border-2 border-base-300 p-3 text-left motion-safe:transition-colors hover:border-base-content/30'}
+                >
+                  <span className="flex w-full items-start justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{t(`manga.ocrEngines.${option}`)}</span>
+                      <span className="block font-mono text-[11px] text-base-content/55">{t(`manga.ocrEngineModel.${option}`)}</span>
+                    </span>
+                    {checked ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+                  </span>
+                  <span className="mt-2 block text-xs text-base-content/65">{t(`manga.ocrEngineTagline.${option}`)}</span>
+                  {option === 'builtin' ? (
+                    <span className="badge badge-primary badge-soft badge-sm mt-2">{t('manga.ocrRecommended')}</span>
+                  ) : installed(option) ? (
+                    <span className="badge badge-success badge-soft badge-sm mt-2">{t('manga:ocr.state.installed')}</span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </Field>
       </div>
@@ -126,7 +148,10 @@ function OcrEngineSettings({ settings }: { settings: Settings }) {
   );
 }
 
-/** The built-in OCR: installed or not, where it runs, its variant, delete. */
+/**
+ * The chosen built-in engine (manga-ocr or meikiocr): installed or not,
+ * where it runs, manga-ocr's variant, delete.
+ */
 function OcrSettings({ settings }: { settings: Settings }) {
   const { t, i18n } = useTranslation(['settings', 'manga']);
   const updateSettings = useAppStore((s) => s.updateSettings);
@@ -140,13 +165,14 @@ function OcrSettings({ settings }: { settings: Settings }) {
   const download = status.download;
   const percent = download && Number(download.total) > 0 ? Math.min(100, Math.round((Number(download.received) / Number(download.total)) * 100)) : 0;
   const where = status.provider ?? status.accelerator;
+  const meiki = settings.manga_ocr_engine === 'meiki';
 
   const remove = async () => {
     setDeleting(true);
     try {
       await ipc.mangaOcrDelete();
       await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
-      toast.success(t('manga.ocrDeleted'));
+      toast.success(t(meiki ? 'manga.ocrMeikiDeleted' : 'manga.ocrDeleted'));
     } catch (error) {
       toast.error(ocrErrorText(error));
     } finally {
@@ -157,7 +183,7 @@ function OcrSettings({ settings }: { settings: Settings }) {
 
   return (
     <div className="p-3">
-      <Field label={t('manga.ocr')} hint={t('manga.ocrHint')}>
+      <Field label={t(meiki ? 'manga.ocrMeiki' : 'manga.ocr')} hint={t(meiki ? 'manga.ocrMeikiHint' : 'manga.ocrHint')}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-48 flex-1">
             {downloading ? (
@@ -184,19 +210,21 @@ function OcrSettings({ settings }: { settings: Settings }) {
             )}
             {status.error && !downloading ? <p className="mt-1 text-xs text-error">{ocrErrorText(status.error)}</p> : null}
           </div>
-          <DropdownSelect
-            className="select select-sm w-40"
-            aria-label={t('manga.ocrVariant')}
-            value={settings.manga_ocr_variant}
-            disabled={downloading}
-            onChange={async (event) => {
-              await updateSettings({ manga_ocr_variant: event.target.value as OcrVariant });
-              await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
-            }}
-          >
-            <option value="int8">{t('manga:ocr.variant.int8')}</option>
-            <option value="fp16">{t('manga:ocr.variant.fp16')}</option>
-          </DropdownSelect>
+          {meiki ? null : (
+            <DropdownSelect
+              className="select select-sm w-40"
+              aria-label={t('manga.ocrVariant')}
+              value={settings.manga_ocr_variant}
+              disabled={downloading}
+              onChange={async (event) => {
+                await updateSettings({ manga_ocr_variant: event.target.value as OcrVariant });
+                await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
+              }}
+            >
+              <option value="int8">{t('manga:ocr.variant.int8')}</option>
+              <option value="fp16">{t('manga:ocr.variant.fp16')}</option>
+            </DropdownSelect>
+          )}
           {downloading || !status.installed ? (
             <Button variant="primary" size="sm" disabled={!status.supported} onClick={() => showInstall()}>
               <Download className="h-4 w-4" />
