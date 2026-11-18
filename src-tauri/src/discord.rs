@@ -189,6 +189,53 @@ pub fn manga_privacy<'a>(
     })
 }
 
+/// Same as [`manga_privacy`], for a detected novel or game: the blacklist
+/// entry (by work or by executable) that silences it, or why its title shows.
+pub fn vn_privacy<'a>(
+    vn: &crate::state::VnSession,
+    settings: &Settings,
+    blacklist: &'a [BlacklistEntry],
+) -> Result<Reason, &'a BlacklistEntry> {
+    if let Some(entry) =
+        blacklisted(blacklist, &vn.content_id).or_else(|| blacklisted(blacklist, &vn.exe))
+    {
+        return Err(entry);
+    }
+    Ok(if vn.media_type == "vn" && vn.is_adult_image == Some(true) {
+        Reason::AdultImage
+    } else if (vn.media_type != "vn" || vn.is_adult_image.is_none()) && vn.is_adult {
+        Reason::Adult
+    } else if settings.discord_generic_mode {
+        Reason::Generic
+    } else {
+        Reason::Full
+    })
+}
+
+/// Same as [`manga_privacy`], for an episode in a player: the blacklist entry
+/// (by show or by player) that silences it, or why its title shows.
+pub fn anime_privacy<'a>(
+    anime: &crate::state::AnimeSession,
+    settings: &Settings,
+    blacklist: &'a [BlacklistEntry],
+) -> Result<Reason, &'a BlacklistEntry> {
+    let media = anime.media.as_ref();
+    let content_id = media.map(|m| m.content_id.as_str()).unwrap_or_default();
+    if let Some(entry) =
+        blacklisted(blacklist, content_id).or_else(|| blacklisted(blacklist, &anime.player))
+    {
+        return Err(entry);
+    }
+    // An unresolved episode only has the release file name to go on, which
+    // is exactly the kind of string nobody wants broadcast.
+    Ok(match media {
+        Some(m) if m.is_adult => Reason::Adult,
+        None => Reason::Unresolved,
+        Some(_) if settings.discord_generic_mode => Reason::Generic,
+        Some(_) => Reason::Full,
+    })
+}
+
 /// The whole policy, as a pure function: same inputs, same answer, whether it
 /// is the watcher publishing or the settings screen previewing.
 ///
@@ -223,21 +270,13 @@ pub fn decide(
         let counting = vn.counting;
         let show_session = counting || settings.discord_show_idle;
         if show_session {
-            if let Some(entry) =
-                blacklisted(blacklist, &vn.content_id).or_else(|| blacklisted(blacklist, &vn.exe))
-            {
-                return Decision::Blocked {
-                    label: entry.label.clone(),
-                };
-            }
-            let reason = if vn.media_type == "vn" && vn.is_adult_image == Some(true) {
-                Reason::AdultImage
-            } else if (vn.media_type != "vn" || vn.is_adult_image.is_none()) && vn.is_adult {
-                Reason::Adult
-            } else if settings.discord_generic_mode {
-                Reason::Generic
-            } else {
-                Reason::Full
+            let reason = match vn_privacy(vn, settings, blacklist) {
+                Ok(reason) => reason,
+                Err(entry) => {
+                    return Decision::Blocked {
+                        label: entry.label.clone(),
+                    }
+                }
             };
             let hide = reason != Reason::Full;
             return Decision::Show {
@@ -310,21 +349,13 @@ pub fn decide(
 
     if let Some(anime) = snapshot.anime.as_ref().filter(|anime| !anime.paused) {
         let media = anime.media.as_ref();
-        let content_id = media.map(|m| m.content_id.as_str()).unwrap_or_default();
-        if let Some(entry) = blacklisted(blacklist, content_id)
-            .or_else(|| blacklisted(blacklist, &anime.player))
-        {
-            return Decision::Blocked {
-                label: entry.label.clone(),
-            };
-        }
-        // An unresolved episode only has the release file name to go on, which
-        // is exactly the kind of string nobody wants broadcast.
-        let reason = match media {
-            Some(m) if m.is_adult => Reason::Adult,
-            None => Reason::Unresolved,
-            Some(_) if settings.discord_generic_mode => Reason::Generic,
-            Some(_) => Reason::Full,
+        let reason = match anime_privacy(anime, settings, blacklist) {
+            Ok(reason) => reason,
+            Err(entry) => {
+                return Decision::Blocked {
+                    label: entry.label.clone(),
+                }
+            }
         };
         let hide = reason != Reason::Full;
         let title = media.map(|m| m.title.clone()).unwrap_or_default();
@@ -713,7 +744,7 @@ pub(crate) mod tests {
         }
     }
 
-    fn vn(is_adult: bool) -> VnSession {
+    pub(crate) fn vn(is_adult: bool) -> VnSession {
         VnSession {
             exe: "aokana.exe".into(),
             pid: 1,
