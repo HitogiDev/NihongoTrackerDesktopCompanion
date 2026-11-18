@@ -150,6 +150,7 @@ export function ServerStrip({ sources, onManage }: { sources: MangaSource[]; onM
               <p className="truncate text-sm font-medium">{source.name}</p>
               <ServerStatus source={source} />
             </button>
+            <span className="hidden shrink-0 text-xs tabular-nums text-base-content/55 sm:inline">{t('folders.series', { count: Number(source.series_count) })}</span>
             <Button appearance="ghost" size="sm" shape="square" disabled={running} aria-label={t('webdav.actions.sync', { name: source.name })} title={t('webdav.actions.sync', { name: source.name })} onClick={() => void syncSource(source.id)}>
               <RefreshCw className={running ? 'h-4 w-4 motion-safe:animate-spin' : 'h-4 w-4'} />
             </Button>

@@ -89,7 +89,8 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
     ],
   };
   const layouts = layout === 'vertical' ? [strip, paged] : [paged, strip];
-  return [...layouts, text, editing, window];
+  // In this order the sheet's two columns come out about as tall.
+  return [...layouts, window, text, editing];
 }
 
 /** The Manga screen, and the app's own keys that also work there. */
@@ -97,7 +98,6 @@ export function libraryShortcuts(mod = modifierKey()): ShortcutGroup[] {
   return [
     {
       title: 'library',
-      current: true,
       items: [
         { label: 'search', keys: [['/']] },
         { label: 'browse', keys: [['Tab'], ['Shift', 'Tab']] },

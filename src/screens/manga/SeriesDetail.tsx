@@ -205,7 +205,9 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
   const unreachable = remote && offline !== null && !volume.downloaded;
   const disabled = !isReadable(volume) || unreachable || Boolean(progress && !progress.offline);
   return (
-    <li className={unreachable ? 'flex items-center gap-2 pr-3 opacity-60' : 'flex items-center gap-2 pr-3'}>
+    // A row of the list's subgrid: the actions of every row share one column,
+    // so the play buttons line up whatever each row offers.
+    <li className={unreachable ? 'col-span-2 grid grid-cols-subgrid items-center opacity-60' : 'col-span-2 grid grid-cols-subgrid items-center'}>
       <button
         type="button"
         disabled={disabled}
@@ -248,6 +250,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
           {unreachable ? <CloudOff className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
         </span>
       </button>
+      <div className="flex items-center justify-end gap-2 pr-3 empty:pr-0">
       {volume.text_layers.length > 0 ? (
         <DropdownSelect
           className="select select-sm w-36 shrink-0"
@@ -278,6 +281,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
         </>
       ) : null}
       {remote ? <DownloadControl volume={volume} progress={progress} offline={offline} /> : null}
+      </div>
     </li>
   );
 }
@@ -410,7 +414,7 @@ export default function SeriesDetailScreen() {
                   {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
               </div>
-              <ul className="surface divide-y divide-base-300/60 overflow-hidden">
+              <ul className="surface grid grid-cols-[minmax(0,1fr)_auto] divide-y divide-base-300/60 overflow-hidden">
                 {volumes.map((volume) => <VolumeRow key={volume.id} volume={volume} offline={offline} ocr={ocr} source={source} />)}
               </ul>
             </section>

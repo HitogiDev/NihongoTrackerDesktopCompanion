@@ -149,7 +149,7 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
       <div className="border-t border-base-300/60 pt-3">
         <button
           type="button"
-          className="btn btn-ghost btn-sm w-full justify-between font-normal"
+          className="btn btn-ghost btn-sm -mx-2 w-[calc(100%+1rem)] justify-between px-2 font-normal"
           onClick={onShortcuts}
         >
           <span className="flex items-center gap-2">

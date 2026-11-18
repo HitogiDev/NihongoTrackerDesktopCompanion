@@ -50,8 +50,8 @@ export function ShortcutsSheet({ open, onClose, groups, note }: {
             <dl className="surface-muted divide-y divide-base-300/60 text-sm">
               {group.items.map((item) => (
                 <div key={item.label + (item.mouse ?? '')} className="flex min-h-10 items-center justify-between gap-4 px-3 py-1.5">
-                  <dt className="min-w-0 text-base-content/85">{t(`shortcuts.do.${item.label}`)}</dt>
-                  <dd className="shrink-0 text-right">
+                  <dt className="min-w-32 text-base-content/85">{t(`shortcuts.do.${item.label}`)}</dt>
+                  <dd className="min-w-0 text-right">
                     {item.mouse ? (
                       <span className="inline-flex items-center gap-1.5 text-xs text-base-content/60">
                         <MousePointer2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

@@ -305,6 +305,14 @@ textarea,
   100% { outline-color: transparent; }
 }
 
+/* A modal whose content scrolls is itself focusable (Chromium focuses the
+   scroller when the dialog opens), which drew the engine's black ring around
+   the whole box. The box is the dialog: its arrows still scroll it. */
+.modal-box:focus,
+.modal-box:focus-visible {
+  outline: none;
+}
+
 /* One focus ring for everything reached with the keyboard: daisyUI buttons
    draw theirs in the button's own colour, plain buttons and tabs got the
    engine's default. Unlayered, so it wins over both; fields keep daisyUI's. */
