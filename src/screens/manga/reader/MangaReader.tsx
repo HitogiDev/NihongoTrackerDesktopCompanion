@@ -14,6 +14,8 @@ import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
 import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { OcrInstallModal } from '../ocr/OcrInstallModal';
+import { ShortcutsSheet } from '../ShortcutsSheet';
+import { isSheetKey, readerShortcuts } from '../shortcuts';
 import { ocrErrorText, useOcrInstallStore, useOcrStatus } from '../ocr/useOcr';
 import { BlockEditor } from './BlockEditor';
 import { EditLayer } from './EditLayer';
@@ -134,6 +136,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [page, setPage] = useState(initialPage);
   const [atEnd, setAtEnd] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [natural, setNatural] = useState<Record<number, Size>>({});
   const vertical = prefs.layout === 'vertical';
@@ -453,6 +456,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // `?` opens the list of shortcuts; while it is open, keys are its own.
+      if (isSheetKey(event)) {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (shortcutsOpen) return;
       const element = event.target as HTMLElement | null;
       if (element?.closest('input, textarea, select, [role="dialog"] button')) return;
       // Ctrl+C with nothing selected copies the block under the pointer: it
@@ -510,13 +520,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
+  }, [shortcutsOpen, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
     if (vertical || prefs.fit !== 'height' || Math.abs(event.deltaY) < 4) return;
     // The dictionary and the settings scroll on their own.
-    if ((event.target as HTMLElement).closest('[role="dialog"], [data-reader-chrome]')) return;
+    if ((event.target as HTMLElement).closest('dialog, [role="dialog"], [data-reader-chrome]')) return;
     const now = performance.now();
     if (now - lastWheel.current < WHEEL_GAP_MS) return;
     lastWheel.current = now;
@@ -526,7 +536,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   const onClick = (event: ReactMouseEvent) => {
     const element = event.target as HTMLElement;
-    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], [role="dialog"]')) return;
+    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]')) return;
     if (settingsOpen) {
       setSettingsOpen(false);
       return;
@@ -540,6 +550,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
+  useEffect(() => { pin('shortcuts', shortcutsOpen); }, [pin, shortcutsOpen]);
+  const shortcutGroups = useMemo(() => readerShortcuts(prefs.direction, prefs.layout), [prefs.direction, prefs.layout]);
 
   const overlay = editing
     ? (index: number, size: Size) => {
@@ -626,6 +638,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onFullscreen={() => void toggleFullscreen()}
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
+        onShortcuts={() => setShortcutsOpen(true)}
         onHover={(hovering) => chrome.pin('top', hovering)}
         extra={<>
           {ownSession ? <SessionIndicator session={ownSession} /> : null}
@@ -711,7 +724,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         />
       ) : null}
       <OcrInstallModal />
-      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} /> : null}
+      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /> : null}
+      <ShortcutsSheet
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        groups={shortcutGroups}
+        note={vertical ? undefined : t(prefs.direction === 'rtl' ? 'shortcuts.noteRtl' : 'shortcuts.noteLtr')}
+      />
       <BottomBar
         visible={chrome.visible || settingsOpen}
         volumeId={volume.id}

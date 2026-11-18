@@ -5,6 +5,7 @@ import {
   BookOpen,
   Columns2,
   Expand,
+  Keyboard,
   RectangleVertical,
   Rows3,
   Settings2,
@@ -54,10 +55,11 @@ function Segmented<T extends string>({ label, value, options, onChange }: {
 
 const BACKGROUNDS: ReaderBackground[] = ['black', 'gray', 'paper'];
 
-export function SettingsPanel({ prefs, onChange, hasText }: {
+export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
   prefs: ReaderPrefs;
   onChange: (patch: Partial<ReaderPrefs>) => void;
   hasText: boolean;
+  onShortcuts: () => void;
 }) {
   const { t } = useTranslation('mangaReader');
   return (
@@ -131,12 +133,24 @@ export function SettingsPanel({ prefs, onChange, hasText }: {
           ]}
         />
       ) : null}
-      <p className="border-t border-base-300/60 pt-3 text-[11px] leading-relaxed text-base-content/55">{t('settings.shortcuts')}</p>
+      <div className="border-t border-base-300/60 pt-3">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm w-full justify-between font-normal"
+          onClick={onShortcuts}
+        >
+          <span className="flex items-center gap-2">
+            <Keyboard className="h-4 w-4" aria-hidden="true" />
+            {t('shortcuts.title')}
+          </span>
+          <kbd className="kbd kbd-xs">?</kbd>
+        </button>
+      </div>
     </div>
   );
 }
 
-export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullscreen, settingsOpen, onSettings, onHover, extra }: {
+export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullscreen, settingsOpen, onSettings, onShortcuts, onHover, extra }: {
   visible: boolean;
   title: string;
   subtitle: string;
@@ -145,6 +159,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
   onFullscreen: () => void;
   settingsOpen: boolean;
   onSettings: () => void;
+  onShortcuts: () => void;
   onHover: (hovering: boolean) => void;
   extra?: ReactNode;
 }) {
@@ -160,6 +175,9 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
           <p className="truncate text-xs text-base-content/60">{subtitle}</p>
         </div>
         {extra}
+        <Button appearance="ghost" size="sm" shape="square" className="hidden sm:inline-flex" aria-label={t('shortcuts.title')} title={t('shortcuts.open')} onClick={onShortcuts}>
+          <Keyboard className="h-4 w-4" />
+        </Button>
         <Button appearance="ghost" size="sm" shape="square" aria-label={fullscreen ? t('exitFullscreen') : t('fullscreen')} title={`${fullscreen ? t('exitFullscreen') : t('fullscreen')} (F)`} onClick={onFullscreen}>
           {fullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
         </Button>

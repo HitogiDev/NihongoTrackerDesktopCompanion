@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, RefreshCw, Search, SearchX, Server } from 'lucide-react';
+import { FolderCog, FolderPlus, Keyboard, RefreshCw, Search, SearchX, Server } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState, ErrorState } from '../components/ui/Empty';
 import { Page, SectionTitle } from '../components/ui/Page';
 import { EmptyLibrary } from './manga/EmptyLibrary';
+import { ShortcutsSheet } from './manga/ShortcutsSheet';
+import { isSheetKey, isTyping, libraryShortcuts } from './manga/shortcuts';
 import { FoldersModal } from './manga/FoldersModal';
 import { ServerFormModal } from './manga/ServerFormModal';
 import { ServersModal, ServerStrip } from './manga/Servers';
@@ -37,6 +39,26 @@ export default function MangaScreen() {
   // `undefined`: the form is closed; `null`: a new server.
   const [editing, setEditing] = useState<MangaSource | null | undefined>(undefined);
   const openForm = (source: MangaSource | null) => { setServersOpen(false); setEditing(source); };
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutGroups = useMemo(() => libraryShortcuts(), []);
+  const searchField = useRef<HTMLInputElement>(null);
+
+  // `?` lists the shortcuts; `/` jumps to the search, as on the web.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('dialog[open] .modal-box:not(.manga-shortcuts)')) return;
+      if (isSheetKey(event)) {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+      } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isTyping(event.target) && searchField.current) {
+        event.preventDefault();
+        searchField.current.focus();
+        searchField.current.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Opening the screen picks up what changed on disk since (at most once a
   // minute; Rust decides).
@@ -64,6 +86,9 @@ export default function MangaScreen() {
       actions={
         hasSources ? (
           <>
+            <Button appearance="ghost" size="sm" shape="square" aria-label={t('mangaReader:shortcuts.title')} title={t('mangaReader:shortcuts.open')} onClick={() => setShortcutsOpen(true)}>
+              <Keyboard className="h-4 w-4" />
+            </Button>
             <Button appearance="ghost" size="sm" shape="square" loading={scanning} aria-label={t('actions.rescan')} title={t('actions.rescan')} onClick={() => void rescan()}>
               {scanning ? null : <RefreshCw className="h-4 w-4" />}
             </Button>
@@ -99,7 +124,7 @@ export default function MangaScreen() {
           <div className="flex flex-wrap items-center gap-3">
             <label className="input input-sm min-w-48 flex-1">
               <Search className="h-4 w-4 opacity-60" />
-              <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
+              <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
             </label>
             <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
               {ORIGINS.map((id) => (
@@ -184,6 +209,7 @@ export default function MangaScreen() {
       )}
       <ServersModal open={serversOpen} onClose={() => setServersOpen(false)} sources={data?.sources ?? []} onAdd={() => openForm(null)} onEdit={openForm} />
       <ServerFormModal open={editing !== undefined} onClose={() => setEditing(undefined)} source={editing} />
+      <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} groups={shortcutGroups} note={t('mangaReader:shortcuts.noteLibrary')} />
       <FoldersModal open={foldersOpen} onClose={() => setFoldersOpen(false)} sources={data?.sources ?? []} onAdd={() => void add()} adding={adding} />
     </Page>
   );

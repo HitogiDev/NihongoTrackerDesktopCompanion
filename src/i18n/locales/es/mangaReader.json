@@ -20,8 +20,7 @@
     "direction": "Dirección",
     "fit": "Ajuste",
     "background": "Fondo",
-    "textLayer": "Texto",
-    "shortcuts": "← → pasar página · Espacio / Mayús+Espacio · Inicio / Fin · F pantalla completa · T texto · Mayús o Alt sobre el texto: diccionario · Ctrl+C copia un bloque · Ctrl+M lo mina"
+    "textLayer": "Texto"
   },
   "layout": {
     "single": "Una",
@@ -51,7 +50,8 @@
     "toggle": "Texto: {{mode}}",
     "copied": "Bloque copiado",
     "copy": "Copiar",
-    "mine": "Minar"
+    "mine": "Minar",
+    "block": "Texto {{n}} de {{count}}, página {{page}}"
   },
   "end": {
     "title": "Fin de {{volume}}",
@@ -104,5 +104,79 @@
     "close": "Cerrar",
     "saved": "Texto guardado",
     "saveFailed": "No se pudo guardar el texto: {{message}}"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "open": "Atajos de teclado (?)",
+    "or": "o",
+    "current": "Disposición actual",
+    "noteRtl": "Libro de derecha a izquierda: las flechas siguen a las páginas, así que ← es la siguiente.",
+    "noteLtr": "Libro de izquierda a derecha: → es la página siguiente.",
+    "noteLibrary": "Los atajos del lector se ven con ? dentro de él.",
+    "group": {
+      "pages": "Pasar página",
+      "strip": "Tira vertical",
+      "text": "Texto de la página",
+      "editing": "Corregir el texto",
+      "window": "Ventana",
+      "library": "Biblioteca de manga",
+      "app": "En toda la app"
+    },
+    "do": {
+      "nextPage": "Página siguiente",
+      "previousPage": "Página anterior",
+      "firstLast": "Primera o última página",
+      "turnByClick": "Pasar página",
+      "turnByWheel": "Pasar página (ajuste al alto)",
+      "showControls": "Mostrar u ocultar los controles",
+      "scrollStep": "Desplazar un poco",
+      "scrollScreen": "Bajar una pantalla",
+      "scrollScreenBack": "Subir una pantalla",
+      "textLayer": "Capa de texto: al pasar, siempre, oculta",
+      "lookUp": "Buscar una palabra",
+      "nextBlock": "Bloque de texto siguiente o anterior",
+      "blockArrows": "Moverse entre bloques (con uno enfocado)",
+      "lookUpFocused": "Buscar el bloque enfocado",
+      "copyBlock": "Copiar el bloque bajo el puntero o enfocado",
+      "mineBlock": "Minar ese bloque, con su viñeta",
+      "leaveBlock": "Volver a la página",
+      "editText": "Empezar o terminar de corregir",
+      "drawBox": "Añadir un bloque",
+      "deleteBlock": "Borrar el bloque elegido",
+      "deselectOrSave": "Deseleccionar y luego guardar y terminar",
+      "fullscreen": "Pantalla completa",
+      "escape": "Cerrar el diccionario, los ajustes o la pantalla completa",
+      "sheet": "Esta lista",
+      "search": "Buscar en la biblioteca",
+      "browse": "Recorrer las portadas",
+      "open": "Abrir la serie o el tomo",
+      "sections": "Ir a una sección",
+      "palette": "Paleta de comandos",
+      "quickLog": "Registrar a mano",
+      "texthooker": "Texthooker",
+      "settings": "Ajustes"
+    },
+    "mouse": {
+      "clickSidesRtl": "Clic en el tercio izquierdo o derecho",
+      "clickSidesLtr": "Clic en el tercio izquierdo o derecho",
+      "wheel": "Rueda del ratón",
+      "clickMiddle": "Clic en el centro",
+      "click": "Clic en la página",
+      "hoverModifier": "Mayús o Alt sobre el texto",
+      "drag": "Arrastrar sobre la página"
+    },
+    "key": {
+      "Space": "Espacio",
+      "Shift": "Mayús",
+      "Esc": "Esc",
+      "Enter": "Intro",
+      "Tab": "Tab",
+      "Home": "Inicio",
+      "End": "Fin",
+      "PgDn": "AvPág",
+      "PgUp": "RePág",
+      "Delete": "Supr",
+      "Backspace": "Retroceso"
+    }
   }
 }
