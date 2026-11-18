@@ -316,10 +316,22 @@ pub fn to_page(result: &OcrResult, img_path: &str) -> super::super::mokuro::Moku
     super::super::mokuro::MokuroPage { img_path: img_path.to_string(), img_width: image.0, img_height: image.1, blocks }
 }
 
-/// The text inside a box the user drew (sent cropped): every line, in
-/// reading order, as one string, like the built-in OCR gives it.
-pub fn to_text(result: &OcrResult) -> String {
-    to_page(result, "").blocks.iter().flat_map(|block| block.lines.iter()).map(String::as_str).collect()
+/// The text inside a box the user drew, sent with a margin around it: the
+/// lines whose centre is inside `inside` (in the image's pixels), in reading
+/// order, as one string, like the built-in OCR gives it.
+pub fn to_text(result: &OcrResult, inside: [f64; 4]) -> String {
+    let within = |corners: &Vec<[f64; 2]>| {
+        let n = corners.len().max(1) as f64;
+        let (x, y) = corners.iter().fold((0.0, 0.0), |(x, y), c| (x + c[0] / n, y + c[1] / n));
+        (inside[0]..=inside[2]).contains(&x) && (inside[1]..=inside[3]).contains(&y)
+    };
+    to_page(result, "")
+        .blocks
+        .iter()
+        .flat_map(|block| block.lines.iter().zip(&block.lines_coords))
+        .filter(|(_, corners)| within(corners))
+        .map(|(line, _)| line.as_str())
+        .collect()
 }
 
 // ── the client ────────────────────────────────────────────────────────
@@ -849,7 +861,9 @@ pub(crate) mod tests {
         let page = to_page(&result, "p.png");
         assert_eq!(page.blocks[0].lines, ["一行目", "二行目"]);
         assert!(!page.blocks[0].vertical);
-        assert_eq!(to_text(&result), "一行目二行目");
+        assert_eq!(to_text(&result, [0.0, 0.0, 800.0, 1000.0]), "一行目二行目");
+        // A box drawn around the first line only (sent with a margin).
+        assert_eq!(to_text(&result, [100.0, 450.0, 700.0, 480.0]), "一行目");
     }
 
     #[test]
@@ -875,5 +889,38 @@ pub(crate) mod tests {
         assert_eq!(page.blocks[0].lines, ["カタカナ"]);
         assert!(page.blocks[0].vertical);
         assert_eq!(page.blocks[0].bbox[2], 100.0);
+    }
+
+    /// Against a real owocr started by hand, e.g.
+    /// `owocr -r websocket -w websocket -of json -e meikiocr`:
+    /// `NTDC_OWOCR_PORT` (7331 if unset), `NTDC_OCR_PAGE` the page to read,
+    /// `NTDC_OCR_EXPECT` (optional) its blocks' text joined by `|`.
+    #[test]
+    #[ignore]
+    fn reads_a_real_page_with_owocr() {
+        let port = std::env::var("NTDC_OWOCR_PORT").ok().and_then(|port| port.parse().ok()).unwrap_or(DEFAULT_PORT);
+        let probe = probe(port, PROBE_TIMEOUT);
+        println!("{probe:?}");
+        assert!(probe.ok);
+        let path = std::env::var("NTDC_OCR_PAGE").expect("NTDC_OCR_PAGE");
+        let bytes = std::fs::read(&path).unwrap();
+        let image = image::load_from_memory(&bytes).unwrap();
+        let started = Instant::now();
+        let result = Client::new(port, PAGE_TIMEOUT).recognize(&bytes, (image.width(), image.height())).unwrap();
+        let page = to_page(&result, "page");
+        println!("page {:?}", started.elapsed());
+        for block in &page.blocks {
+            println!("{:?} vertical={} lines={:?}", block.bbox.map(f64::round), block.vertical, block.lines);
+        }
+        assert!(!page.blocks.is_empty());
+        // A box drawn around the first block reads the same text.
+        let crop = super::super::crop_png(&image, page.blocks[0].bbox).unwrap();
+        let region = to_text(&Client::new(port, PAGE_TIMEOUT).recognize(&crop.png, crop.size).unwrap(), crop.inside);
+        println!("region {region:?}");
+        assert_eq!(region, page.blocks[0].lines.concat());
+        if let Ok(expected) = std::env::var("NTDC_OCR_EXPECT") {
+            let read: Vec<String> = page.blocks.iter().map(|block| block.lines.concat()).collect();
+            assert_eq!(read.join("|"), expected);
+        }
     }
 }

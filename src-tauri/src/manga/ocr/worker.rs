@@ -4,7 +4,8 @@
 //! runs on the watcher's tick or a tokio worker: one OS thread takes jobs from
 //! a queue, best first:
 //!
-//! 1. a box the user drew and wants read (someone is waiting for it);
+//! 1. a box the user drew and wants read, or owocr's connection test
+//!    (someone is waiting for them);
 //! 2. the pages on screen in the reader;
 //! 3. the pages after them, so turning the page finds text;
 //! 4. "process volume", page by page in order.
@@ -35,6 +36,17 @@ pub enum Work {
     Page,
     /// Read the text inside one box of the page; the answer goes back.
     Region { bbox: [f64; 4], reply: mpsc::Sender<Result<String, String>> },
+    /// "Test connection" to owocr on a port. It goes through the queue so
+    /// that owocr never has two images of ours at once (it has no request
+    /// ids). Not a page: `volume_id` is empty.
+    Probe { port: u16, reply: mpsc::Sender<super::owocr::OwocrProbe> },
+}
+
+impl Work {
+    /// Someone waits for the answer: never dropped with a volume's pages.
+    fn awaited(&self) -> bool {
+        matches!(self, Work::Region { .. } | Work::Probe { .. })
+    }
 }
 
 pub struct Job {
@@ -106,7 +118,7 @@ impl Queue {
     /// never dropped: someone waits for it).
     pub fn drop_volume(&mut self, volume_id: &str, priority: Priority) -> usize {
         let before = self.jobs.len();
-        self.jobs.retain(|job| job.volume_id != volume_id || job.priority < priority || matches!(job.work, Work::Region { .. }));
+        self.jobs.retain(|job| job.volume_id != volume_id || job.priority < priority || job.work.awaited());
         before - self.jobs.len()
     }
 
@@ -116,7 +128,15 @@ impl Queue {
     }
 
     pub fn queued_pages(&self, volume_id: &str) -> HashSet<i64> {
-        self.jobs.iter().filter(|job| job.volume_id == volume_id).map(|job| job.page).collect()
+        self.jobs.iter().filter(|job| job.volume_id == volume_id && !matches!(job.work, Work::Probe { .. })).map(|job| job.page).collect()
+    }
+
+    /// Takes every page and region waiting (the engine cannot read them);
+    /// connection tests stay, they do not need it.
+    pub fn take_reads(&mut self) -> Vec<Job> {
+        let (probes, reads) = std::mem::take(&mut self.jobs).into_iter().partition(|job| matches!(job.work, Work::Probe { .. }));
+        self.jobs = probes;
+        reads
     }
 
     pub fn is_empty(&self) -> bool {
@@ -196,6 +216,21 @@ mod tests {
         assert_eq!(queue.drop_volume("v", Priority::Volume), 1);
         queue.drop_ahead_except("v");
         assert_eq!(order(&mut queue), [("v".to_string(), 0), ("v".to_string(), 2)]);
+    }
+
+    #[test]
+    fn a_connection_test_survives_what_drops_pages() {
+        let mut queue = Queue::default();
+        let (reply, _answer) = mpsc::channel();
+        queue.push("", -1, Priority::Region, Work::Probe { port: 7331, reply });
+        queue.push("v", 1, Priority::Volume, Work::Page);
+        queue.push("v", 2, Priority::Visible, Work::Page);
+        assert_eq!(queue.drop_volume("", Priority::Volume), 0);
+        assert!(queue.queued_pages("").is_empty());
+        let taken: Vec<i64> = queue.take_reads().into_iter().map(|job| job.page).collect();
+        assert_eq!(taken.len(), 2);
+        assert!(matches!(queue.pop().map(|job| job.work), Some(Work::Probe { port: 7331, .. })));
+        assert!(queue.pop().is_none());
     }
 
     #[test]

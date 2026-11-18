@@ -52,7 +52,11 @@ pub async fn save_settings(
         settings.reading_overlay.font_weight = 400;
     }
     let previous = state.settings_snapshot().await;
+    if settings.manga_owocr_port == 0 {
+        settings.manga_owocr_port = crate::manga::ocr::owocr::DEFAULT_PORT;
+    }
     let ocr_variant_changed = previous.manga_ocr_variant != settings.manga_ocr_variant;
+    let ocr_engine_changed = previous.manga_ocr_engine != settings.manga_ocr_engine || previous.manga_owocr_port != settings.manga_owocr_port;
     let previous_overlay = previous.reading_overlay;
     let shortcuts_changed = previous_overlay.toggle_shortcut != settings.reading_overlay.toggle_shortcut
         || previous_overlay.interaction_shortcut != settings.reading_overlay.interaction_shortcut;
@@ -61,7 +65,7 @@ pub async fn save_settings(
     if let Some(remote) = state.manga.remote() {
         remote.cache.set_limit(settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024));
     }
-    if ocr_variant_changed {
+    if ocr_variant_changed || ocr_engine_changed {
         if let Some(ocr) = state.manga.ocr() {
             ocr.reload();
         }
@@ -89,6 +93,11 @@ pub async fn save_settings(
                 let _ = tray.set_menu(Some(menu));
             }
         }
+    }
+
+    // The settings are in place now: the OCR's status follows the engine.
+    if ocr_variant_changed || ocr_engine_changed {
+        crate::manga::ocr::emit_status(&app);
     }
 
     // A new server or key invalidates whatever we matched before.
@@ -1850,11 +1859,35 @@ fn ocr_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::ocr::Servi
     state.manga.ocr().ok_or_else(|| "error".to_string())
 }
 
-/// The built-in OCR: whether it is installed, where it runs, what it reads.
+/// `not-installed` when the chosen engine is the built-in one and it is not
+/// downloaded yet. owocr is always worth asking: if it is not running, the
+/// first page says so (`owocr-unavailable`).
+async fn ensure_ocr_ready(state: &AppState, ocr: &crate::manga::ocr::Service) -> CmdResult<()> {
+    let settings = state.settings_snapshot().await;
+    if ocr.ready(settings.manga_ocr_engine, settings.manga_ocr_variant) {
+        Ok(())
+    } else {
+        Err("not-installed".into())
+    }
+}
+
+/// The OCR: the engine chosen, whether the built-in one is installed, where
+/// it runs, what it reads.
 #[tauri::command]
 pub async fn manga_ocr_status(state: State<'_, AppState>) -> CmdResult<crate::manga::ocr::OcrStatus> {
-    let variant = state.settings_snapshot().await.manga_ocr_variant;
-    Ok(ocr_of(&state)?.status(variant))
+    let settings = state.settings_snapshot().await;
+    Ok(ocr_of(&state)?.status(settings.manga_ocr_engine, settings.manga_ocr_variant))
+}
+
+/// "Test connection" to owocr on `port` of this computer (the one typed in
+/// settings, saved or not): sends it a small image and says what came back.
+#[tauri::command]
+pub async fn manga_owocr_test(app: AppHandle, state: State<'_, AppState>, port: u16) -> CmdResult<crate::manga::ocr::owocr::OwocrProbe> {
+    if port == 0 {
+        return Err("bad-port".into());
+    }
+    let ocr = ocr_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || ocr.probe_owocr(&app, port)).await.map_err(err)
 }
 
 /// The reader has no text for these pages: read `visible` now and `ahead`
@@ -1862,9 +1895,7 @@ pub async fn manga_ocr_status(state: State<'_, AppState>) -> CmdResult<crate::ma
 #[tauri::command]
 pub async fn manga_ocr_read_pages(app: AppHandle, state: State<'_, AppState>, volume_id: String, visible: Vec<i64>, ahead: Vec<i64>) -> CmdResult<()> {
     let ocr = ocr_of(&state)?;
-    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
-        return Err("not-installed".into());
-    }
+    ensure_ocr_ready(&state, &ocr).await?;
     ocr.request_pages(&app, &volume_id, &visible, &ahead);
     Ok(())
 }
@@ -1874,9 +1905,7 @@ pub async fn manga_ocr_read_pages(app: AppHandle, state: State<'_, AppState>, vo
 #[tauri::command]
 pub async fn manga_ocr_process_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<usize> {
     let ocr = ocr_of(&state)?;
-    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
-        return Err("not-installed".into());
-    }
+    ensure_ocr_ready(&state, &ocr).await?;
     let db = state.db.clone();
     let remote = state.manga.remote();
     let id = volume_id.clone();
@@ -1923,9 +1952,7 @@ pub async fn manga_ocr_delete(app: AppHandle, state: State<'_, AppState>) -> Cmd
 #[tauri::command]
 pub async fn manga_ocr_region(app: AppHandle, state: State<'_, AppState>, volume_id: String, page: i64, bbox: [f64; 4]) -> CmdResult<String> {
     let ocr = ocr_of(&state)?;
-    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
-        return Err("not-installed".into());
-    }
+    ensure_ocr_ready(&state, &ocr).await?;
     tauri::async_runtime::spawn_blocking(move || ocr.recognize_region(&app, &volume_id, page, bbox)).await.map_err(err)?
 }
 
