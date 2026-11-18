@@ -12,6 +12,12 @@ import type { DictionarySummary } from './bindings/DictionarySummary';
 import type { DiscordDecision } from './bindings/DiscordDecision';
 import type { DiscordPresence } from './bindings/DiscordPresence';
 import type { DiscordReason } from './bindings/DiscordReason';
+import type { ExtAction } from './bindings/ExtAction';
+import type { ExtBrowseKind } from './bindings/ExtBrowseKind';
+import type { ExtComponent } from './bindings/ExtComponent';
+import type { ExtInstall } from './bindings/ExtInstall';
+import type { ExtMode } from './bindings/ExtMode';
+import type { ExtStatus } from './bindings/ExtStatus';
 import type { FilterPreview } from './bindings/FilterPreview';
 import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
@@ -70,6 +76,12 @@ import type { WebdavSyncProgress } from './bindings/WebdavSyncProgress';
 
 export type {
   AnimeSession,
+  ExtAction,
+  ExtBrowseKind,
+  ExtComponent,
+  ExtInstall,
+  ExtMode,
+  ExtStatus,
   BlacklistEntry,
   Capabilities,
   DictionaryEntry,

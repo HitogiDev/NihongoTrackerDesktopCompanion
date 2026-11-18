@@ -281,6 +281,23 @@
     "owocrNoCoordinatesTitle": "owocr is running, but without coordinates",
     "owocrFailed": "No owocr at {{url}}",
     "owocrLastError": "Last attempt: {{error}}",
-    "owocrPrivacy": "The app only connects to 127.0.0.1, never to another computer. An online engine chosen in owocr (Google Lens, Bing…) does send the pages to its service."
+    "owocrPrivacy": "The app only connects to 127.0.0.1, never to another computer. An online engine chosen in owocr (Google Lens, Bing…) does send the pages to its service.",
+    "ext": "Extensions",
+    "extManagedHint": "The app installs Suwayomi-Server (with your permission) and runs it only while you use extensions.",
+    "extCustomHint": "Extensions run in your own Suwayomi-Server.",
+    "extInstalled": "{{size}} on disk · {{state}}",
+    "extMissing": "Not installed ({{size}} to download).",
+    "extInstall": "Install…",
+    "extRemove": "Remove server",
+    "extRemoveConfirm": "Remove it",
+    "extRemoveHint": "This deletes Suwayomi, its Java and its installed extensions. Series in your library and downloaded chapters stay.",
+    "extRemoved": "Suwayomi removed",
+    "extNoCustom": "No server saved yet.",
+    "extSetCustom": "Set server",
+    "extEditCustom": "Edit server",
+    "extAdult": "Show sources for adults",
+    "extAdultHint": "Shows extensions and sources marked NSFW or mixed. Series added from them never show their title on Discord.",
+    "extIdle": "Stop the server after (minutes unused)",
+    "extIdleHint": "0 keeps it running until you close the app."
   }
 }

@@ -79,7 +79,8 @@
     },
     "extensions": {
       "title": "Extensiones",
-      "body": "Fuentes en línea a través de un servidor Suwayomi local, solo si decides instalarlo."
+      "body": "Fuentes en línea a través de un servidor Suwayomi local, solo si decides instalarlo.",
+      "action": "Configurar extensiones"
     },
     "tip": "Consejo: pon cada serie en su propia carpeta. Un archivo Vol 1.mokuro junto a Vol 1.cbz o a una carpeta Vol 1 le da texto a ese tomo."
   },
@@ -318,6 +319,212 @@
       "saved_other": "Guardado {{path}} ({{count}} páginas con texto)",
       "uploaded_one": "Subido {{path}} ({{count}} página con texto)",
       "uploaded_other": "Subido {{path}} ({{count}} páginas con texto)"
+    }
+  },
+  "ext": {
+    "loadFailed": "No se pudo leer el estado del servidor de extensiones",
+    "setup": {
+      "title": "Lee fuentes en línea con extensiones",
+      "body": "Las extensiones son las fuentes de Tachiyomi y Mihon, de la tienda Keiyoushi. Funcionan dentro de Suwayomi-Server, un pequeño servidor en este equipo que la app puede instalar y arrancar por ti, o en el tuyo propio.",
+      "thirdParty": "Suwayomi y las extensiones son obra de terceros. No se descarga ni se arranca nada hasta que tú lo elijas.",
+      "install": "Instalar Suwayomi…",
+      "custom": "Usar mi servidor"
+    },
+    "mode": {
+      "managed": "Gestionado",
+      "managedHint": "La app descarga Suwayomi-Server y Java, lo arranca solo mientras usas extensiones y lo para al cerrar la app.",
+      "custom": "URL propia",
+      "customHint": "Un Suwayomi-Server que ya tienes, en este equipo o en tu red.",
+      "recommended": "Recomendado"
+    },
+    "install": {
+      "title": "Instalar Suwayomi-Server",
+      "intro": "Para usar extensiones la app descargará e instalará Suwayomi-Server, un servidor de código abierto escrito en Java, y el entorno Java 21 que necesita. Funciona sin interfaz en este equipo: sin ventana, sin navegador y accesible solo desde este equipo.",
+      "component": {
+        "server": "Suwayomi-Server {{version}}",
+        "java": "Eclipse Temurin Java {{version}}"
+      },
+      "componentHint": {
+        "server": "El servidor, tal cual lo publican sus autores ({{size}})",
+        "java": "El entorno Java sobre el que corre (unos {{size}} descomprimido)"
+      },
+      "present": "Ya está",
+      "download": "A descargar",
+      "disk": "En disco",
+      "diskValue": "unos {{size}}",
+      "free": "Espacio libre",
+      "unknown": "Desconocido",
+      "where": "Se instala en",
+      "noRoom": "Puede que no haya espacio suficiente en este disco.",
+      "local": "Solo escucha en 127.0.0.1, con un puerto al azar y una contraseña que solo conoce la app. Arranca cuando usas extensiones y se para tras un rato sin uso y al cerrar la app.",
+      "thirdParty": "Las extensiones son código de terceros que corre dentro de ese servidor y se conecta a los sitios que lee. Instala solo las que te den confianza.",
+      "license": "Suwayomi-Server es software libre del Suwayomi Project (MPL-2.0), se descarga sin modificar y se comprueba contra un SHA-256 fijo. Java es Eclipse Temurin (GPLv2 con Classpath Exception).",
+      "sourceLink": "Código fuente",
+      "accept": "Instalar ({{size}})",
+      "phase": {
+        "downloading": "Descargando…",
+        "verifying": "Comprobando la descarga…",
+        "unpacking": "Descomprimiendo Java…",
+        "done": "Instalado",
+        "failed": "Detenido",
+        "cancelled": "En pausa"
+      },
+      "progress": "Progreso de la instalación",
+      "of": "{{received}} de {{total}}",
+      "background": "Puedes cerrar esta ventana: la descarga sigue.",
+      "resumes": "Continúa donde se quedó.",
+      "hide": "Ocultar",
+      "show": "Ver",
+      "cancel": "Cancelar descarga",
+      "resume": "Continuar",
+      "close": "Hecho",
+      "doneTitle": "Suwayomi está instalado",
+      "doneBody": "Arranca al abrir la pestaña Extensiones.",
+      "errors": {
+        "offline": "La descarga no pudo llegar al servidor. Revisa tu conexión y vuelve a intentarlo.",
+        "server": "El servidor de descarga respondió con un error.",
+        "checksum": "Un archivo descargado no era el esperado y se ha borrado. Vuelve a intentarlo.",
+        "disk": "No se pudieron escribir los archivos en el disco.",
+        "cancelled": "Descarga en pausa."
+      }
+    },
+    "custom": {
+      "title": "Tu servidor Suwayomi",
+      "body": "La dirección de un Suwayomi-Server que tengas tú. Si usa autenticación básica, añade su usuario y contraseña.",
+      "url": "Dirección",
+      "urlHint": "Tal como la abres en el navegador, por ejemplo http://192.168.1.10:4567",
+      "basic": "Pide usuario y contraseña (basic auth)",
+      "test": "Probar conexión",
+      "save": "Guardar",
+      "found": "Ha respondido Suwayomi {{version}}.",
+      "saved": "Conectado a Suwayomi {{version}}",
+      "privacy": "La dirección y la contraseña se quedan en los datos de la app: las páginas e imágenes las pide la app, nunca la vista web."
+    },
+    "server": {
+      "managed": "gestionado por la app",
+      "phase": {
+        "not-installed": "Sin instalar",
+        "installing": "Instalando",
+        "not-configured": "Sin servidor",
+        "stopped": "Parado",
+        "starting": "Arrancando el servidor…",
+        "ready": "Listo",
+        "error": "No disponible"
+      },
+      "startingBody": "El primer arranque tarda un poco más.",
+      "start": "Arrancar",
+      "retry": "Reintentar",
+      "stop": "Parar el servidor",
+      "addStore": "Añadir la tienda Keiyoushi"
+    },
+    "view": {
+      "label": "Extensiones",
+      "library": "En la biblioteca",
+      "explore": "Explorar",
+      "store": "Tienda"
+    },
+    "library": {
+      "none": "Aún no hay series de extensiones",
+      "noneBody": "Explora una fuente y añade una serie, o empieza a leer un capítulo.",
+      "explore": "Explorar fuentes"
+    },
+    "sources": {
+      "loadFailed": "No se pudieron listar las fuentes",
+      "none": "Aún no hay fuentes",
+      "noneBody": "Instala una extensión desde la tienda y sus fuentes aparecerán aquí.",
+      "openStore": "Abrir la tienda"
+    },
+    "content": {
+      "safe": "Segura",
+      "safeHint": "Marcada como segura por la tienda",
+      "mixed": "Mixta",
+      "mixedHint": "Puede incluir contenido para adultos",
+      "nsfw": "Adultos",
+      "nsfwHint": "Contenido para adultos"
+    },
+    "store": {
+      "warning": "Las extensiones son código de terceros que corre en el servidor Suwayomi y visita los sitios que lee.",
+      "adultHidden": "Las fuentes para adultos y mixtas están ocultas; puedes mostrarlas en Ajustes.",
+      "search": "Buscar extensiones",
+      "language": "Idioma",
+      "allLanguages": "Todos los idiomas",
+      "show": "Mostrar",
+      "filter": {
+        "all": "Todas",
+        "installed": "Instaladas",
+        "updates": "Actualizaciones"
+      },
+      "refresh": "Actualizar la tienda",
+      "loadFailed": "No se pudo leer la tienda",
+      "none": "Ninguna extensión coincide",
+      "noneBody": "Prueba con otro idioma u otra búsqueda.",
+      "count_one": "{{count}} extensión",
+      "count_other": "{{count}} extensiones",
+      "install": "Instalar",
+      "update": "Actualizar",
+      "installed": "Instalada",
+      "obsolete": "Obsoleta",
+      "uninstall": "Desinstalar {{name}}",
+      "done": {
+        "install": "{{name}} instalada",
+        "update": "{{name}} actualizada",
+        "uninstall": "{{name}} desinstalada"
+      },
+      "failed": "{{name}}: {{message}}"
+    },
+    "browse": {
+      "title": "Fuente",
+      "kind": "Qué mostrar",
+      "popular": "Populares",
+      "latest": "Recientes",
+      "search": "Buscar en esta fuente",
+      "resultsFor": "Resultados de «{{query}}»",
+      "failed": "La fuente no ha respondido",
+      "none": "No hay nada aquí",
+      "end": "No hay más",
+      "inLibrary": "En biblioteca"
+    },
+    "manga": {
+      "add": "Añadir a la biblioteca",
+      "added": "{{title}} está en tu biblioteca",
+      "inLibrary": "Abrir en la biblioteca",
+      "adult": "Esta fuente puede tener contenido para adultos: la serie se trata como privada (Discord solo muestra actividad genérica).",
+      "chapters": "Capítulos",
+      "refresh": "Volver a preguntar a la fuente",
+      "noChapters": "Esta serie no tiene capítulos",
+      "failed": "No se pudo abrir esta serie",
+      "more": "Más",
+      "less": "Menos",
+      "tracked": "En tu biblioteca: leer cuenta páginas, caracteres y tiempo.",
+      "readAdds": "Leer un capítulo añade la serie a tu biblioteca, para poder registrar la lectura."
+    },
+    "detail": {
+      "from": "De una extensión · {{server}}",
+      "chapters_one": "{{count}} capítulo",
+      "chapters_other": "{{count}} capítulos",
+      "pagesOnOpen": "Las páginas se cargan al abrirlo",
+      "refreshed": "Capítulos actualizados"
+    },
+    "state": {
+      "installed": "Instalado"
+    },
+    "errors": {
+      "offline": "No se pudo conectar con el servidor.",
+      "unauthorized": "El servidor ha rechazado el usuario o la contraseña.",
+      "not-installed": "Suwayomi aún no está instalado.",
+      "not-configured": "No hay ningún servidor de extensiones configurado.",
+      "start-failed": "El servidor Suwayomi no ha arrancado. Su registro está en su carpeta (server.log).",
+      "server": "El servidor respondió con un error (puede que la fuente esté caída).",
+      "bad-reply": "No se entendió la respuesta del servidor.",
+      "not-found": "No está en el servidor.",
+      "adult-hidden": "Esta fuente es para adultos y están ocultas. Puedes mostrarlas en Ajustes.",
+      "disk": "No se pudo guardar algo en el disco.",
+      "unsupported": "No hay Java para este equipo, así que el servidor gestionado no puede funcionar aquí. Puedes usar tu propio servidor.",
+      "busy": "Espera a que termine la instalación.",
+      "other-server": "Esta serie viene del otro servidor de extensiones. Vuelve a él para leerla en línea.",
+      "checksum": "Una descarga no era el archivo esperado.",
+      "cancelled": "Cancelado.",
+      "invalid-url": "Escribe una dirección completa http:// o https://."
     }
   }
 }

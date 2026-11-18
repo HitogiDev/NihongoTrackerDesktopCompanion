@@ -79,7 +79,8 @@
     },
     "extensions": {
       "title": "Extensions",
-      "body": "Online sources through a local Suwayomi server, only if you choose to install it."
+      "body": "Online sources through a local Suwayomi server, only if you choose to install it.",
+      "action": "Set up extensions"
     },
     "tip": "Tip: put each series in its own folder. A file called Vol 1.mokuro next to Vol 1.cbz or a Vol 1 folder gives that volume its text."
   },
@@ -318,6 +319,212 @@
       "saved_other": "Saved {{path}} ({{count}} pages with text)",
       "uploaded_one": "Uploaded {{path}} ({{count}} page with text)",
       "uploaded_other": "Uploaded {{path}} ({{count}} pages with text)"
+    }
+  },
+  "ext": {
+    "loadFailed": "Could not read the state of the extensions server",
+    "setup": {
+      "title": "Read online sources with extensions",
+      "body": "Extensions are the sources of Tachiyomi and Mihon, from the Keiyoushi store. They run in Suwayomi-Server, a small server on this computer that the app can install and start for you, or in your own.",
+      "thirdParty": "Suwayomi and the extensions are made by other people. Nothing is downloaded or started until you choose.",
+      "install": "Install Suwayomi…",
+      "custom": "Use my server"
+    },
+    "mode": {
+      "managed": "Managed",
+      "managedHint": "The app downloads Suwayomi-Server and Java, runs it only while you use extensions and stops it when you close the app.",
+      "custom": "My own server",
+      "customHint": "A Suwayomi-Server you already run, on this computer or your network.",
+      "recommended": "Recommended"
+    },
+    "install": {
+      "title": "Install Suwayomi-Server",
+      "intro": "To use extensions the app will download and install Suwayomi-Server, an open-source server written in Java, and the Java 21 runtime it needs. It runs headless on this computer: no window, no browser, only reachable from this computer.",
+      "component": {
+        "server": "Suwayomi-Server {{version}}",
+        "java": "Eclipse Temurin Java {{version}}"
+      },
+      "componentHint": {
+        "server": "The server, as released by its authors ({{size}})",
+        "java": "The Java runtime it runs on (about {{size}} unpacked)"
+      },
+      "present": "Here",
+      "download": "To download",
+      "disk": "On disk",
+      "diskValue": "about {{size}}",
+      "free": "Free space",
+      "unknown": "Unknown",
+      "where": "Installed in",
+      "noRoom": "There may not be enough free space on this disk.",
+      "local": "It listens only on 127.0.0.1, with a random port and a password only the app knows. It starts when you use extensions and stops after a while unused and when you close the app.",
+      "thirdParty": "Extensions are third-party code that runs inside that server and talks to the sites it reads. Install only those you trust.",
+      "license": "Suwayomi-Server is free software by the Suwayomi Project (MPL-2.0), downloaded unmodified and checked against a fixed SHA-256. Java is Eclipse Temurin (GPLv2 with Classpath Exception).",
+      "sourceLink": "Source code",
+      "accept": "Install ({{size}})",
+      "phase": {
+        "downloading": "Downloading…",
+        "verifying": "Checking the download…",
+        "unpacking": "Unpacking Java…",
+        "done": "Installed",
+        "failed": "Stopped",
+        "cancelled": "Paused"
+      },
+      "progress": "Installation progress",
+      "of": "{{received}} of {{total}}",
+      "background": "You can close this window: the download carries on.",
+      "resumes": "It continues where it stopped.",
+      "hide": "Hide",
+      "show": "Show",
+      "cancel": "Cancel download",
+      "resume": "Continue",
+      "close": "Done",
+      "doneTitle": "Suwayomi is installed",
+      "doneBody": "It starts when you open the Extensions tab.",
+      "errors": {
+        "offline": "The download could not reach the server. Check your connection and try again.",
+        "server": "The download server answered with an error.",
+        "checksum": "A downloaded file was not the expected one, so it was deleted. Try again.",
+        "disk": "The files could not be written to disk.",
+        "cancelled": "Download paused."
+      }
+    },
+    "custom": {
+      "title": "Your Suwayomi server",
+      "body": "The address of a Suwayomi-Server you run yourself. If it uses basic authentication, add its user and password.",
+      "url": "Address",
+      "urlHint": "As you open it in the browser, for example http://192.168.1.10:4567",
+      "basic": "It asks for a user and password (basic auth)",
+      "test": "Test connection",
+      "save": "Save",
+      "found": "Suwayomi {{version}} answered.",
+      "saved": "Connected to Suwayomi {{version}}",
+      "privacy": "The address and the password stay in the app's own data: pages and images are fetched by the app, never by the web view."
+    },
+    "server": {
+      "managed": "managed by the app",
+      "phase": {
+        "not-installed": "Not installed",
+        "installing": "Installing",
+        "not-configured": "No server set",
+        "stopped": "Stopped",
+        "starting": "Starting the server…",
+        "ready": "Ready",
+        "error": "Not available"
+      },
+      "startingBody": "The first start takes a little longer.",
+      "start": "Start",
+      "retry": "Retry",
+      "stop": "Stop the server",
+      "addStore": "Add the Keiyoushi store"
+    },
+    "view": {
+      "label": "Extensions",
+      "library": "In the library",
+      "explore": "Explore",
+      "store": "Store"
+    },
+    "library": {
+      "none": "No series from extensions yet",
+      "noneBody": "Explore a source and add a series, or start reading a chapter.",
+      "explore": "Explore sources"
+    },
+    "sources": {
+      "loadFailed": "Could not list the sources",
+      "none": "No sources yet",
+      "noneBody": "Install an extension from the store and its sources appear here.",
+      "openStore": "Open the store"
+    },
+    "content": {
+      "safe": "Safe",
+      "safeHint": "Marked safe by the store",
+      "mixed": "Mixed",
+      "mixedHint": "May include adult content",
+      "nsfw": "Adult",
+      "nsfwHint": "Adult content"
+    },
+    "store": {
+      "warning": "Extensions are third-party code that runs in the Suwayomi server and visits the sites it reads.",
+      "adultHidden": "Adult and mixed sources are hidden; you can show them in Settings.",
+      "search": "Search extensions",
+      "language": "Language",
+      "allLanguages": "All languages",
+      "show": "Show",
+      "filter": {
+        "all": "All",
+        "installed": "Installed",
+        "updates": "Updates"
+      },
+      "refresh": "Refresh the store",
+      "loadFailed": "Could not read the store",
+      "none": "No extensions match",
+      "noneBody": "Try another language or search.",
+      "count_one": "{{count}} extension",
+      "count_other": "{{count}} extensions",
+      "install": "Install",
+      "update": "Update",
+      "installed": "Installed",
+      "obsolete": "Obsolete",
+      "uninstall": "Uninstall {{name}}",
+      "done": {
+        "install": "{{name}} installed",
+        "update": "{{name}} updated",
+        "uninstall": "{{name}} uninstalled"
+      },
+      "failed": "{{name}}: {{message}}"
+    },
+    "browse": {
+      "title": "Source",
+      "kind": "What to show",
+      "popular": "Popular",
+      "latest": "Latest",
+      "search": "Search this source",
+      "resultsFor": "Results for “{{query}}”",
+      "failed": "The source did not answer",
+      "none": "Nothing here",
+      "end": "That is all",
+      "inLibrary": "In library"
+    },
+    "manga": {
+      "add": "Add to library",
+      "added": "{{title}} is in your library",
+      "inLibrary": "Open in library",
+      "adult": "This source may have adult content: the series is kept private (Discord shows only generic activity).",
+      "chapters": "Chapters",
+      "refresh": "Ask the source again",
+      "noChapters": "This series has no chapters",
+      "failed": "Could not open this series",
+      "more": "More",
+      "less": "Less",
+      "tracked": "In your library: reading counts pages, characters and time.",
+      "readAdds": "Reading a chapter adds the series to your library, so the reading can be logged."
+    },
+    "detail": {
+      "from": "From an extension · {{server}}",
+      "chapters_one": "{{count}} chapter",
+      "chapters_other": "{{count}} chapters",
+      "pagesOnOpen": "Pages load when you open it",
+      "refreshed": "Chapters updated"
+    },
+    "state": {
+      "installed": "Installed"
+    },
+    "errors": {
+      "offline": "The server could not be reached.",
+      "unauthorized": "The server refused the user or password.",
+      "not-installed": "Suwayomi is not installed yet.",
+      "not-configured": "No extensions server is set up.",
+      "start-failed": "The Suwayomi server did not start. Its log is in its folder (server.log).",
+      "server": "The server answered with an error (the source may be down).",
+      "bad-reply": "The server's answer was not understood.",
+      "not-found": "Not found on the server.",
+      "adult-hidden": "This source is for adults and they are hidden. You can show them in Settings.",
+      "disk": "Something could not be saved on disk.",
+      "unsupported": "There is no Java build for this computer, so the managed server cannot run here. You can use your own server.",
+      "busy": "Wait for the installation to finish.",
+      "other-server": "This series comes from the other extensions server. Switch back to it to read online.",
+      "checksum": "A download was not the expected file.",
+      "cancelled": "Cancelled.",
+      "invalid-url": "Enter a full http:// or https:// address."
     }
   }
 }
