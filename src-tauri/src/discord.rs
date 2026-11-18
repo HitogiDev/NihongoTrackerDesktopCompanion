@@ -161,6 +161,34 @@ fn blacklisted<'a>(list: &'a [BlacklistEntry], key: &str) -> Option<&'a Blacklis
     list.iter().find(|entry| entry.key == needle)
 }
 
+/// What may be said about a manga session: the blacklist entry that silences
+/// it, or why its title shows or not. The same rules for Discord and for the
+/// friends who see what one is immersed in (`sync::immersion_presence`).
+pub fn manga_privacy<'a>(
+    manga: &crate::manga::session::MangaSession,
+    settings: &Settings,
+    blacklist: &'a [BlacklistEntry],
+) -> Result<Reason, &'a BlacklistEntry> {
+    let series_key = format!("manga:{}", manga.series_id);
+    if let Some(entry) = manga
+        .media_id
+        .as_deref()
+        .and_then(|id| blacklisted(blacklist, id))
+        .or_else(|| blacklisted(blacklist, &series_key))
+    {
+        return Err(entry);
+    }
+    Ok(if manga.is_adult {
+        Reason::Adult
+    } else if manga.media_id.is_none() {
+        Reason::Unresolved
+    } else if settings.discord_generic_mode {
+        Reason::Generic
+    } else {
+        Reason::Full
+    })
+}
+
 /// The whole policy, as a pure function: same inputs, same answer, whether it
 /// is the watcher publishing or the settings screen previewing.
 ///
@@ -250,23 +278,9 @@ pub fn decide(
     // from the media, or set for an adult source), never looked up here.
     if let Some(manga) = snapshot.manga.as_ref() {
         if manga.counting || settings.discord_show_idle {
-            let series_key = format!("manga:{}", manga.series_id);
-            if let Some(entry) = manga
-                .media_id
-                .as_deref()
-                .and_then(|id| blacklisted(blacklist, id))
-                .or_else(|| blacklisted(blacklist, &series_key))
-            {
-                return Decision::Blocked { label: entry.label.clone() };
-            }
-            let reason = if manga.is_adult {
-                Reason::Adult
-            } else if manga.media_id.is_none() {
-                Reason::Unresolved
-            } else if settings.discord_generic_mode {
-                Reason::Generic
-            } else {
-                Reason::Full
+            let reason = match manga_privacy(manga, settings, blacklist) {
+                Err(entry) => return Decision::Blocked { label: entry.label.clone() },
+                Ok(reason) => reason,
             };
             let hide = reason != Reason::Full;
             let title = manga.title().to_string();
@@ -681,7 +695,7 @@ pub fn shutdown(app: &AppHandle) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::parser::ParsedAnime;
     use crate::playback::PlaybackSource;
@@ -795,7 +809,7 @@ mod tests {
         assert_ne!(presence.large_image, "https://img/cover.jpg");
     }
 
-    fn manga(media_id: Option<&str>, is_adult: bool) -> crate::manga::session::MangaSession {
+    pub(crate) fn manga(media_id: Option<&str>, is_adult: bool) -> crate::manga::session::MangaSession {
         serde_json::from_value(serde_json::json!({
             "volume_id": "vol-1", "series_id": "ser-1",
             "series_title": "[Scans] Yotsuba (raw)", "volume_title": "第1巻",
@@ -890,7 +904,7 @@ mod tests {
         }
     }
 
-    fn entry(key: &str, kind: &str) -> BlacklistEntry {
+    pub(crate) fn entry(key: &str, kind: &str) -> BlacklistEntry {
         BlacklistEntry {
             key: key.into(),
             kind: kind.into(),
