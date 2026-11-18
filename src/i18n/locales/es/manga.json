@@ -8,9 +8,7 @@
     "all": "Todo",
     "local": "Local",
     "webdav": "WebDAV",
-    "extensions": "Extensiones",
-    "soon": "Pronto",
-    "soonHint": "Llegará en una próxima versión"
+    "extensions": "Extensiones"
   },
   "actions": {
     "addFolder": "Añadir carpeta",
@@ -68,7 +66,7 @@
   },
   "empty": {
     "title": "Tu estantería de manga está vacía",
-    "body": "Añade manga desde tu ordenador o un servidor WebDAV para leerlo con consultas al pasar el ratón. Tu progreso se queda en este equipo.",
+    "body": "Añade manga desde tu ordenador, un servidor WebDAV o extensiones para leerlo con consultas al pasar el ratón. Tu progreso se queda en este equipo.",
     "local": {
       "title": "Una carpeta de este ordenador",
       "body": "Carpetas de imágenes, tomos en CBZ o ZIP y los archivos .mokuro que les dan texto."

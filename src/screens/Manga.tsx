@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FolderCog, FolderPlus, RefreshCw, Search, SearchX, Server } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -8,6 +9,7 @@ import { EmptyLibrary } from './manga/EmptyLibrary';
 import { FoldersModal } from './manga/FoldersModal';
 import { ServerFormModal } from './manga/ServerFormModal';
 import { ServersModal, ServerStrip } from './manga/Servers';
+import { ExtensionsPanel } from './manga/ext/ExtensionsPanel';
 import { useWebdavSyncEvents } from './manga/useWebdav';
 import { ContinueShelf, SeriesGrid, SeriesGridSkeleton, ShelfSkeleton } from './manga/SeriesGrid';
 import { useAddFolder, useRescan } from './manga/useAddFolder';
@@ -15,12 +17,7 @@ import { useMangaLibrary, useMangaLibraryEvents } from './manga/useMangaLibrary'
 import type { MangaSource } from '../lib/types';
 
 type Origin = 'all' | 'local' | 'webdav' | 'extensions';
-const ORIGINS: { id: Origin; ready: boolean }[] = [
-  { id: 'all', ready: true },
-  { id: 'local', ready: true },
-  { id: 'webdav', ready: true },
-  { id: 'extensions', ready: false },
-];
+const ORIGINS: Origin[] = ['all', 'local', 'webdav', 'extensions'];
 const ORIGIN_SOURCE: Record<Origin, string | null> = { all: null, local: 'local', webdav: 'webdav', extensions: 'suwayomi' };
 
 export default function MangaScreen() {
@@ -30,7 +27,9 @@ export default function MangaScreen() {
   const library = useMangaLibrary();
   const { add, adding } = useAddFolder();
   const { rescan, scanning } = useRescan();
-  const [origin, setOrigin] = useState<Origin>('all');
+  // Back from a source or a series of one: the Extensions tab again.
+  const routeState = useLocation().state as { origin?: Origin } | null;
+  const [origin, setOrigin] = useState<Origin>(routeState?.origin ?? 'all');
   const [search, setSearch] = useState('');
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [serversOpen, setServersOpen] = useState(false);
@@ -51,7 +50,8 @@ export default function MangaScreen() {
       && (!needle || `${series.title} ${series.media_title ?? ''}`.toLowerCase().includes(needle)));
   }, [data, origin, search]);
 
-  const hasSources = (data?.sources.length ?? 0) > 0;
+  // The extensions server's own rows do not make a library: only its series do.
+  const hasSources = (data?.sources ?? []).some((source) => source.kind !== 'suwayomi' || source.series_count > 0) || origin === 'extensions';
   const hasSeries = (data?.series.length ?? 0) > 0;
   const servers = useMemo(() => (data?.sources ?? []).filter((source) => source.kind === 'webdav'), [data]);
   const filtering = search.trim() !== '' || origin !== 'all';
@@ -92,7 +92,7 @@ export default function MangaScreen() {
           <ErrorState title={t('loadFailed')} error={library.error} retrying={library.isFetching} onRetry={() => void library.refetch()} />
         </div>
       ) : !hasSources ? (
-        <EmptyLibrary onAdd={() => void add()} adding={adding} onAddServer={() => openForm(null)} />
+        <EmptyLibrary onAdd={() => void add()} adding={adding} onAddServer={() => openForm(null)} onExtensions={() => setOrigin('extensions')} />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -101,19 +101,16 @@ export default function MangaScreen() {
               <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
             </label>
             <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
-              {ORIGINS.map(({ id, ready }) => (
+              {ORIGINS.map((id) => (
                 <button
                   key={id}
                   type="button"
                   role="tab"
                   aria-selected={origin === id}
-                  disabled={!ready}
-                  title={ready ? undefined : t('tabs.soonHint')}
                   className={origin === id ? 'tab tab-active gap-1.5' : 'tab gap-1.5'}
                   onClick={() => setOrigin(id)}
                 >
                   {t(`tabs.${id}`)}
-                  {ready ? null : <span className="badge badge-ghost badge-xs">{t('tabs.soon')}</span>}
                 </button>
               ))}
             </div>
@@ -121,14 +118,16 @@ export default function MangaScreen() {
 
           {origin === 'webdav' && servers.length > 0 ? <ServerStrip sources={servers} onManage={() => setServersOpen(true)} /> : null}
 
-          {!filtering && data && data.continue_reading.length > 0 ? (
+          {origin === 'extensions' ? <ExtensionsPanel series={filtered} /> : null}
+
+          {origin !== 'extensions' && !filtering && data && data.continue_reading.length > 0 ? (
             <section className="space-y-3" aria-label={t('shelf.title')}>
               <SectionTitle>{t('shelf.title')}</SectionTitle>
               <ContinueShelf items={data.continue_reading} />
             </section>
           ) : null}
 
-          <section className="space-y-3" aria-label={t('grid.title')}>
+          {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
             <SectionTitle aside={<span className="text-xs text-base-content/50">{filtered.length}</span>}>{t('grid.title')}</SectionTitle>
             {filtered.length > 0 ? (
               <SeriesGrid series={filtered} />
@@ -179,7 +178,7 @@ export default function MangaScreen() {
                 />
               </div>
             )}
-          </section>
+          </section>}
         </>
       )}
       <ServersModal open={serversOpen} onClose={() => setServersOpen(false)} sources={data?.sources ?? []} onAdd={() => openForm(null)} onEdit={openForm} />

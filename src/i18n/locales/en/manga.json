@@ -8,9 +8,7 @@
     "all": "All",
     "local": "Local",
     "webdav": "WebDAV",
-    "extensions": "Extensions",
-    "soon": "Soon",
-    "soonHint": "Coming in a later update"
+    "extensions": "Extensions"
   },
   "actions": {
     "addFolder": "Add folder",
@@ -68,7 +66,7 @@
   },
   "empty": {
     "title": "Your manga shelf is empty",
-    "body": "Add manga from your computer or a WebDAV server to read it with hover lookups. Your progress stays on this computer.",
+    "body": "Add manga from your computer, a WebDAV server or extensions to read it with hover lookups. Your progress stays on this computer.",
     "local": {
       "title": "A folder on this computer",
       "body": "Folders of images, CBZ or ZIP volumes, and the .mokuro files that give them text."
