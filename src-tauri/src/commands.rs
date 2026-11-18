@@ -63,6 +63,8 @@ pub async fn save_settings(
         || previous_overlay.interaction_shortcut != settings.reading_overlay.interaction_shortcut;
     let topmost_changed = previous_overlay.always_on_top != settings.reading_overlay.always_on_top;
     state.db.save_settings(&settings).map_err(err)?;
+    // Suggestions turned on, or a new key: the loop looks again now.
+    state.manga.suggest_wake.notify_one();
     if let Some(remote) = state.manga.remote() {
         remote.cache.set_limit(settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024));
     }
@@ -1727,17 +1729,67 @@ pub fn manga_link_series(
     media_title: Option<String>,
     is_adult: Option<bool>,
 ) -> CmdResult<()> {
-    let media_id = media_id.filter(|id| !id.trim().is_empty());
-    let media_title = media_title.filter(|_| media_id.is_some());
-    let is_adult = media_id.is_some() && is_adult.unwrap_or(false);
-    if !state.db.link_manga_series(&series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
+    if !link_series(&app, &state, &series_id, media_id, media_title, is_adult.unwrap_or(false))? {
         return Err("Unknown series".into());
     }
-    // A series from an adult source stays adult, whatever it is linked to.
-    let is_adult = state.db.manga_series(&series_id).map_err(err)?.map_or(is_adult, |series| series.is_adult);
-    crate::manga::session::series_linked(&app, &series_id, media_id.as_deref(), media_title.as_deref(), is_adult);
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(())
+}
+
+/// Links (or unlinks) a series and tells the session: the one path for a
+/// link picked by hand and for a confirmed suggestion. `false` if the series
+/// is not in the library.
+fn link_series(app: &AppHandle, state: &AppState, series_id: &str, media_id: Option<String>, media_title: Option<String>, is_adult: bool) -> CmdResult<bool> {
+    let media_id = media_id.filter(|id| !id.trim().is_empty());
+    let media_title = media_title.filter(|_| media_id.is_some());
+    let is_adult = media_id.is_some() && is_adult;
+    if !state.db.link_manga_series(series_id, media_id.as_deref(), media_title.as_deref(), is_adult).map_err(err)? {
+        return Ok(false);
+    }
+    // A series from an adult source stays adult, whatever it is linked to.
+    let is_adult = state.db.manga_series(series_id).map_err(err)?.map_or(is_adult, |series| series.is_adult);
+    crate::manga::session::series_linked(app, series_id, media_id.as_deref(), media_title.as_deref(), is_adult);
+    Ok(true)
+}
+
+/// The link suggestions waiting for the user (see `manga::suggest`).
+#[tauri::command]
+pub fn manga_link_suggestions(state: State<'_, AppState>) -> CmdResult<Vec<crate::manga::suggest::MangaLinkSuggestion>> {
+    state.db.link_suggestions().map_err(err)
+}
+
+/// Confirms the suggestions of these series: each is linked to the media
+/// shown to the user, the same way as a link picked by hand. Returns how
+/// many were linked (a series linked meanwhile is skipped).
+#[tauri::command]
+pub fn manga_confirm_suggestions(app: AppHandle, state: State<'_, AppState>, series_ids: Vec<String>) -> CmdResult<u32> {
+    let mut linked = 0;
+    for series_id in series_ids {
+        let Some(suggestion) = state.db.link_suggestion(&series_id).map_err(err)? else { continue };
+        if link_series(&app, &state, &series_id, Some(suggestion.media_id), Some(suggestion.media_title), suggestion.is_adult)? {
+            linked += 1;
+        }
+    }
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    let _ = app.emit(crate::manga::suggest::SUGGESTIONS_CHANGED, ());
+    Ok(linked)
+}
+
+/// "Not this one": the media is never suggested again for the series.
+#[tauri::command]
+pub fn manga_dismiss_suggestion(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+    state.db.dismiss_link_suggestion(&series_id).map_err(err)?;
+    let _ = app.emit(crate::manga::suggest::SUGGESTIONS_CHANGED, ());
+    Ok(())
+}
+
+/// The series the library shows now, top first: looked up before the rest.
+#[tauri::command]
+pub fn manga_suggest_priority(state: State<'_, AppState>, series_ids: Vec<String>) {
+    let mut ids = series_ids;
+    ids.truncate(crate::manga::suggest::PRIORITY_LIMIT);
+    *state.manga.suggest_priority.lock().unwrap() = ids;
+    state.manga.suggest_wake.notify_one();
 }
 
 /// Opens the reader window on a volume, at `page` or where the user left off.

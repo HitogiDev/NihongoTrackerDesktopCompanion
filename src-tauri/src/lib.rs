@@ -192,6 +192,7 @@ pub fn run() {
             sync::spawn_flusher(app.handle().clone());
             connection::spawn(app.handle().clone());
             sync::spawn_presence_sync(app.handle().clone());
+            sync::spawn_manga_suggester(app.handle().clone());
             streak::spawn(app.handle().clone());
             #[cfg(desktop)]
             {
@@ -402,6 +403,10 @@ pub fn run() {
             commands::manga_library,
             commands::manga_series_detail,
             commands::manga_link_series,
+            commands::manga_link_suggestions,
+            commands::manga_confirm_suggestions,
+            commands::manga_dismiss_suggestion,
+            commands::manga_suggest_priority,
             commands::manga_open_reader,
             commands::manga_reader_target,
             commands::manga_reader_volume,

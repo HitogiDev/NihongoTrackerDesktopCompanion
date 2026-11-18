@@ -258,6 +258,12 @@ export function MangaSection({ settings }: { settings: Settings }) {
   return (
     <div className="surface p-2 divide-y divide-base-300/50">
       <Toggle
+        label={t('manga.suggest')}
+        description={t('manga.suggestHint')}
+        checked={settings.manga_link_suggestions}
+        onChange={(v) => void updateSettings({ manga_link_suggestions: v })}
+      />
+      <Toggle
         label={t('manga.confirm')}
         description={t('manga.confirmHint')}
         checked={settings.manga_confirm_before_log}

@@ -175,6 +175,10 @@ pub struct Settings {
     /// `mokuro-reader/volume-data.json` (writes to the server: opt-in).
     #[serde(default)]
     pub manga_webdav_sync_progress: bool,
+    /// Look unlinked series up on NihongoTracker in the background and
+    /// suggest a media for each (`manga::suggest`). Never links on its own.
+    #[serde(default = "d_true")]
+    pub manga_link_suggestions: bool,
     /// The built-in OCR's recognizer weights (`manga::ocr::assets::Variant`).
     #[serde(default)]
     pub manga_ocr_variant: crate::manga::ocr::assets::Variant,
@@ -365,6 +369,7 @@ impl Default for Settings {
             manga_idle_log_minutes: d_manga_idle_log(),
             manga_webdav_cache_mb: d_manga_webdav_cache(),
             manga_webdav_sync_progress: false,
+            manga_link_suggestions: true,
             manga_ocr_variant: Default::default(),
             manga_ocr_auto: true,
             manga_ocr_engine: Default::default(),

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server } from 'lucide-react';
+import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server, Sparkles } from 'lucide-react';
+import { MANGA } from './manga/Cover';
 import { Button } from '../components/ui/Button';
 import { EmptyState, ErrorState } from '../components/ui/Empty';
 import { Page, SectionTitle } from '../components/ui/Page';
@@ -19,6 +20,9 @@ import { useAddFolder, useRescan } from './manga/useAddFolder';
 import { useMangaLibrary, useMangaLibraryEvents } from './manga/useMangaLibrary';
 import { formatCount } from '../lib/manga';
 import { LibraryToolbar } from './manga/LibraryToolbar';
+import { SuggestionReview } from './manga/Suggestions';
+import { useSuggestions } from './manga/useSuggestions';
+import { ipc } from '../lib/ipc';
 import { activeFilters, applyView, DEFAULT_VIEW, loadView, saveView, type LibraryView } from './manga/libraryView';
 import type { MangaSource } from '../lib/types';
 
@@ -78,9 +82,20 @@ export default function MangaScreen() {
       (!source || series.source === source)
       && (!needle || `${series.title} ${series.media_title ?? ''}`.toLowerCase().includes(needle)));
   }, [data, origin, search]);
-  const suggested = useMemo(() => new Set<string>(), []);
+  const suggestions = useSuggestions();
+  const suggested = useMemo(() => new Set(suggestions.byId.keys()), [suggestions.byId]);
   const filtered = useMemo(() => applyView(searched, view, suggested), [searched, view, suggested]);
   const narrowed = activeFilters(view) > 0;
+  const reviewing = view.link === 'suggested';
+  const waiting = useMemo(() => searched.filter((item) => !item.media_id && suggested.has(item.id)).length, [searched, suggested]);
+
+  // Suggestions look up first what the grid shows first (Rust keeps the pace).
+  useEffect(() => {
+    const ids = filtered.filter((item) => !item.media_id && !suggested.has(item.id)).slice(0, 240).map((item) => item.id);
+    if (ids.length === 0) return;
+    const timer = setTimeout(() => void ipc.mangaSuggestPriority(ids).catch(() => undefined), 800);
+    return () => clearTimeout(timer);
+  }, [filtered, suggested]);
 
   // The extensions server's own rows do not make a library: only its series do.
   const hasSources = (data?.sources ?? []).some((source) => source.kind !== 'suwayomi' || source.series_count > 0) || origin === 'extensions';
@@ -137,6 +152,12 @@ export default function MangaScreen() {
               <Search className="h-4 w-4 opacity-60" />
               <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
             </label>
+            {origin !== 'extensions' && waiting > 0 && !reviewing ? (
+              <button type="button" className="btn btn-ghost btn-sm gap-1.5 text-base-content/70" onClick={() => setView({ ...view, link: 'suggested' })} title={t('suggest.review.open')}>
+                <Sparkles className={`h-4 w-4 ${MANGA.color}`} aria-hidden="true" />
+                {t('suggest.review.waiting', { count: waiting })}
+              </button>
+            ) : null}
             {origin === 'extensions' ? null : <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} />}
             <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
               {ORIGINS.map((id) => (
@@ -167,9 +188,11 @@ export default function MangaScreen() {
           ) : null}
 
           {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
-            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}</span>}>{t('grid.title')}</SectionTitle>
-            {filtered.length > 0 ? (
-              <SeriesGrid series={filtered} />
+            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}</span>}>{reviewing ? t('suggest.review.title') : t('grid.title')}</SectionTitle>
+            {reviewing && searched.length > 0 ? (
+              <SuggestionReview series={filtered} suggestions={suggestions.byId} />
+            ) : filtered.length > 0 ? (
+              <SeriesGrid series={filtered} suggested={suggested} />
             ) : narrowed && searched.length > 0 ? (
               <div className="surface">
                 <EmptyState

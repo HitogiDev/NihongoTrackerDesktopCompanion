@@ -586,5 +586,34 @@
       "unlinked": "Not linked",
       "suggested": "Suggestion waiting"
     }
+  },
+  "suggest": {
+    "isThisIt": "Is this it?",
+    "why": "Found by searching “{{query}}”",
+    "score": "{{percent}}% match",
+    "scoreHint": "How much its titles look like the series' name",
+    "confirm": "Confirm",
+    "choose": "Choose another",
+    "dismiss": "Dismiss",
+    "badge": "A NihongoTracker match is waiting for review",
+    "toast": {
+      "linked_one": "{{count, number}} series linked to NihongoTracker",
+      "linked_other": "{{count, number}} series linked to NihongoTracker"
+    },
+    "review": {
+      "title": "Suggestions to review",
+      "open": "Review the suggested links",
+      "waiting_one": "{{count, number}} suggestion",
+      "waiting_other": "{{count, number}} suggestions",
+      "selectAll": "Select all",
+      "body": "Nothing is linked until you confirm it. Check each pair first.",
+      "confirmSelected_one": "Confirm {{count, number}}",
+      "confirmSelected_other": "Confirm {{count, number}}",
+      "pick": "Select {{title}} → {{media}}",
+      "confirmOne": "Link {{title}}",
+      "dismissOne": "Dismiss the suggestion for {{title}}",
+      "none": "No suggestions to review",
+      "noneBody": "Unlinked series are looked up on NihongoTracker in the background. Matches show up here."
+    }
   }
 }

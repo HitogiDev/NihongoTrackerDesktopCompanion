@@ -16,6 +16,7 @@ import type {
   MediaHit,
   MediaMatch,
   MangaLibrary,
+  MangaLinkSuggestion,
   MangaSession,
   MangaSeriesDetail,
   MangaSource,
@@ -281,6 +282,10 @@ export const ipc = {
   mangaPrepareSeries: (seriesId: string) => invoke<void>('manga_prepare_series', { seriesId }),
   mangaSeriesDetail: (seriesId: string) => invoke<MangaSeriesDetail | null>('manga_series_detail', { seriesId }),
   /** `mediaId: null` unlinks. */
+  mangaLinkSuggestions: () => invoke<MangaLinkSuggestion[]>('manga_link_suggestions'),
+  mangaConfirmSuggestions: (seriesIds: string[]) => invoke<number>('manga_confirm_suggestions', { seriesIds }),
+  mangaDismissSuggestion: (seriesId: string) => invoke<void>('manga_dismiss_suggestion', { seriesId }),
+  mangaSuggestPriority: (seriesIds: string[]) => invoke<void>('manga_suggest_priority', { seriesIds }),
   mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
     invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
   /** Opens (or focuses) the reader window on a volume. */
@@ -392,6 +397,7 @@ export const events = {
   streakAuthRequired: 'streak://auth-required',
   discordStatus: 'discord://status',
   mangaLibrary: 'manga://library-changed',
+  mangaSuggestions: 'manga://suggestions',
   /** A WebDAV source being listed (`WebdavSyncProgress`). */
   mangaWebdavSync: 'manga://webdav-sync',
   /** A remote volume downloading (`DownloadProgress`). */

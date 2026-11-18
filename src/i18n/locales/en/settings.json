@@ -312,6 +312,8 @@
     "extAdult": "Show sources for adults",
     "extAdultHint": "Shows extensions and sources marked NSFW or mixed. Series added from them never show their title on Discord.",
     "extIdle": "Stop the server after (minutes unused)",
-    "extIdleHint": "0 keeps it running until you close the app."
+    "extIdleHint": "0 keeps it running until you close the app.",
+    "suggest": "Suggest NihongoTracker links",
+    "suggestHint": "Look unlinked series up on NihongoTracker in the background, about one search every two seconds, and suggest a match. Nothing is linked until you confirm it."
   }
 }

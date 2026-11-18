@@ -586,5 +586,34 @@
       "unlinked": "Sin vincular",
       "suggested": "Con sugerencia"
     }
+  },
+  "suggest": {
+    "isThisIt": "¿Es esta?",
+    "why": "Encontrada al buscar «{{query}}»",
+    "score": "Coincide al {{percent}} %",
+    "scoreHint": "Cuánto se parecen sus títulos al nombre de la serie",
+    "confirm": "Confirmar",
+    "choose": "Elegir otra",
+    "dismiss": "Descartar",
+    "badge": "Hay una coincidencia de NihongoTracker por revisar",
+    "toast": {
+      "linked_one": "{{count, number}} serie vinculada a NihongoTracker",
+      "linked_other": "{{count, number}} series vinculadas a NihongoTracker"
+    },
+    "review": {
+      "title": "Sugerencias por revisar",
+      "open": "Revisar los vínculos sugeridos",
+      "waiting_one": "{{count, number}} sugerencia",
+      "waiting_other": "{{count, number}} sugerencias",
+      "selectAll": "Seleccionar todas",
+      "body": "Nada se vincula hasta que lo confirmas. Revisa cada pareja antes.",
+      "confirmSelected_one": "Confirmar {{count, number}}",
+      "confirmSelected_other": "Confirmar {{count, number}}",
+      "pick": "Seleccionar {{title}} → {{media}}",
+      "confirmOne": "Vincular {{title}}",
+      "dismissOne": "Descartar la sugerencia de {{title}}",
+      "none": "No hay sugerencias por revisar",
+      "noneBody": "Las series sin vincular se buscan en NihongoTracker en segundo plano. Las coincidencias aparecen aquí."
+    }
   }
 }

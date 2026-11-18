@@ -312,6 +312,8 @@
     "extAdult": "Mostrar fuentes para adultos",
     "extAdultHint": "Muestra las extensiones y fuentes marcadas como NSFW o mixtas. Las series añadidas desde ellas nunca muestran su título en Discord.",
     "extIdle": "Parar el servidor tras (minutos sin uso)",
-    "extIdleHint": "0 lo mantiene en marcha hasta que cierres la app."
+    "extIdleHint": "0 lo mantiene en marcha hasta que cierres la app.",
+    "suggest": "Sugerir vínculos de NihongoTracker",
+    "suggestHint": "Busca en segundo plano las series sin vincular en NihongoTracker, más o menos una búsqueda cada dos segundos, y sugiere una coincidencia. Nada se vincula hasta que lo confirmas."
   }
 }

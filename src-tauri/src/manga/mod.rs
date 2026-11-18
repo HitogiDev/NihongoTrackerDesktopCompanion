@@ -13,6 +13,7 @@ pub mod protocol;
 pub mod reader;
 pub mod session;
 pub mod store;
+pub mod suggest;
 pub mod suwayomi;
 pub mod thumbs;
 pub mod webdav;
@@ -48,6 +49,12 @@ pub struct Runtime {
     pub ocr: OnceLock<Arc<ocr::Service>>,
     /// The extensions server (see `suwayomi`). Set once at start.
     pub suwayomi: OnceLock<Arc<suwayomi::Service>>,
+    /// The series the library shows now, top first: link suggestions look
+    /// these up before the rest (see `suggest`).
+    pub suggest_priority: Mutex<Vec<String>>,
+    /// Wakes the suggestion loop when it is idle (settings saved, a new
+    /// series, the user scrolled to unlooked-at ones).
+    pub suggest_wake: tokio::sync::Notify,
 }
 
 impl Runtime {
