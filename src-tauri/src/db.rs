@@ -323,6 +323,13 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE text_history ADD COLUMN intelligence TEXT",
     "ALTER TABLE mined_sentences ADD COLUMN screenshot_path TEXT",
     "ALTER TABLE vn_apps ADD COLUMN filter_chinese INTEGER",
+    // WebDAV manga sources (see `manga::webdav`).
+    "ALTER TABLE manga_sources ADD COLUMN last_sync_at TEXT",
+    "ALTER TABLE manga_sources ADD COLUMN last_error TEXT",
+    "ALTER TABLE manga_series ADD COLUMN signature TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN cover TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN layers_json TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN size INTEGER",
 ];
 
 #[derive(Debug, thiserror::Error)]

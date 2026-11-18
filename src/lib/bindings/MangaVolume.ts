@@ -2,7 +2,7 @@
 
 export type MangaVolume = { id: string, series_id: string, title: string, 
 /**
- * `folder` or `archive`.
+ * `folder` or `archive`, `remote-folder` or `remote-archive`.
  */
 format: string, position: number, page_count: number, 
 /**
@@ -12,4 +12,16 @@ ocr_state: string, added_at: string,
 /**
  * The page the user is on, if they ever opened it (0-based).
  */
-page: number | null, finished: boolean, read_at: string | null, };
+page: number | null, finished: boolean, read_at: string | null, 
+/**
+ * Bytes on the server, for a remote volume.
+ */
+size: number | null, 
+/**
+ * Alternative texts (`<Vol>.<layer>.mokuro`), by layer name.
+ */
+text_layers: Array<string>, 
+/**
+ * The layer the reader shows; `None` is the main `.mokuro`.
+ */
+text_layer: string | null, };

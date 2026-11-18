@@ -6,9 +6,10 @@
 //! for a while (an unplugged drive) and comes back keeps its progress, which is
 //! why `manga_progress` has no foreign key.
 //!
-//! A source's credentials (`auth_json`, used by WebDAV later) stay in Rust:
-//! no struct sent to the UI carries them, like the account's API key never
-//! leaves `Settings` for anything but the settings screen.
+//! A source's credentials (`auth_json`, for WebDAV) stay in Rust: no struct
+//! sent to the UI carries them, only what kind they are (`MangaSource::auth`),
+//! like the account's API key never leaves `Settings` for anything but the
+//! settings screen.
 
 use std::collections::{HashMap, HashSet};
 
@@ -21,10 +22,19 @@ use super::natural_cmp;
 
 /// `manga_sources.kind` for a folder on this computer.
 pub const SOURCE_LOCAL: &str = "local";
+/// `manga_sources.kind` for a WebDAV server (see `manga::webdav`).
+pub const SOURCE_WEBDAV: &str = "webdav";
 
 /// `manga_volumes.format`.
 pub const FORMAT_FOLDER: &str = "folder";
 pub const FORMAT_ARCHIVE: &str = "archive";
+/// On a WebDAV server: `source_ref` is the remote path, not a file.
+pub const FORMAT_REMOTE_ARCHIVE: &str = "remote-archive";
+pub const FORMAT_REMOTE_FOLDER: &str = "remote-folder";
+
+pub fn is_remote_format(format: &str) -> bool {
+    format == FORMAT_REMOTE_ARCHIVE || format == FORMAT_REMOTE_FOLDER
+}
 
 // `manga_volumes.ocr_state` is `none` (no text) or `mokuro` (a `.mokuro` file
 // next to the volume), set by `apply_manga_scan`. The OCR states of a later
@@ -35,13 +45,23 @@ pub const FORMAT_ARCHIVE: &str = "archive";
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct MangaSource {
     pub id: String,
-    /// `local` today; `webdav` and `suwayomi` later.
+    /// `local` or `webdav` (`suwayomi` later).
     pub kind: String,
     pub name: String,
-    /// A folder for `local`, a URL for the others.
+    /// A folder for `local`, a URL (never with credentials) for the others.
     pub url: String,
     pub created_at: String,
     pub series_count: i64,
+    /// `none`, `basic` or `bearer`: what kind of credentials it has, never
+    /// the credentials.
+    pub auth: String,
+    /// The last time its server was listed in full.
+    pub last_sync_at: Option<String>,
+    /// Why the last request to its server failed (`offline`, `unauthorized`…),
+    /// until one succeeds.
+    pub last_error: Option<String>,
+    /// A sync is running now (filled in by the command, not stored).
+    pub syncing: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,7 +94,7 @@ pub struct MangaVolume {
     pub id: String,
     pub series_id: String,
     pub title: String,
-    /// `folder` or `archive`.
+    /// `folder` or `archive`, `remote-folder` or `remote-archive`.
     pub format: String,
     pub position: i64,
     pub page_count: i64,
@@ -85,6 +105,12 @@ pub struct MangaVolume {
     pub page: Option<i64>,
     pub finished: bool,
     pub read_at: Option<String>,
+    /// Bytes on the server, for a remote volume.
+    pub size: Option<i64>,
+    /// Alternative texts (`<Vol>.<layer>.mokuro`), by layer name.
+    pub text_layers: Vec<String>,
+    /// The layer the reader shows; `None` is the main `.mokuro`.
+    pub text_layer: Option<String>,
 }
 
 /// One cover on the "continue reading" shelf.
@@ -116,6 +142,8 @@ pub struct MangaLibrary {
 pub struct MangaSeriesDetail {
     pub series: MangaSeries,
     pub volumes: Vec<MangaVolume>,
+    /// Where it comes from, for a series on a server (offline or not).
+    pub source: Option<MangaSource>,
 }
 
 /// A series as a scan found it, with all of its volumes.
@@ -142,6 +170,34 @@ pub struct VolumeRecord {
     pub mokuro_path: Option<String>,
 }
 
+/// A volume as a WebDAV listing found it (see `webdav::sync`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RemoteVolumeRecord {
+    pub id: String,
+    pub title: String,
+    /// Remote path of the archive or folder.
+    pub source_ref: String,
+    pub format: &'static str,
+    pub position: i64,
+    /// A folder's pages; empty for an archive until its index is read.
+    pub pages: Vec<String>,
+    pub signature: Option<String>,
+    pub mokuro_path: Option<String>,
+    pub layers: Vec<(String, String)>,
+    pub cover: Option<String>,
+    pub size: Option<i64>,
+}
+
+/// A source as Rust needs it, with its credentials. Never for the UI.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceRow {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+    pub url: String,
+    pub auth_json: Option<String>,
+}
+
 /// What it takes to serve a volume's pages. Rust only.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VolumeLocation {
@@ -153,6 +209,12 @@ pub struct VolumeLocation {
     pub pages: Vec<String>,
     pub signature: Option<String>,
     pub mokuro_path: Option<String>,
+    pub source_id: String,
+    /// A remote volume's own cover image (its sidecar), as a remote path.
+    pub cover: Option<String>,
+    /// `(layer, remote path)` of its alternative texts.
+    pub layers: Vec<(String, String)>,
+    pub size: Option<i64>,
 }
 
 /// What a scan changed, for the caches that hang off volume ids.
@@ -166,6 +228,7 @@ pub struct ScanChanges {
 
 fn map_volume_location(r: &rusqlite::Row<'_>) -> Result<VolumeLocation> {
     let pages: String = r.get(5)?;
+    let layers: Option<String> = r.get(10)?;
     Ok(VolumeLocation {
         id: r.get(0)?,
         series_id: r.get(1)?,
@@ -175,11 +238,20 @@ fn map_volume_location(r: &rusqlite::Row<'_>) -> Result<VolumeLocation> {
         pages: serde_json::from_str(&pages).unwrap_or_default(),
         signature: r.get(6)?,
         mokuro_path: r.get(7)?,
+        source_id: r.get(8)?,
+        cover: r.get(9)?,
+        layers: layers.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default(),
+        size: r.get(11)?,
     })
 }
 
-const VOLUME_LOCATION: &str =
-    "SELECT id, series_id, title, source_ref, format, pages_json, signature, mokuro_path FROM manga_volumes";
+const VOLUME_LOCATION: &str = "SELECT v.id, v.series_id, v.title, v.source_ref, v.format, v.pages_json, v.signature, v.mokuro_path,
+            s.source_id, v.cover, v.layers_json, v.size
+     FROM manga_volumes v JOIN manga_series s ON s.id = v.series_id";
+
+fn layer_key(volume_id: &str) -> String {
+    format!("manga:layer:{volume_id}")
+}
 
 impl Db {
     // ── sources ────────────────────────────────────────────────────────
@@ -198,10 +270,13 @@ impl Db {
         self.with(|c| {
             let mut stmt = c.prepare(
                 "SELECT m.id, m.kind, m.name, m.url, m.created_at,
-                        (SELECT COUNT(*) FROM manga_series s WHERE s.source_id = m.id)
+                        (SELECT COUNT(*) FROM manga_series s WHERE s.source_id = m.id),
+                        m.auth_json, m.last_sync_at, m.last_error
                  FROM manga_sources m ORDER BY m.created_at",
             )?;
             let rows = stmt.query_map([], |r| {
+                // Only the kind of the credentials is read out of them.
+                let auth: Option<String> = r.get(6)?;
                 Ok(MangaSource {
                     id: r.get(0)?,
                     kind: r.get(1)?,
@@ -209,6 +284,10 @@ impl Db {
                     url: r.get(3)?,
                     created_at: r.get(4)?,
                     series_count: r.get(5)?,
+                    auth: crate::manga::webdav::client::Auth::from_json(auth.as_deref()).kind().to_string(),
+                    last_sync_at: r.get(7)?,
+                    last_error: r.get(8)?,
+                    syncing: false,
                 })
             })?;
             rows.collect()
@@ -216,12 +295,49 @@ impl Db {
     }
 
     /// The source's credentials, for Rust's own requests. Never for the UI.
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn manga_source_auth(&self, id: &str) -> Result<Option<String>> {
         self.with(|c| {
             c.query_row("SELECT auth_json FROM manga_sources WHERE id = ?1", params![id], |r| r.get(0))
                 .optional()
                 .map(Option::flatten)
+        })
+    }
+
+    /// A source with its credentials, for Rust's own requests.
+    pub fn manga_source_row(&self, id: &str) -> Result<Option<SourceRow>> {
+        self.with(|c| {
+            c.query_row("SELECT id, kind, name, url, auth_json FROM manga_sources WHERE id = ?1", params![id], |r| {
+                Ok(SourceRow { id: r.get(0)?, kind: r.get(1)?, name: r.get(2)?, url: r.get(3)?, auth_json: r.get(4)? })
+            })
+            .optional()
+        })
+    }
+
+    pub fn set_manga_source_auth(&self, id: &str, auth_json: Option<&str>) -> Result<()> {
+        self.with(|c| c.execute("UPDATE manga_sources SET auth_json = ?2 WHERE id = ?1", params![id, auth_json]).map(|_| ()))
+    }
+
+    pub fn update_manga_source(&self, id: &str, name: &str, url: &str) -> Result<bool> {
+        self.with(|c| {
+            c.execute("UPDATE manga_sources SET name = ?2, url = ?3 WHERE id = ?1", params![id, name, url]).map(|n| n > 0)
+        })
+    }
+
+    /// The outcome of the last request to a source's server. A success
+    /// (`error: None`) with `synced` also stamps a full listing.
+    pub fn set_manga_source_status(&self, id: &str, error: Option<&str>, synced: bool) -> Result<bool> {
+        self.with(|c| {
+            let before: Option<Option<String>> = c
+                .query_row("SELECT last_error FROM manga_sources WHERE id = ?1", params![id], |r| r.get(0))
+                .optional()?;
+            if synced {
+                c.execute("UPDATE manga_sources SET last_error = ?2, last_sync_at = ?3 WHERE id = ?1", params![id, error, now_iso()])?;
+            } else {
+                c.execute("UPDATE manga_sources SET last_error = ?2 WHERE id = ?1", params![id, error])?;
+            }
+            // Whether the status changed: the library is told only then.
+            Ok(before.is_some_and(|before| before.as_deref() != error))
         })
     }
 
@@ -351,6 +467,140 @@ impl Db {
         })
     }
 
+    // ── remote sources ─────────────────────────────────────────────────
+
+    /// Makes a WebDAV source's series exactly the folders a listing found
+    /// (`(id, remote path, title)`): new ones added, gone ones removed with
+    /// their volumes, whose ids are returned. A series' volumes, cover and
+    /// signature are left as they are: they come from its own listing.
+    pub fn apply_remote_series(&self, source_id: &str, found: &[(String, String, String)]) -> Result<Vec<String>> {
+        self.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            let now = now_iso();
+            let ids: HashSet<&str> = found.iter().map(|(id, ..)| id.as_str()).collect();
+            for (id, path, title) in found {
+                tx.execute(
+                    "INSERT INTO manga_series (id, source, source_id, source_ref, title, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                     ON CONFLICT(id) DO UPDATE SET source_ref = excluded.source_ref, title = excluded.title",
+                    params![id, SOURCE_WEBDAV, source_id, path, title, now],
+                )?;
+            }
+            let gone: Vec<String> = {
+                let mut stmt = tx.prepare("SELECT id FROM manga_series WHERE source_id = ?1")?;
+                let rows = stmt.query_map(params![source_id], |r| r.get::<_, String>(0))?;
+                rows.filter_map(|row| row.ok()).filter(|id| !ids.contains(id.as_str())).collect()
+            };
+            let mut stale = Vec::new();
+            for id in gone {
+                let mut stmt = tx.prepare("SELECT id FROM manga_volumes WHERE series_id = ?1")?;
+                let volumes = stmt.query_map(params![id], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>>>()?;
+                stale.extend(volumes);
+                tx.execute("DELETE FROM manga_series WHERE id = ?1", params![id])?;
+            }
+            tx.commit()?;
+            Ok(stale)
+        })
+    }
+
+    /// `series id → signature of its folder when it was last listed`.
+    pub fn remote_series_signatures(&self, source_id: &str) -> Result<HashMap<String, Option<String>>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT id, signature FROM manga_series WHERE source_id = ?1")?;
+            let rows = stmt.query_map(params![source_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })
+    }
+
+    /// Makes a remote series' volumes what its listing found. An archive whose
+    /// signature did not change keeps the page list read from it; one that
+    /// changed (or is gone) is returned, so its caches go.
+    pub fn apply_remote_volumes(
+        &self,
+        series_id: &str,
+        signature: Option<&str>,
+        cover: Option<&str>,
+        volumes: &[RemoteVolumeRecord],
+    ) -> Result<Vec<String>> {
+        self.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            let before: HashMap<String, Option<String>> = {
+                let mut stmt = tx.prepare("SELECT id, signature FROM manga_volumes WHERE series_id = ?1")?;
+                let rows = stmt.query_map(params![series_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                rows.collect::<Result<_>>()?
+            };
+            let now = now_iso();
+            let mut stale = Vec::new();
+            for volume in volumes {
+                let changed = before.get(&volume.id).is_some_and(|old| old != &volume.signature);
+                if changed {
+                    stale.push(volume.id.clone());
+                }
+                let keep_pages = before.contains_key(&volume.id) && !changed && volume.pages.is_empty();
+                let pages = serde_json::to_string(&volume.pages).unwrap_or_else(|_| "[]".into());
+                let layers = serde_json::to_string(&volume.layers).unwrap_or_else(|_| "[]".into());
+                tx.execute(
+                    "INSERT INTO manga_volumes (id, series_id, title, source_ref, format, position, page_count, pages_json, signature, mokuro_path, ocr_state, added_at, cover, layers_json, size)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CASE WHEN ?10 IS NULL THEN 'none' ELSE 'mokuro' END, ?11, ?12, ?13, ?14)
+                     ON CONFLICT(id) DO UPDATE SET
+                        series_id = excluded.series_id,
+                        title = excluded.title,
+                        source_ref = excluded.source_ref,
+                        format = excluded.format,
+                        position = excluded.position,
+                        page_count = CASE WHEN ?15 THEN manga_volumes.page_count ELSE excluded.page_count END,
+                        pages_json = CASE WHEN ?15 THEN manga_volumes.pages_json ELSE excluded.pages_json END,
+                        signature = excluded.signature,
+                        mokuro_path = excluded.mokuro_path,
+                        ocr_state = CASE
+                            WHEN excluded.mokuro_path IS NOT NULL THEN 'mokuro'
+                            WHEN manga_volumes.ocr_state = 'mokuro' THEN 'none'
+                            ELSE manga_volumes.ocr_state END,
+                        cover = excluded.cover,
+                        layers_json = excluded.layers_json,
+                        size = excluded.size",
+                    params![
+                        volume.id,
+                        series_id,
+                        volume.title,
+                        volume.source_ref,
+                        volume.format,
+                        volume.position,
+                        volume.pages.len() as i64,
+                        pages,
+                        volume.signature,
+                        volume.mokuro_path,
+                        now,
+                        volume.cover,
+                        layers,
+                        volume.size,
+                        keep_pages,
+                    ],
+                )?;
+            }
+            let ids: HashSet<&str> = volumes.iter().map(|volume| volume.id.as_str()).collect();
+            for id in before.keys().filter(|id| !ids.contains(id.as_str())) {
+                tx.execute("DELETE FROM manga_volumes WHERE id = ?1", params![id])?;
+                stale.push(id.clone());
+            }
+            tx.execute("UPDATE manga_series SET signature = ?2, cover = ?3 WHERE id = ?1", params![series_id, signature, cover])?;
+            tx.commit()?;
+            Ok(stale)
+        })
+    }
+
+    /// The pages of a remote archive, once its index has been read.
+    pub fn set_manga_volume_pages(&self, volume_id: &str, pages: &[String]) -> Result<()> {
+        let json = serde_json::to_string(pages).unwrap_or_else(|_| "[]".into());
+        self.with(|c| {
+            c.execute(
+                "UPDATE manga_volumes SET pages_json = ?2, page_count = ?3 WHERE id = ?1",
+                params![volume_id, json, pages.len() as i64],
+            )
+            .map(|_| ())
+        })
+    }
+
     // ── library ────────────────────────────────────────────────────────
 
     fn query_manga_series(&self, filter: Option<&str>) -> Result<Vec<MangaSeries>> {
@@ -414,11 +664,13 @@ impl Db {
         self.with(|c| {
             let mut stmt = c.prepare(
                 "SELECT v.id, v.series_id, v.title, v.format, v.position, v.page_count, v.ocr_state, v.added_at,
-                        p.page, COALESCE(p.finished, 0), p.updated_at
+                        p.page, COALESCE(p.finished, 0), p.updated_at, v.size, v.layers_json
                  FROM manga_volumes v LEFT JOIN manga_progress p ON p.volume_id = v.id
                  WHERE v.series_id = ?1 ORDER BY v.position, v.title",
             )?;
             let rows = stmt.query_map(params![series_id], |r| {
+                let layers: Option<String> = r.get(12)?;
+                let layers: Vec<(String, String)> = layers.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
                 Ok(MangaVolume {
                     id: r.get(0)?,
                     series_id: r.get(1)?,
@@ -431,10 +683,36 @@ impl Db {
                     page: r.get(8)?,
                     finished: r.get::<_, i64>(9)? != 0,
                     read_at: r.get(10)?,
+                    size: r.get(11)?,
+                    text_layers: layers.into_iter().map(|(name, _)| name).collect(),
+                    text_layer: None,
                 })
             })?;
-            rows.collect()
+            rows.collect::<Result<Vec<_>>>()
         })
+        .map(|mut volumes| {
+            for volume in volumes.iter_mut().filter(|volume| !volume.text_layers.is_empty()) {
+                volume.text_layer = self.get_kv(&layer_key(&volume.id)).filter(|layer| volume.text_layers.contains(layer));
+            }
+            volumes
+        })
+    }
+
+    /// The source a series belongs to.
+    pub fn manga_series_source(&self, id: &str) -> Result<Option<String>> {
+        self.with(|c| c.query_row("SELECT source_id FROM manga_series WHERE id = ?1", params![id], |r| r.get(0)).optional())
+    }
+
+    /// The text layer a volume shows (`None` = its main `.mokuro`).
+    pub fn manga_text_layer(&self, volume_id: &str) -> Option<String> {
+        self.get_kv(&layer_key(volume_id))
+    }
+
+    pub fn set_manga_text_layer(&self, volume_id: &str, layer: Option<&str>) -> Result<()> {
+        match layer {
+            Some(layer) => self.set_kv(&layer_key(volume_id), layer),
+            None => self.delete_kv(&layer_key(volume_id)),
+        }
     }
 
     pub fn manga_volume(&self, id: &str) -> Result<Option<MangaVolume>> {
@@ -448,7 +726,7 @@ impl Db {
     /// Where a volume's pages are. Only Rust asks: the protocol and the reader.
     pub fn manga_volume_location(&self, id: &str) -> Result<Option<VolumeLocation>> {
         self.with(|c| {
-            c.query_row(&format!("{VOLUME_LOCATION} WHERE id = ?1"), params![id], map_volume_location)
+            c.query_row(&format!("{VOLUME_LOCATION} WHERE v.id = ?1"), params![id], map_volume_location)
                 .optional()
         })
     }
@@ -462,7 +740,7 @@ impl Db {
         let Some(cover) = cover else { return Ok(None) };
         let first = self.with(|c| {
             c.query_row(
-                &format!("{VOLUME_LOCATION} WHERE series_id = ?1 AND page_count > 0 ORDER BY position, title LIMIT 1"),
+                &format!("{VOLUME_LOCATION} WHERE v.series_id = ?1 AND (v.page_count > 0 OR v.cover IS NOT NULL) ORDER BY v.position, v.title LIMIT 1"),
                 params![id],
                 map_volume_location,
             )
@@ -665,6 +943,20 @@ pub(crate) mod tests {
         let listed = serde_json::to_string(&db.manga_sources().unwrap()).unwrap();
         assert!(!listed.contains("hunter2"));
         assert!(db.manga_source_auth("src").unwrap().unwrap().contains("hunter2"));
+
+        // A WebDAV source: the UI learns the kind of its credentials, never them.
+        let auth = crate::manga::webdav::client::Auth::Basic { username: "yuki-login".into(), password: "hunter2".into() };
+        db.add_manga_source("dav", SOURCE_WEBDAV, "Server", "https://files.example/").unwrap();
+        db.set_manga_source_auth("dav", auth.to_json().as_deref()).unwrap();
+        db.apply_remote_series("dav", &[("rs".into(), "/m/S/".into(), "S".into())]).unwrap();
+        let sources = db.manga_sources().unwrap();
+        assert_eq!(sources.iter().find(|s| s.id == "dav").unwrap().auth, "basic");
+        let library = MangaLibrary { sources: sources.clone(), series: db.manga_series_list().unwrap(), continue_reading: Vec::new() };
+        let detail = MangaSeriesDetail { series: db.manga_series("rs").unwrap().unwrap(), volumes: db.manga_volumes("rs").unwrap(), source: sources.into_iter().find(|s| s.id == "dav") };
+        for json in [serde_json::to_string(&library).unwrap(), serde_json::to_string(&detail).unwrap()] {
+            assert!(!json.contains("hunter2") && !json.contains("yuki-login"), "{json}");
+        }
+        db.delete_manga_source("dav").unwrap();
 
         db.apply_manga_scan("src", SOURCE_LOCAL, &[series("s1", "A", vec![volume("v1", 1, 2)])]).unwrap();
         assert_eq!(db.delete_manga_source("src").unwrap(), ["v1"]);

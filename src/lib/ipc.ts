@@ -24,6 +24,8 @@ import type {
   ReaderTarget,
   ReaderVolume,
   ScanSummary,
+  WebdavAuth,
+  WebdavProbe,
   MinedSentence,
   MpvSetup,
   OutboxItem,
@@ -236,6 +238,18 @@ export const ipc = {
   /** `force` for the user's button; without it a scan from the last minute is enough. */
   mangaRescan: (force = false) => invoke<ScanSummary>('manga_rescan', { force }),
   mangaLibrary: () => invoke<MangaLibrary>('manga_library'),
+  /**
+   * Lists a WebDAV server and counts its series. `auth` null keeps the
+   * credentials `sourceId` already has (the form never receives them).
+   * Rejects with a code: `offline`, `unauthorized`, `not-webdav`, `invalid-url`…
+   */
+  mangaWebdavTest: (url: string, auth: WebdavAuth | null, sourceId?: string) =>
+    invoke<WebdavProbe>('manga_webdav_test', { url, auth, sourceId }),
+  /** Adds (or edits, with `sourceId`) a WebDAV source and syncs it. Resolves with its id. */
+  mangaWebdavSave: (name: string, url: string, auth: WebdavAuth | null, sourceId?: string) =>
+    invoke<string>('manga_webdav_save', { sourceId, name, url, auth }),
+  /** `force` lists every series, not only the folders that changed. */
+  mangaWebdavSync: (sourceId: string, force = false) => invoke<void>('manga_webdav_sync', { sourceId, force }),
   mangaSeriesDetail: (seriesId: string) => invoke<MangaSeriesDetail | null>('manga_series_detail', { seriesId }),
   /** `mediaId: null` unlinks. */
   mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
@@ -298,6 +312,8 @@ export const events = {
   streakAuthRequired: 'streak://auth-required',
   discordStatus: 'discord://status',
   mangaLibrary: 'manga://library-changed',
+  /** A WebDAV source being listed (`WebdavSyncProgress`). */
+  mangaWebdavSync: 'manga://webdav-sync',
   /** To the reader window: show another volume. */
   mangaReaderOpen: 'manga://reader-open',
   /** The reading session (`MangaSession | null`) whenever it changes. */

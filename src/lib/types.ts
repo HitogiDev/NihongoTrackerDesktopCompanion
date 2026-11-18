@@ -52,6 +52,9 @@ import type { TrackerSnapshot } from './bindings/TrackerSnapshot';
 import type { UpdateInfo } from './bindings/UpdateInfo';
 import type { VnApp } from './bindings/VnApp';
 import type { VnSession } from './bindings/VnSession';
+import type { WebdavAuth } from './bindings/WebdavAuth';
+import type { WebdavProbe } from './bindings/WebdavProbe';
+import type { WebdavSyncProgress } from './bindings/WebdavSyncProgress';
 
 export type {
   AnimeSession,
@@ -104,6 +107,9 @@ export type {
   UpdateInfo,
   VnApp,
   VnSession,
+  WebdavAuth,
+  WebdavProbe,
+  WebdavSyncProgress,
 };
 
 /** Log types accepted by the NihongoTracker backend (`Backend/src/models/log.model.ts`). */

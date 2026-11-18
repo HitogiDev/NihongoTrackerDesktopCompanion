@@ -16,6 +16,7 @@ pub mod thumbs;
 pub mod webdav;
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -33,6 +34,9 @@ pub struct Runtime {
     pub tracking: Mutex<session::Tracking>,
     /// The reader window has the focus (from its window events).
     pub reader_focused: AtomicBool,
+    /// WebDAV sources being synced now, and when each last was.
+    pub webdav_syncing: Mutex<HashSet<String>>,
+    pub webdav_last_sync: Mutex<HashMap<String, Instant>>,
 }
 
 /// Extensions the webview can show as a page.

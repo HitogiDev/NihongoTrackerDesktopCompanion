@@ -1558,14 +1558,111 @@ pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
 /// passes `false` and is skipped if a scan ran a moment ago.
 #[tauri::command]
 pub async fn manga_rescan(app: AppHandle, force: Option<bool>) -> CmdResult<crate::manga::library::ScanSummary> {
-    crate::manga::library::rescan(&app, force.unwrap_or(false)).await
+    let force = force.unwrap_or(false);
+    // Servers sync in the background: a slow one does not hold the folders up.
+    crate::manga::webdav::sync::sync_all_later(&app, false, !force);
+    crate::manga::library::rescan(&app, force).await
+}
+
+/// Marks the sources being synced right now.
+fn with_sync_state(state: &AppState, mut sources: Vec<crate::manga::store::MangaSource>) -> Vec<crate::manga::store::MangaSource> {
+    let syncing = state.manga.webdav_syncing.lock().unwrap();
+    for source in &mut sources {
+        source.syncing = syncing.contains(&source.id);
+    }
+    sources
+}
+
+/// The credentials a WebDAV form sends: new ones, or `None` to keep what the
+/// source has (the form never sees them, so it cannot send them back).
+fn webdav_client_for(
+    state: &AppState,
+    url: &str,
+    auth: Option<crate::manga::webdav::client::Auth>,
+    source_id: Option<&str>,
+) -> Result<(reqwest::Url, crate::manga::webdav::client::Auth), String> {
+    use crate::manga::webdav::client::{parse_base_url, Auth};
+    let (url, from_url) = parse_base_url(url).map_err(|e| e.code().to_string())?;
+    let auth = match auth {
+        Some(auth) => auth,
+        None => from_url
+            .or_else(|| {
+                let id = source_id?;
+                let row = state.db.manga_source_row(id).ok()??;
+                Some(Auth::from_json(row.auth_json.as_deref()))
+            })
+            .unwrap_or_default(),
+    };
+    Ok((url, auth))
+}
+
+/// "Test connection": lists the server and counts the series it would add.
+/// Errors are codes (`offline`, `unauthorized`, `not-webdav`, `invalid-url`…).
+#[tauri::command]
+pub async fn manga_webdav_test(
+    state: State<'_, AppState>,
+    url: String,
+    auth: Option<crate::manga::webdav::client::Auth>,
+    source_id: Option<String>,
+) -> CmdResult<crate::manga::webdav::sync::WebdavProbe> {
+    let (url, auth) = webdav_client_for(&state, &url, auth, source_id.as_deref())?;
+    let client = crate::manga::webdav::client::Client::new(url, auth);
+    crate::manga::webdav::sync::probe(&client).await.map_err(|e| e.code().to_string())
+}
+
+/// Adds a WebDAV source, or edits one (`source_id`), after checking that the
+/// server answers; then syncs it in the background. Returns its id.
+#[tauri::command]
+pub async fn manga_webdav_save(
+    app: AppHandle,
+    source_id: Option<String>,
+    name: String,
+    url: String,
+    auth: Option<crate::manga::webdav::client::Auth>,
+) -> CmdResult<String> {
+    use crate::manga::store::SOURCE_WEBDAV;
+    let state = app.state::<AppState>();
+    let (url, auth) = webdav_client_for(&state, &url, auth, source_id.as_deref())?;
+    let client = crate::manga::webdav::client::Client::new(url.clone(), auth.clone());
+    crate::manga::webdav::sync::probe(&client).await.map_err(|e| e.code().to_string())?;
+    let name = Some(name.trim().to_string()).filter(|name| !name.is_empty()).unwrap_or_else(|| url.host_str().unwrap_or("WebDAV").to_string());
+    let id = match source_id {
+        Some(id) => {
+            let row = state.db.manga_source_row(&id).map_err(err)?.filter(|row| row.kind == SOURCE_WEBDAV).ok_or("not-found")?;
+            if !state.db.update_manga_source(&row.id, &name, url.as_str()).map_err(err)? {
+                return Err("not-found".into());
+            }
+            row.id
+        }
+        None => {
+            let id = uuid::Uuid::new_v4().to_string();
+            state.db.add_manga_source(&id, SOURCE_WEBDAV, &name, url.as_str()).map_err(err)?;
+            id
+        }
+    };
+    state.db.set_manga_source_auth(&id, auth.to_json().as_deref()).map_err(err)?;
+    let _ = state.db.set_manga_source_status(&id, None, false);
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    let background = app.clone();
+    let sync_id = id.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = crate::manga::webdav::sync::sync_source(&background, &sync_id, true, false).await;
+    });
+    Ok(id)
+}
+
+/// Lists a WebDAV source again. `force` lists every series, not only the
+/// folders that changed. Errors are codes, like `manga_webdav_test`.
+#[tauri::command]
+pub async fn manga_webdav_sync(app: AppHandle, source_id: String, force: Option<bool>) -> CmdResult<()> {
+    crate::manga::webdav::sync::sync_source(&app, &source_id, force.unwrap_or(false), false).await
 }
 
 /// The Manga screen: roots, series and the "continue reading" shelf.
 #[tauri::command]
 pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::store::MangaLibrary> {
     Ok(crate::manga::store::MangaLibrary {
-        sources: state.db.manga_sources().map_err(err)?,
+        sources: with_sync_state(&state, state.db.manga_sources().map_err(err)?),
         series: state.db.manga_series_list().map_err(err)?,
         continue_reading: state.db.manga_continue_reading(12).map_err(err)?,
     })
@@ -1575,7 +1672,13 @@ pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::stor
 pub fn manga_series_detail(state: State<'_, AppState>, series_id: String) -> CmdResult<Option<crate::manga::store::MangaSeriesDetail>> {
     let Some(series) = state.db.manga_series(&series_id).map_err(err)? else { return Ok(None) };
     let volumes = state.db.manga_volumes(&series_id).map_err(err)?;
-    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes }))
+    let source = state
+        .db
+        .manga_series_source(&series_id)
+        .map_err(err)?
+        .and_then(|source_id| with_sync_state(&state, state.db.manga_sources().ok()?).into_iter().find(|s| s.id == source_id))
+        .filter(|source| source.kind != crate::manga::store::SOURCE_LOCAL);
+    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes, source }))
 }
 
 /// Links a series to its NihongoTracker media (or unlinks it with `None`).

@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use super::propfind::{self, Entry, MAX_LISTING_BYTES};
 
-/// How the server wants to be asked.
+/// How the server wants to be asked. The UI sends one in a source form; Rust
+/// never sends one back.
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export, rename = "WebdavAuth"))]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Auth {
     #[default]

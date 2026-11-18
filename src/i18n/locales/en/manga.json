@@ -15,7 +15,7 @@
   "actions": {
     "addFolder": "Add folder",
     "folders": "Folders",
-    "rescan": "Rescan folders",
+    "rescan": "Rescan the library",
     "readVolume": "Read {{volume}}",
     "continueAt": "Continue {{volume}} · p. {{page}}"
   },
@@ -69,7 +69,7 @@
   },
   "empty": {
     "title": "Your manga shelf is empty",
-    "body": "Add manga from your computer to read it with hover lookups. Your progress stays on this computer.",
+    "body": "Add manga from your computer or a WebDAV server to read it with hover lookups. Your progress stays on this computer.",
     "local": {
       "title": "A folder on this computer",
       "body": "Folders of images, CBZ or ZIP volumes, and the .mokuro files that give them text."
@@ -102,5 +102,82 @@
     "linked": "{{title}} linked to NihongoTracker",
     "linkFailed": "Could not link: {{message}}",
     "openFailed": "Could not open the reader: {{message}}"
+  },
+  "webdav": {
+    "actions": {
+      "servers": "Servers",
+      "add": "Connect a server",
+      "sync": "Check {{name}} for changes",
+      "syncAll": "List everything on {{name}} again",
+      "edit": "Edit {{name}}",
+      "remove": "Remove {{name}} from the library"
+    },
+    "servers": {
+      "title": "WebDAV servers",
+      "body": "Series on these servers are listed in your library and read on demand: nothing is downloaded until you open a volume.",
+      "none": "No servers yet.",
+      "removeHint": "Removing a server only forgets it here, with its downloads: nothing on the server changes."
+    },
+    "status": {
+      "syncing": "Listing…",
+      "syncingCount": "Listing series {{done}} of {{total}}",
+      "offline": "Offline: showing what was seen last",
+      "unauthorized": "The server refused the credentials",
+      "failed": "The last sync failed",
+      "synced": "Synced {{when}}",
+      "never": "Not synced yet"
+    },
+    "form": {
+      "title": "Connect a WebDAV server",
+      "editTitle": "Edit server",
+      "body": "Any WebDAV server with your volumes works, including a mokuro-bunko server. Series are listed from its mokuro-reader folder when it has one.",
+      "url": "Server address",
+      "urlHint": "The folder with your series, or the server root. http:// or https://.",
+      "name": "Name",
+      "optional": "Optional",
+      "namePlaceholder": "My manga server",
+      "auth": "Sign-in",
+      "authKind": {
+        "none": "Anonymous",
+        "basic": "User and password",
+        "bearer": "Token"
+      },
+      "username": "User",
+      "password": "Password",
+      "token": "Access token",
+      "unchanged": "Unchanged",
+      "keepHint": "Leave these empty to keep the credentials already saved.",
+      "test": "Test connection",
+      "add": "Add server",
+      "save": "Save",
+      "found_one": "Connected: {{count}} series",
+      "found_other": "Connected: {{count}} series",
+      "foundBunko": "In {{path}}, the way mokuro-bunko serves it.",
+      "foundAt": "In {{path}}.",
+      "privacy": "Credentials stay on this computer: they are only sent to this server and are never shown again."
+    },
+    "empty": {
+      "title": "No servers yet",
+      "body": "Connect a WebDAV server to read its volumes and their .mokuro text without downloading them first.",
+      "noSeries": "No series on your servers yet",
+      "noSeriesBody": "Each folder on the server is a series. They appear here as soon as the server has been listed."
+    },
+    "errors": {
+      "offline": "The server could not be reached. Check the address and your connection.",
+      "unauthorized": "The server refused the user, password or token.",
+      "not-found": "That folder does not exist on the server.",
+      "not-webdav": "That address does not answer like a WebDAV server.",
+      "needs-download": "This server does not send parts of files: the volume has to be downloaded to be read.",
+      "too-large": "The server sent more than expected.",
+      "changed": "The file changed on the server. Sync and try again.",
+      "cancelled": "Download cancelled.",
+      "invalid-url": "Enter a full http:// or https:// address.",
+      "error": "The server answered with an error."
+    },
+    "toast": {
+      "added": "Server added: listing its series",
+      "updated": "Server updated",
+      "syncFailed": "Could not sync: {{message}}"
+    }
   }
 }
