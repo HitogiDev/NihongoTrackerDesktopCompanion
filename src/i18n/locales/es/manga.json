@@ -50,7 +50,6 @@
     "hasText": "Con texto",
     "percentRead": "{{percent}} % leído",
     "textMokuro": "Texto de mokuro",
-    "textOcr": "Texto de OCR",
     "noText": "Sin texto",
     "finished": "Leído",
     "link": "Vincular con NihongoTracker",
@@ -278,6 +277,13 @@
       "disk": "No se pudo guardar el archivo. Comprueba el espacio libre.",
       "unreadable": "No se pudo leer la imagen de la página.",
       "not-found": "Esta página ya no está en la biblioteca."
+    },
+    "volume": {
+      "process": "Leer texto",
+      "processHint": "Lee en segundo plano el texto de todas las páginas que no lo tienen. Una notificación avisa al terminar.",
+      "installHint": "Descarga el OCR integrado para leer el texto de este tomo.",
+      "cancel": "Dejar de leer este tomo",
+      "progress": "Leyendo el texto de {{title}}"
     }
   }
 }

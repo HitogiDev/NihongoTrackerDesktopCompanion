@@ -338,6 +338,9 @@ mod tests {
             println!("{:?} vertical={} lines={:?}", block.bbox.map(|v| v.round()), block.vertical, block.lines);
         }
         assert!(!result.blocks.is_empty());
+        if let Ok(out) = std::env::var("NTDC_OCR_OUT") {
+            std::fs::write(out, serde_json::to_string_pretty(&result).unwrap()).unwrap();
+        }
         if let Ok(expected) = std::env::var("NTDC_OCR_EXPECT") {
             let read: Vec<String> = result.blocks.iter().map(|block| block.lines.concat()).collect();
             assert_eq!(read.join("|"), expected);

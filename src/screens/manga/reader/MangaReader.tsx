@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
-import { BookX, EyeOff, ScanText, Type } from 'lucide-react';
+import { BookX, EyeOff, Loader2, PencilLine, ScanText, Type } from 'lucide-react';
 import { DictionaryPopup } from '../../../components/DictionaryPopup';
 import { useDictionaryHover } from '../../../hooks/useDictionaryHover';
 import { useAppStore } from '../../../store/useAppStore';
@@ -12,7 +12,11 @@ import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
-import type { MangaSessionEnded, MokuroPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
+import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
+import { OcrInstallModal } from '../ocr/OcrInstallModal';
+import { ocrErrorText, useOcrInstallStore, useOcrStatus } from '../ocr/useOcr';
+import { BlockEditor } from './BlockEditor';
+import { EditLayer } from './EditLayer';
 import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, spreadOf, type Size } from './layout';
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
@@ -135,14 +139,16 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const vertical = prefs.layout === 'vertical';
 
   // ── text ───────────────────────────────────────────────────────────
-  const hasText = volume.ocr_state !== 'none';
+  // Asked for even without a .mokuro: the OCR or a correction may have
+  // given some pages text.
+  const queryClient = useQueryClient();
   const textQuery = useQuery({
     queryKey: ['manga', 'text', volume.id],
     queryFn: () => ipc.mangaVolumeText(volume.id),
-    enabled: hasText,
     staleTime: Infinity,
   });
-  const text: (MokuroPage | null)[] = textQuery.data ?? [];
+  const text: (MokuroPage | null)[] = useMemo(() => textQuery.data ?? [], [textQuery.data]);
+  const hasText = volume.ocr_state !== 'none' || text.some(Boolean);
   const popupDelay = useAppStore((s) => Math.max(0, Math.min(2000, s.settings?.dictionary_popup_delay_ms ?? 75)));
   const theme = useAppStore((s) => s.settings?.theme);
   const dictionary = useDictionaryHover(popupDelay);
@@ -227,6 +233,112 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const spread = spreads[spreadIndex] ?? [0];
   const lastShown = vertical ? page : Math.max(...spread);
   const finished = atEnd || lastShown >= count - 1;
+
+  // ── OCR ────────────────────────────────────────────────────────────
+  // Pages on screen without text are read as soon as they show (and the next
+  // ones after them), when the OCR is installed and the user wants it so.
+  const ocr = useOcrStatus().data;
+  const autoOcr = useAppStore((s) => s.settings?.manga_ocr_auto ?? true);
+  const showInstall = useOcrInstallStore((s) => s.show);
+  const [ocrPending, setOcrPending] = useState<Set<number>>(() => new Set());
+  const asked = useRef(new Set<number>());
+  const shownPages = useMemo(() => (atEnd ? [] : vertical ? [page] : spread), [atEnd, vertical, page, spread]);
+  const textLoaded = textQuery.isSuccess;
+  const missing = useCallback((index: number) => textLoaded && index >= 0 && index < count && !text[index], [count, text, textLoaded]);
+  const readPages = useCallback((visible: number[], ahead: number[]) => {
+    const fresh = (pages: number[]) => pages.filter((index) => missing(index) && !asked.current.has(index));
+    const now = fresh(visible);
+    const later = fresh(ahead);
+    if (now.length === 0 && later.length === 0) return;
+    for (const index of [...now, ...later]) asked.current.add(index);
+    setOcrPending((pending) => new Set([...pending, ...now, ...later]));
+    ipc.mangaOcrReadPages(volume.id, now, later).catch((error) => {
+      for (const index of [...now, ...later]) asked.current.delete(index);
+      setOcrPending(new Set());
+      toast.error(ocrErrorText(error));
+    });
+  }, [missing, volume.id]);
+  const shownKey = shownPages.join(',');
+  useEffect(() => {
+    if (!ocr?.installed || !autoOcr || !textLoaded) return;
+    const last = shownPages.length > 0 ? Math.max(...shownPages) : -1;
+    const ahead = Array.from({ length: vertical ? 2 : 4 }, (_, offset) => last + 1 + offset);
+    readPages(shownPages, ahead);
+  }, [ocr?.installed, autoOcr, textLoaded, shownKey, vertical, readPages]);
+  useEffect(() => {
+    const off = listen<OcrPage>(events.mangaOcrPage, ({ payload }) => {
+      if (payload.volume_id !== volume.id) return;
+      setOcrPending((pending) => {
+        const next = new Set(pending);
+        next.delete(Number(payload.page));
+        return next;
+      });
+      void queryClient.invalidateQueries({ queryKey: ['manga', 'text', volume.id] });
+    });
+    return () => void off.then((fn) => fn());
+  }, [queryClient, volume.id]);
+  const readingShown = shownPages.some((index) => ocrPending.has(index));
+  const shownWithoutText = shownPages.some((index) => missing(index));
+
+  // ── correcting text by hand ────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<Record<number, EditedBlock[]>>({});
+  const [selection, setSelection] = useState<{ page: number; block: number | null } | null>(null);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const blocksOf = useCallback((index: number): EditedBlock[] => drafts[index] ?? (text[index]?.blocks ?? []).map((block) => ({
+    box: block.box,
+    vertical: block.vertical,
+    text: block.lines.join('\n'),
+  })), [drafts, text]);
+  const editPage = (index: number, change: (blocks: EditedBlock[]) => EditedBlock[]) => {
+    setDrafts((current) => ({ ...current, [index]: change(current[index] ?? blocksOf(index)) }));
+  };
+  const selectedBlock = selection && selection.block !== null ? blocksOf(selection.page)[selection.block] ?? null : null;
+  const dirtyPages = Object.keys(drafts).map(Number);
+  const recognize = async (index: number, block: number, bbox: EditedBlock['box']) => {
+    setRecognizing(true);
+    try {
+      const read = await ipc.mangaOcrRegion(volume.id, index, bbox);
+      editPage(index, (blocks) => blocks.map((item, i) => (i === block ? { ...item, text: read } : item)));
+    } catch (error) {
+      toast.error(ocrErrorText(error));
+    } finally {
+      setRecognizing(false);
+    }
+  };
+  const saveEdits = async () => {
+    setSavingEdits(true);
+    try {
+      for (const index of dirtyPages) {
+        const size = sizeOf(index);
+        const own = text[index];
+        await ipc.mangaSavePageText(
+          volume.id,
+          index,
+          own && own.img_width > 0 ? own.img_width : size.width,
+          own && own.img_height > 0 ? own.img_height : size.height,
+          drafts[index],
+        );
+      }
+      if (dirtyPages.length > 0) toast.success(t('edit.saved'));
+      setDrafts({});
+      setSelection(null);
+      setEditing(false);
+      await queryClient.invalidateQueries({ queryKey: ['manga', 'text', volume.id] });
+    } catch (error) {
+      toast.error(t('edit.saveFailed', { message: String(error) }));
+    } finally {
+      setSavingEdits(false);
+    }
+  };
+  const toggleEditing = () => {
+    if (editing) void saveEdits();
+    else {
+      setEditing(true);
+      setSelection(null);
+    }
+  };
 
   // ── preferences ────────────────────────────────────────────────────
   const updatePrefs = (patch: Partial<ReaderPrefs>) => {
@@ -356,6 +468,24 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         else toast.info(t('mine.hoverFirst'));
         return;
       }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        toggleEditing();
+        return;
+      }
+      if (editing && (event.key === 'Delete' || event.key === 'Backspace') && selection && selection.block !== null) {
+        event.preventDefault();
+        const { page: index, block } = selection;
+        editPage(index, (blocks) => blocks.filter((_, i) => i !== block));
+        setSelection({ page: index, block: null });
+        return;
+      }
+      if (editing && event.key === 'Escape') {
+        event.preventDefault();
+        if (selection?.block !== null && selection) setSelection({ page: selection.page, block: null });
+        else void saveEdits();
+        return;
+      }
       const action = keyAction(event, prefs.direction, prefs.layout);
       if (!action) return;
       event.preventDefault();
@@ -379,7 +509,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical]);
+  }, [count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
@@ -395,7 +525,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   const onClick = (event: ReactMouseEvent) => {
     const element = event.target as HTMLElement;
-    if (element.closest('[data-reader-chrome], [data-text-block], [role="dialog"]')) return;
+    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], [role="dialog"]')) return;
     if (settingsOpen) {
       setSettingsOpen(false);
       return;
@@ -410,7 +540,28 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
 
-  const overlay = hasText
+  const overlay = editing
+    ? (index: number, size: Size) => {
+      const own = text[index];
+      return (
+        <EditLayer
+          pageIndex={index}
+          blocks={blocksOf(index)}
+          size={size}
+          imageWidth={own && own.img_width > 0 ? own.img_width : sizeOf(index).width}
+          selected={selection?.page === index ? selection.block : null}
+          onSelect={(pageIndex, block) => setSelection({ page: pageIndex, block })}
+          onDraw={(pageIndex, box) => {
+            const fresh = blocksOf(pageIndex).length;
+            const vertical = box[3] - box[1] > box[2] - box[0];
+            editPage(pageIndex, (blocks) => [...blocks, { box, vertical, text: '' }]);
+            setSelection({ page: pageIndex, block: fresh });
+            if (ocr?.installed) void recognize(pageIndex, fresh, box);
+          }}
+        />
+      );
+    }
+    : hasText
     ? (index: number, size: Size) => (
       <TextLayer
         page={text[index]}
@@ -477,6 +628,43 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onHover={(hovering) => chrome.pin('top', hovering)}
         extra={<>
           {ownSession ? <SessionIndicator session={ownSession} /> : null}
+          {readingShown ? (
+            <span className="badge badge-soft badge-primary gap-1.5" role="status">
+              <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
+              {t('ocr.reading')}
+            </span>
+          ) : shownWithoutText && !editing && ocr?.supported ? (
+            <Button
+              appearance="ghost"
+              size="sm"
+              title={ocr.installed ? t('ocr.readPageHint') : t('ocr.installHint')}
+              onClick={() => {
+                if (!ocr.installed) {
+                  showInstall();
+                  return;
+                }
+                asked.current.clear();
+                readPages(shownPages, []);
+              }}
+            >
+              <ScanText className="h-4 w-4" />
+              <span className="hidden md:inline">{t('ocr.readPage')}</span>
+            </Button>
+          ) : null}
+          {count > 0 ? (
+            <Button
+              appearance={editing ? 'soft' : 'ghost'}
+              variant={editing ? 'primary' : undefined}
+              size="sm"
+              shape="square"
+              aria-pressed={editing}
+              aria-label={t('edit.toggle')}
+              title={`${t('edit.toggle')} (E)`}
+              onClick={toggleEditing}
+            >
+              <PencilLine className="h-4 w-4" />
+            </Button>
+          ) : null}
           {hasText ? (
           <Button
             appearance="ghost"
@@ -491,7 +679,38 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           ) : null}
         </>}
       />
-      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={volume.ocr_state !== 'none'} /> : null}
+      {editing ? (
+        <BlockEditor
+          block={selectedBlock}
+          index={selection?.block ?? null}
+          count={shownPages.reduce((sum, index) => sum + blocksOf(index).length, 0)}
+          dirty={dirtyPages.length > 0}
+          saving={savingEdits}
+          recognizing={recognizing}
+          canRecognize={Boolean(ocr?.installed) && selectedBlock !== null}
+          onChange={(patch) => {
+            if (!selection || selection.block === null) return;
+            const { page: index, block } = selection;
+            editPage(index, (blocks) => blocks.map((item, i) => (i === block ? { ...item, ...patch } : item)));
+          }}
+          onDelete={() => {
+            if (!selection || selection.block === null) return;
+            const { page: index, block } = selection;
+            editPage(index, (blocks) => blocks.filter((_, i) => i !== block));
+            setSelection({ page: index, block: null });
+          }}
+          onRecognize={() => {
+            if (selection && selection.block !== null && selectedBlock) void recognize(selection.page, selection.block, selectedBlock.box);
+          }}
+          onDiscard={() => {
+            setDrafts({});
+            setSelection(null);
+          }}
+          onDone={() => void saveEdits()}
+        />
+      ) : null}
+      <OcrInstallModal />
+      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} /> : null}
       <BottomBar
         visible={chrome.visible || settingsOpen}
         volumeId={volume.id}

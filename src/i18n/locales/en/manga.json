@@ -50,7 +50,6 @@
     "hasText": "With text",
     "percentRead": "{{percent}}% read",
     "textMokuro": "Text from mokuro",
-    "textOcr": "Text from OCR",
     "noText": "No text",
     "finished": "Read",
     "link": "Link to NihongoTracker",
@@ -278,6 +277,13 @@
       "disk": "The file could not be saved. Check the free space.",
       "unreadable": "The page image could not be read.",
       "not-found": "This page is no longer in the library."
+    },
+    "volume": {
+      "process": "Read text",
+      "processHint": "Read the text of every page without it, in the background. A notification says when it is done.",
+      "installHint": "Download the built-in OCR to read the text of this volume.",
+      "cancel": "Stop reading this volume",
+      "progress": "Reading the text of {{title}}"
     }
   }
 }

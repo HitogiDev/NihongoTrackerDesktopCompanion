@@ -122,7 +122,11 @@ pub fn reading_order(boxes: &[[f64; 4]]) -> Vec<usize> {
 /// string; it is split into as many lines (columns when vertical) as the box
 /// seems to hold, so the reader's text layer looks like the page.
 pub fn block(bbox: [f64; 4], text: &str) -> MokuroBlock {
-    let vertical = is_vertical(&bbox);
+    block_oriented(bbox, is_vertical(&bbox), text)
+}
+
+/// A block written the way the user says (a box corrected by hand).
+pub fn block_oriented(bbox: [f64; 4], vertical: bool, text: &str) -> MokuroBlock {
     let chars: Vec<char> = text.chars().collect();
     let count = chars.len().max(1) as f64;
     let (w, h) = (width(&bbox), height(&bbox));
@@ -160,6 +164,69 @@ pub fn page(img_path: &str, image: (u32, u32), blocks: Vec<([f64; 4], String)>) 
         img_height: f64::from(image.1),
         blocks: blocks.into_iter().filter(|(_, text)| !text.trim().is_empty()).map(|(bbox, text)| block(bbox, &text)).collect(),
     }
+}
+
+/// A block as the user corrected it in the reader.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct EditedBlock {
+    /// `[x1, y1, x2, y2]` in image pixels.
+    #[serde(rename = "box")]
+    pub bbox: [f64; 4],
+    pub vertical: bool,
+    /// Its text; line breaks the user typed separate lines (columns).
+    pub text: String,
+}
+
+/// Most blocks a page can be given by hand: no real page has this many.
+const MAX_BLOCKS: usize = 400;
+const MAX_TEXT: usize = 2_000;
+
+/// The page the user corrected, as a `.mokuro` page: boxes put inside the
+/// image, blocks without text dropped, the lines they typed kept as lines.
+pub fn edited_page(img_path: &str, image: (f64, f64), blocks: &[EditedBlock]) -> Result<MokuroPage, String> {
+    let (w, h) = image;
+    if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
+        return Err("bad-size".into());
+    }
+    if blocks.len() > MAX_BLOCKS {
+        return Err("too-many".into());
+    }
+    let mut out = Vec::new();
+    for edited in blocks {
+        let b = edited.bbox;
+        if b.iter().any(|v| !v.is_finite()) {
+            return Err("bad-box".into());
+        }
+        let bbox = [b[0].min(b[2]).clamp(0.0, w), b[1].min(b[3]).clamp(0.0, h), b[0].max(b[2]).clamp(0.0, w), b[1].max(b[3]).clamp(0.0, h)];
+        let text: String = edited.text.chars().take(MAX_TEXT).collect();
+        let lines: Vec<&str> = text.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+        if lines.is_empty() || width(&bbox) < 1.0 || height(&bbox) < 1.0 {
+            continue;
+        }
+        let mut block = block_oriented(bbox, edited.vertical, &lines.concat());
+        if lines.len() > 1 {
+            // The user's own line breaks win over the guess.
+            let n = lines.len() as f64;
+            block.lines = lines.iter().map(|line| line.to_string()).collect();
+            block.lines_coords = (0..lines.len())
+                .map(|i| {
+                    let i = i as f64;
+                    if edited.vertical {
+                        let x2 = bbox[2] - width(&bbox) * i / n;
+                        let x1 = bbox[2] - width(&bbox) * (i + 1.0) / n;
+                        vec![[x1, bbox[1]], [x2, bbox[1]], [x2, bbox[3]], [x1, bbox[3]]]
+                    } else {
+                        let y1 = bbox[1] + height(&bbox) * i / n;
+                        let y2 = bbox[1] + height(&bbox) * (i + 1.0) / n;
+                        vec![[bbox[0], y1], [bbox[2], y1], [bbox[2], y2], [bbox[0], y2]]
+                    }
+                })
+                .collect();
+        }
+        out.push(block);
+    }
+    Ok(MokuroPage { img_path: img_path.to_string(), img_width: w, img_height: h, blocks: out })
 }
 
 #[cfg(test)]
@@ -247,5 +314,28 @@ mod tests {
         let page = page("001.jpg", (800, 1200), vec![([0.0, 0.0, 10.0, 40.0], " ".into()), ([0.0, 0.0, 40.0, 80.0], "あ".into())]);
         assert_eq!(page.blocks.len(), 1);
         assert_eq!(page.img_width, 800.0);
+    }
+
+    #[test]
+    fn a_page_corrected_by_hand_keeps_its_lines_and_stays_inside() {
+        let page = edited_page(
+            "001.jpg",
+            (800.0, 1200.0),
+            &[
+                EditedBlock { bbox: [700.0, 100.0, 900.0, 400.0], vertical: true, text: "今日は\nいい天気".into() },
+                // Drawn from bottom right to top left.
+                EditedBlock { bbox: [300.0, 600.0, 100.0, 500.0], vertical: false, text: "東京駅".into() },
+                EditedBlock { bbox: [0.0, 0.0, 50.0, 50.0], vertical: false, text: "  ".into() },
+            ],
+        )
+        .unwrap();
+        assert_eq!(page.blocks.len(), 2);
+        assert_eq!(page.blocks[0].bbox, [700.0, 100.0, 800.0, 400.0]);
+        assert_eq!(page.blocks[0].lines, ["今日は", "いい天気"]);
+        assert!(page.blocks[0].vertical);
+        assert_eq!(page.blocks[1].bbox, [100.0, 500.0, 300.0, 600.0]);
+        assert!(!page.blocks[1].vertical);
+        assert!(edited_page("x", (0.0, 10.0), &[]).is_err());
+        assert!(edited_page("x", (10.0, 10.0), &[EditedBlock { bbox: [f64::NAN, 0.0, 1.0, 1.0], vertical: false, text: "あ".into() }]).is_err());
     }
 }

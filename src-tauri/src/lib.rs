@@ -413,6 +413,8 @@ pub fn run() {
             commands::manga_ocr_install,
             commands::manga_ocr_cancel_install,
             commands::manga_ocr_delete,
+            commands::manga_ocr_region,
+            commands::manga_save_page_text,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

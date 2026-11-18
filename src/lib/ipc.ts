@@ -20,6 +20,7 @@ import type {
   MangaSeriesDetail,
   MangaSource,
   MokuroPage,
+  EditedBlock,
   OcrStatus,
   ReaderPrefs,
   ReaderTarget,
@@ -305,6 +306,12 @@ export const ipc = {
   mangaOcrInstall: () => invoke<void>('manga_ocr_install'),
   mangaOcrCancelInstall: () => invoke<boolean>('manga_ocr_cancel_install'),
   mangaOcrDelete: () => invoke<void>('manga_ocr_delete'),
+  /** The text inside a box (image pixels) of a page, read before anything queued. */
+  mangaOcrRegion: (volumeId: string, page: number, bbox: [number, number, number, number]) =>
+    invoke<string>('manga_ocr_region', { volumeId, page, bbox }),
+  /** Saves a page's blocks as corrected by hand; they win over the `.mokuro`. */
+  mangaSavePageText: (volumeId: string, page: number, imageWidth: number, imageHeight: number, blocks: EditedBlock[]) =>
+    invoke<MokuroPage>('manga_save_page_text', { volumeId, page, imageWidth, imageHeight, blocks }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

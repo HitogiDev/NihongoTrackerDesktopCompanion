@@ -414,6 +414,50 @@ textarea,
   color: #141414;
   background-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
 }
+/* Correcting the text by hand: every box outlined and numbered, the
+   selected one filled, a dashed box while one is drawn. */
+.manga-edit-layer {
+  touch-action: none;
+}
+.manga-edit-layer .manga-edit-block {
+  position: absolute;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  outline: 2px solid color-mix(in oklch, var(--color-primary) 75%, transparent);
+  background-color: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+.manga-edit-layer .manga-edit-block:hover {
+  background-color: color-mix(in oklch, var(--color-primary) 18%, transparent);
+}
+.manga-edit-layer .manga-edit-block[data-empty] {
+  outline-color: color-mix(in oklch, var(--color-warning) 85%, transparent);
+  background-color: color-mix(in oklch, var(--color-warning) 12%, transparent);
+}
+.manga-edit-layer .manga-edit-block[data-selected] {
+  outline: 3px solid var(--color-primary);
+  background-color: color-mix(in oklch, var(--color-primary) 22%, transparent);
+}
+.manga-edit-layer .manga-edit-index {
+  position: absolute;
+  top: -0.7rem;
+  right: -0.7rem;
+  display: grid;
+  place-items: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font: 600 11px/1 var(--font-sans, system-ui);
+  color: var(--color-primary-content);
+  background-color: var(--color-primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+.manga-edit-layer .manga-edit-draft {
+  position: absolute;
+  border: 2px dashed var(--color-primary);
+  background-color: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  pointer-events: none;
+}
 @media (prefers-reduced-motion: no-preference) {
   .manga-text-layer .manga-block {
     transition: color 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;

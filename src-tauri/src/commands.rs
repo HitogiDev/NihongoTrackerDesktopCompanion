@@ -1919,6 +1919,32 @@ pub async fn manga_ocr_delete(app: AppHandle, state: State<'_, AppState>) -> Cmd
     Ok(())
 }
 
+/// Reads the text inside a box the user drew on a page.
+#[tauri::command]
+pub async fn manga_ocr_region(app: AppHandle, state: State<'_, AppState>, volume_id: String, page: i64, bbox: [f64; 4]) -> CmdResult<String> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || ocr.recognize_region(&app, &volume_id, page, bbox)).await.map_err(err)?
+}
+
+/// Saves a page's blocks as the user corrected them (text edited, boxes
+/// deleted or drawn). `image` is the page's size in pixels.
+#[tauri::command]
+pub async fn manga_save_page_text(
+    app: AppHandle,
+    volume_id: String,
+    page: i64,
+    image_width: f64,
+    image_height: f64,
+    blocks: Vec<crate::manga::ocr::layout::EditedBlock>,
+) -> CmdResult<crate::manga::mokuro::MokuroPage> {
+    tauri::async_runtime::spawn_blocking(move || crate::manga::ocr::save_edited_page(&app, &volume_id, page, (image_width, image_height), &blocks))
+        .await
+        .map_err(err)?
+}
+
 #[tauri::command]
 pub fn manga_ocr_cancel_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<bool> {
     Ok(ocr_of(&state)?.cancel_volume(&app, &volume_id))

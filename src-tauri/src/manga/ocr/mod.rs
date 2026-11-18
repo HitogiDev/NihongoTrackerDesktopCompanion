@@ -546,9 +546,30 @@ pub fn pages_without_text(
     remote: Option<&super::webdav::remote::Remote>,
     volume_id: &str,
 ) -> Result<(String, Vec<i64>), String> {
+    // A remote archive opened for the first time: its pages first.
+    if let (Some(remote), Some(location)) = (remote, db.manga_volume_location(volume_id).map_err(|e| e.to_string())?) {
+        if super::store::is_remote_format(&location.format) && location.pages.is_empty() {
+            remote.ensure_index(&location).map_err(|e| e.code().to_string())?;
+        }
+    }
     let volume = db.manga_volume(volume_id).map_err(|e| e.to_string())?.ok_or("not-found")?;
     let series = db.manga_series(&volume.series_id).map_err(|e| e.to_string())?.ok_or("not-found")?;
     let text = super::mokuro::volume_text(db, remote, volume_id)?;
     let pages = text.iter().enumerate().filter(|(_, page)| page.is_none()).map(|(index, _)| index as i64).collect();
     Ok((format!("{} — {}", series.title, volume.title), pages))
+}
+
+/// Stores a page as the user corrected it (engine `manual`: it wins over a
+/// `.mokuro` and the OCR never redoes it), and lets the session count it.
+pub fn save_edited_page(app: &AppHandle, volume_id: &str, page: i64, image: (f64, f64), blocks: &[layout::EditedBlock]) -> Result<MokuroPage, String> {
+    let state = app.state::<AppState>();
+    let location = state.db.manga_volume_location(volume_id).map_err(|e| e.to_string())?.ok_or("not-found")?;
+    let name = usize::try_from(page).ok().and_then(|index| location.pages.get(index)).ok_or("not-found")?;
+    let edited = layout::edited_page(name, image, blocks)?;
+    let json = serde_json::to_string(&edited).map_err(|e| e.to_string())?;
+    state.db.set_manga_page_text(volume_id, page, &json, super::store::ENGINE_MANUAL).map_err(|e| e.to_string())?;
+    super::session::page_text_changed(app, volume_id, page, Some(edited.clone()));
+    let _ = app.emit(PAGE_EVENT, OcrPage { volume_id: volume_id.to_string(), page, ok: true });
+    let _ = app.emit(super::library::LIBRARY_CHANGED, ());
+    Ok(edited)
 }
