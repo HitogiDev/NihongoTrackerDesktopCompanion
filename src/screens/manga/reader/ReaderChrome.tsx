@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftRight,
@@ -24,6 +24,19 @@ const TOP_SHOWN = 'top-0 border-b translate-y-0 opacity-100';
 const TOP_HIDDEN = 'top-0 border-b -translate-y-full opacity-0 pointer-events-none';
 const BOTTOM_SHOWN = 'bottom-0 border-t translate-y-0 opacity-100';
 const BOTTOM_HIDDEN = 'bottom-0 border-t translate-y-full opacity-0 pointer-events-none';
+
+/** Focus from the keyboard (Tab) brings a hidden bar up, and keeps it up
+ *  while it stays inside; a click's focus does not. */
+function keyboardFocus(onFocus: (inside: boolean) => void) {
+  return {
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      if (event.target.matches(':focus-visible')) onFocus(true);
+    },
+    onBlur: (event: FocusEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus(false);
+    },
+  };
+}
 
 function Segmented<T extends string>({ label, value, options, onChange }: {
   label: string;
@@ -150,7 +163,7 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
   );
 }
 
-export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullscreen, settingsOpen, onSettings, onShortcuts, onHover, extra }: {
+export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullscreen, settingsOpen, onSettings, onShortcuts, onHover, onFocusWithin, extra }: {
   visible: boolean;
   title: string;
   subtitle: string;
@@ -161,11 +174,13 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
   onSettings: () => void;
   onShortcuts: () => void;
   onHover: (hovering: boolean) => void;
+  /** Tab reached the bar, or left it. */
+  onFocusWithin: (inside: boolean) => void;
   extra?: ReactNode;
 }) {
   const { t } = useTranslation('mangaReader');
   return (
-    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
+    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)} {...keyboardFocus(onFocusWithin)}>
       <div className="flex h-12 items-center gap-2 px-2">
         <Button appearance="ghost" size="sm" shape="square" aria-label={t('close')} title={t('close')} onClick={onClose}>
           <X className="h-4 w-4" />
@@ -189,7 +204,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
   );
 }
 
-export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount, direction, onSeek, onHover }: {
+export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount, direction, onSeek, onHover, onFocusWithin }: {
   visible: boolean;
   volumeId: string;
   page: number;
@@ -200,6 +215,7 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
   direction: ReadingDirection;
   onSeek: (page: number) => void;
   onHover: (hovering: boolean) => void;
+  onFocusWithin: (inside: boolean) => void;
 }) {
   const { t } = useTranslation('mangaReader');
   const [strip, setStrip] = useState(false);
@@ -216,6 +232,7 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
       data-reader-chrome
       onMouseEnter={() => { setStrip(true); onHover(true); }}
       onMouseLeave={() => { setStrip(false); onHover(false); }}
+      {...keyboardFocus((inside) => { setStrip(inside); onFocusWithin(inside); })}
     >
       <div className={strip ? 'grid grid-rows-[1fr] motion-safe:transition-[grid-template-rows] motion-safe:duration-200' : 'grid grid-rows-[0fr] motion-safe:transition-[grid-template-rows] motion-safe:duration-200'}>
         <div className="overflow-hidden">
@@ -229,8 +246,8 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
                   aria-label={t('goToPage', { page: index + 1 })}
                   aria-current={shown.includes(index) ? 'page' : undefined}
                   className={shown.includes(index)
-                    ? 'block overflow-hidden rounded-field ring-2 ring-primary'
-                    : 'block overflow-hidden rounded-field opacity-70 ring-1 ring-base-content/10 motion-safe:transition hover:opacity-100'}
+                    ? 'block overflow-hidden rounded-field ring-2 ring-primary focus-visible:-outline-offset-2'
+                    : 'block overflow-hidden rounded-field opacity-70 ring-1 ring-base-content/10 motion-safe:transition hover:opacity-100 focus-visible:opacity-100 focus-visible:-outline-offset-2'}
                 >
                   <img src={mangaUrl.thumb(volumeId, index)} alt="" loading="lazy" decoding="async" draggable={false} className="h-24 w-auto min-w-16 bg-base-300 object-cover" />
                   <span className="block bg-base-200 py-0.5 text-center text-[10px] tabular-nums text-base-content/70">{index + 1}</span>

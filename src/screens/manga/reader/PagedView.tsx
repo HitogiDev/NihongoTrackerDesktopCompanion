@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mangaUrl } from '../../../lib/manga';
 import type { PageFit, ReadingDirection } from '../../../lib/types';
-import { fitSpread, onScreen, type Size } from './layout';
+import { fitSpread, type Size } from './layout';
 import { PageImage } from './PageImage';
 
 /**
@@ -23,7 +23,9 @@ export function PagedView({ volumeId, spread, direction, fit, viewport, sizeOf, 
 }) {
   const { t } = useTranslation('mangaReader');
   const scroller = useRef<HTMLDivElement>(null);
-  const pages = onScreen(spread, direction);
+  // In reading order, laid out right to left for an RTL book: Tab and screen
+  // readers then meet the first page first.
+  const pages = spread;
   const sizes = fitSpread(pages.map(sizeOf), viewport, fit);
   const key = spread.join('-');
 
@@ -33,7 +35,7 @@ export function PagedView({ volumeId, spread, direction, fit, viewport, sizeOf, 
 
   return (
     <div ref={scroller} className={fit === 'height' ? 'h-full w-full overflow-hidden' : 'h-full w-full overflow-auto'}>
-      <div key={key} className="manga-page-in flex min-h-full min-w-full w-max items-center justify-center">
+      <div key={key} className={direction === 'rtl' ? 'manga-page-in flex min-h-full min-w-full w-max flex-row-reverse items-center justify-center' : 'manga-page-in flex min-h-full min-w-full w-max items-center justify-center'}>
         {pages.map((page, index) => (
           <PageImage
             key={page}

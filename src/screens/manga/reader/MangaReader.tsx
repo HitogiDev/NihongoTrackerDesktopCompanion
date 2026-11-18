@@ -19,11 +19,12 @@ import { isSheetKey, readerShortcuts } from '../shortcuts';
 import { ocrErrorText, useOcrInstallStore, useOcrStatus } from '../ocr/useOcr';
 import { BlockEditor } from './BlockEditor';
 import { EditLayer } from './EditLayer';
-import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, spreadOf, type Size } from './layout';
+import { blockStep, buildSpreads, clickAction, DEFAULT_PAGE, keyAction, orderBlocks, preloadPages, spreadOf, type Size } from './layout';
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
 import { BACKGROUND_CLASS } from './styles';
 import { TextLayer, type HoveredBlock } from './TextLayer';
+import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
 import { useMangaSession } from '../useMangaSession';
 import { SessionIndicator } from './SessionIndicator';
@@ -171,6 +172,15 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     window.getSelection()?.addRange(range);
     copyingBlock.current = block.text;
   }, []);
+  /** The block focused with Tab or the arrows, if one is. */
+  const focusedBlock = useCallback((): HoveredBlock | null => {
+    const element = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-text-block]');
+    if (!element) return null;
+    const pageIndex = Number(element.dataset.page);
+    const blockIndex = Number(element.dataset.block);
+    const block = text[pageIndex]?.blocks[blockIndex];
+    return block ? { text: blockText(block), element, page: pageIndex, block: blockIndex } : null;
+  }, [text]);
   const copyBlock = useCallback((block: HoveredBlock) => {
     selectForCopy(block);
     // Runs the `copy` handler now, with the block's text.
@@ -468,16 +478,51 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       // Ctrl+C with nothing selected copies the block under the pointer: it
       // is selected for the copy (no clipboard permission needed in any
       // webview) and the `copy` handler below writes its lines joined.
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && hoveredBlock.current) {
-        selectForCopy(hoveredBlock.current);
+      // A focused block (Tab, arrows) stands in for the pointer.
+      const target = hoveredBlock.current ?? focusedBlock();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && target) {
+        selectForCopy(target);
         return;
       }
       // Ctrl+M mines the block under the pointer, as its button does.
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'm') {
         event.preventDefault();
-        if (hoveredBlock.current) void mineBlock(hoveredBlock.current);
+        if (target) void mineBlock(target);
         else toast.info(t('mine.hoverFirst'));
         return;
+      }
+      // On a focused block: Enter looks it up, Esc goes back to the page and
+      // the arrows walk the blocks on screen; past the last one they turn the
+      // page as usual.
+      const focused = element?.matches('[data-text-block]') ? focusedBlock() : null;
+      if (focused && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          dictionary.openDictionaryForElement(focused.element, focused.text, lineContext(focused.page)(focused.block));
+          return;
+        }
+        if (event.key === 'Escape' && !dictionary.dictionaryRequest) {
+          event.preventDefault();
+          focused.element.blur();
+          return;
+        }
+        const step = blockStep(event.key, prefs.direction);
+        if (step !== 0) {
+          const blocks = orderBlocks(Array.from(document.querySelectorAll<HTMLElement>('[data-text-block]'), (node) => ({
+            node,
+            page: Number(node.dataset.page),
+            block: Number(node.dataset.block),
+          })));
+          const at = blocks.findIndex((entry) => entry.node === focused.element);
+          const next = blocks[at + step];
+          if (next) {
+            event.preventDefault();
+            dictionary.closeDictionary();
+            next.node.focus();
+            return;
+          }
+          focused.element.blur();
+        }
       }
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'e') {
         event.preventDefault();
@@ -520,7 +565,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shortcutsOpen, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
+  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
@@ -640,6 +685,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onSettings={() => setSettingsOpen((open) => !open)}
         onShortcuts={() => setShortcutsOpen(true)}
         onHover={(hovering) => chrome.pin('top', hovering)}
+        onFocusWithin={(inside) => chrome.pin('top-focus', inside)}
         extra={<>
           {ownSession ? <SessionIndicator session={ownSession} /> : null}
           {readingShown ? (
@@ -741,6 +787,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         direction={prefs.direction}
         onSeek={seek}
         onHover={(hovering) => chrome.pin('bottom', hovering)}
+        onFocusWithin={(inside) => chrome.pin('bottom-focus', inside)}
       />
       {dictionary.dictionaryRequest ? (
         <DictionaryPopup
