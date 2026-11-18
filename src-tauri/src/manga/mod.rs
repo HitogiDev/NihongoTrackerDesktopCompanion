@@ -13,6 +13,7 @@ pub mod protocol;
 pub mod reader;
 pub mod session;
 pub mod store;
+pub mod suwayomi;
 pub mod thumbs;
 pub mod webdav;
 

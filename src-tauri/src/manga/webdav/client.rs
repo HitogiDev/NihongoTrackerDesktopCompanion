@@ -57,7 +57,7 @@ impl Auth {
         }
     }
 
-    fn apply(&self, request: RequestBuilder) -> RequestBuilder {
+    pub(crate) fn apply(&self, request: RequestBuilder) -> RequestBuilder {
         match self {
             Auth::None => request,
             Auth::Basic { username, password } => request.basic_auth(username, Some(password)),
