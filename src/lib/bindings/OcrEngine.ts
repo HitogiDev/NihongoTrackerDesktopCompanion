@@ -3,4 +3,4 @@
 /**
  * Which OCR reads pages (`Settings::manga_ocr_engine`).
  */
-export type OcrEngine = "builtin" | "owocr";
+export type OcrEngine = "builtin" | "meiki" | "owocr";

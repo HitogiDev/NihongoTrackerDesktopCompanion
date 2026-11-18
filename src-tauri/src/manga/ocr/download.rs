@@ -243,11 +243,11 @@ pub fn free_space(path: &Path) -> Option<u64> {
         .map(|disk| disk.available_space())
 }
 
-/// Deletes every file the OCR downloaded, finished or not. Returns the ones
-/// that could not go (a library still loaded, on Windows).
-pub fn delete_all(dir: &Path) -> Vec<String> {
+/// Deletes these downloads (and what is left of them unfinished). Returns
+/// the names that could not go (a library still loaded, on Windows).
+pub fn delete_files(dir: &Path, files: &[&str]) -> Vec<String> {
     let mut left = Vec::new();
-    for file in super::assets::known_files() {
+    for file in files {
         for name in [file.to_string(), format!("{file}.part"), format!("{file}.zpart"), format!("{file}.zhead")] {
             let path = dir.join(&name);
             if path.exists() && std::fs::remove_file(&path).is_err() {
@@ -256,6 +256,11 @@ pub fn delete_all(dir: &Path) -> Vec<String> {
         }
     }
     left
+}
+
+/// Any of these files on disk, finished or not.
+pub fn any_present(dir: &Path, files: &[&str]) -> bool {
+    files.iter().any(|file| ["", ".part", ".zpart"].iter().any(|suffix| dir.join(format!("{file}{suffix}")).exists()))
 }
 
 #[cfg(test)]
@@ -438,14 +443,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// The real thing: this computer's runtime and the int8 models, from
-    /// their real URLs, into `NTDC_OCR_FETCH_DIR`. Run by hand.
+    #[test]
+    fn deleting_some_models_leaves_the_others() {
+        let dir = temp_dir();
+        for name in ["meiki.a.onnx", "meiki.b.onnx.part", "keep.onnx", "lib.so"] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        assert!(any_present(&dir, &["meiki.b.onnx"]), "an unfinished download counts");
+        assert!(delete_files(&dir, &["meiki.a.onnx", "meiki.b.onnx"]).is_empty());
+        assert!(!any_present(&dir, &["meiki.a.onnx", "meiki.b.onnx"]));
+        assert!(dir.join("keep.onnx").exists() && dir.join("lib.so").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The real thing: this computer's runtime and the int8 models (or
+    /// meikiocr's with `NTDC_OCR_MODELS=meiki`), from their real URLs, into
+    /// `NTDC_OCR_FETCH_DIR`. Run by hand.
     #[test]
     #[ignore]
     fn downloads_the_real_files() {
+        use super::super::assets::{all_for, Models, Variant};
         let dir = PathBuf::from(std::env::var("NTDC_OCR_FETCH_DIR").expect("NTDC_OCR_FETCH_DIR"));
+        let models = if std::env::var("NTDC_OCR_MODELS").as_deref() == Ok("meiki") { Models::Meiki } else { Models::MangaOcr(Variant::Int8) };
         let started = std::time::Instant::now();
-        for asset in super::super::assets::all(super::super::assets::Variant::Int8).expect("a runtime for this computer") {
+        for asset in all_for(models).expect("a runtime for this computer") {
             fetch(&client(), &asset, &dir, &AtomicBool::new(false), &mut |_| {}).unwrap();
             assert!(asset.present(&dir));
             println!("{} ok ({} bytes, {:?})", asset.file, asset.size, started.elapsed());

@@ -52,7 +52,8 @@ src-tauri/src/
                  rangos como Read+Seek), remote (de dónde sale cada archivo, descargas)
     ocr/         OCR integrado (ONNX vía `ort`): assets (archivos y SHA-256),
                  download, engine, beam, text, layout, worker (cola), export;
-                 owocr (cliente WebSocket del owocr del usuario + conversión)
+                 meiki (motor rápido meikiocr); owocr (cliente WebSocket del
+                 owocr del usuario + conversión)
     suwayomi/    Extensiones vía Suwayomi-Server: assets (jar y JRE con SHA-256),
                  install, process (arranque headless), graphql (cliente),
                  catalog (lo que ve la UI, filtro adulto), library (series y
@@ -497,7 +498,7 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   comic-text-detector, que es GPL-3.0) → recorte por caja → manga-ocr
   (`onnx-community/manga-ocr-base-ONNX` + el `vocab.txt` de
   `kha-white/manga-ocr-base`). Lo corre ONNX Runtime a través de `ort`
-  (`=2.0.0-rc.15`, `load-dynamic`, `api-24`): **el runtime nunca se enlaza**;
+  (`=2.0.0-rc.15`, `load-dynamic`, `api-23`: la API del runtime más viejo que se baja): **el runtime nunca se enlaza**;
   se carga de `app_data_dir/ocr/` tras volver a comprobar su SHA-256.
   Variantes: `int8` (por defecto) y `fp16` = encoder fp16 + decoder fp32,
   porque el decoder fp16 de la conversión no carga.
@@ -535,7 +536,12 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   oficiales de Microsoft en nuget.org (`Microsoft.ML.OnnxRuntime`,
   `…DirectML` + `DirectML.dll` de `Microsoft.AI.DirectML` 1.15.4): se lee
   solo la entrada de este SO por rangos (cabecera local del zip + datos
-  deflate). Sin build para Mac Intel (`supported = false`). "Eliminar
+  deflate). **Mac Intel** usa ONNX Runtime **1.23.2** (`osx-x64`,
+  `RUNTIME_VERSION_OSX_X64`): la 1.24 ya no publica ese build. Necesita
+  macOS 13.4+. Por ella `ort` va con `api-23` (un runtime más nuevo sirve
+  una API más vieja; al revés no carga). La 1.23 no tiene kernel de CPU para
+  el `ConvInteger` del encoder int8, así que allí la variante int8 es
+  encoder fp16 + decoder int8 (`assets::recognizer_for`). "Eliminar
   modelos" borra todo; lo que siga cargado (Windows) se borra al arrancar
   (`.delete-pending`). Los modelos no van en la copia de seguridad.
 - **UX**: cada tomo dice su texto (mokuro, listo, n de N, sin texto) y
@@ -553,7 +559,8 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `.mokuro` previo y recuerda el `volume_uuid` para el progreso de Mokuro
   Reader. Reemplazar exige una segunda confirmación.
 - **owocr como motor** (`ocr/owocr.rs`, M5; Ajustes → Lector de manga →
-  Motor de OCR: Integrado · owocr, `manga_ocr_engine`, `manga_owocr_port`).
+  Motor de OCR: Integrado · Integrado rápido · owocr, `manga_ocr_engine`,
+  `manga_owocr_port`).
   owocr (AuroraWright/owocr, GPL-3.0) es un programa que el usuario instala
   y arranca: la app **no** lo instala, no lo empaqueta ni copia su código;
   solo le habla por WebSocket, siempre a `127.0.0.1` (owocr escucha en
@@ -589,10 +596,43 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 - `OcrStatus` lleva `engine`, `ready` (owocr, o el integrado instalado) y
   `usable`: la UI usa esos dos, no `installed`/`supported`, para pedir
   páginas. Con owocr no hay diálogo de descarga.
+- **meikiocr como motor integrado** (`ocr/meiki.rs`; "Integrado
+  rápido", `OcrEngine::Meiki`, engine `meiki` en `manga_page_text`).
+  manga-ocr sigue siendo el de por defecto: meikiocr (rtr46/meikiocr,
+  Apache-2.0) está hecho para videojuegos. Su código **no** está en la app:
+  el pipeline de su `ocr.py` 0.3.5 se reimplementó en Rust. Modelos
+  (**LGPL-3.0**, sin modificar, de los repos de rtr46 en commits fijados):
+  `meiki.text.detect.v0.1.960x544` (líneas, D-FINE, 64 como mucho) y
+  `meiki.text.rec.v0.960x32` / `.vertical.32x480` (el reconocimiento es una
+  detección de caracteres: `char_codes` = código Unicode, caja y score).
+  Entrada BGR en `[0,1]` (pasa el BGR de OpenCV tal cual), la imagen
+  arriba a la izquierda de un lienzo negro y `orig_target_sizes` =
+  `960/escala, 544/escala` para que las cajas salgan en píxeles; líneas con
+  score > 0,5, caracteres ≥ 0,1, una línea más alta que ancha va al modelo
+  vertical (piezas de 420 px que se solapan 64 si no cabe en 480), y en cada
+  línea gana el carácter más seguro donde dos se solapan > 30 %.
+- Dos cosas que meikiocr no hace y aquí sí, porque en manga hacen falta: una
+  página más alta que 960:544 se detecta por **bandas** de esa forma que se
+  solapan un 25 % (`bands`, `merge_lines`; entera encogía a un tercio y se
+  perdían el texto pequeño y los pies), y las líneas se agrupan en bloques
+  `.mokuro` (`blocks`: misma dirección, grosor parecido, a un carácter como
+  mucho, la mitad de su largo compartida) **sin furigana** (`is_furigana`:
+  < 60 % del grosor, pegada y dentro de su largo; contaría dos veces). Luego
+  el `post_process` de manga-ocr y `layout::reading_order`. La caja dibujada
+  se detecta con margen y cuentan las líneas con el centro dentro; si no hay
+  ninguna, se lee la caja como una línea.
+- Instalar y borrar van por motor (`assets::Models`, `OcrEngine::models`):
+  el diálogo y "Eliminar modelos" son los del motor elegido (los de
+  manga-ocr con owocr); el runtime se comparte y solo se borra cuando no
+  queda ningún modelo del otro. `OcrStatus` dice `manga_ocr_installed` y
+  `meiki_installed`. `.delete-pending` lista nombres y al arrancar solo se
+  borran esos (y solo si son archivos conocidos del OCR).
 - Probar el OCR de verdad: los tests `#[ignore]`
-  `ocr::download::…downloads_the_real_files` (`NTDC_OCR_FETCH_DIR`),
-  `ocr::engine::…reads_a_real_page` (`NTDC_OCR_DIR`, `NTDC_OCR_PAGE`,
-  `NTDC_OCR_EXPECT`) y, con un owocr arrancado a mano,
+  `ocr::download::…downloads_the_real_files` (`NTDC_OCR_FETCH_DIR`, con
+  `NTDC_OCR_MODELS=meiki` los de meikiocr),
+  `ocr::engine::…reads_a_real_page` y
+  `ocr::meiki::…reads_a_real_page_with_meikiocr` (`NTDC_OCR_DIR`,
+  `NTDC_OCR_PAGE`, `NTDC_OCR_EXPECT`) y, con un owocr arrancado a mano,
   `ocr::owocr::…reads_a_real_page_with_owocr` (`NTDC_OWOCR_PORT`,
   `NTDC_OCR_PAGE`, `NTDC_OCR_EXPECT`). Nunca guardes modelos ni runtime en
   el repo.

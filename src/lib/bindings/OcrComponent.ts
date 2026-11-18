@@ -5,7 +5,8 @@
  */
 export type OcrComponent = { 
 /**
- * `runtime`, `detector` or `recognizer`.
+ * `runtime`, `detector`, `recognizer`, `meikiDetector` or
+ * `meikiRecognizer`.
  */
 kind: string, 
 /**

@@ -44,7 +44,10 @@ each is checked against the SHA-256 pinned in
   (Linux, macOS) and
   [`Microsoft.ML.OnnxRuntime.DirectML`](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.DirectML/1.24.4)
   (Windows), built from [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)
-  `v1.24.4`. On Windows also `DirectML.dll` from
+  `v1.24.4`. On Intel Macs, which 1.24 no longer builds for, **ONNX Runtime
+  1.23.2** instead, from
+  [`Microsoft.ML.OnnxRuntime` 1.23.2](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/1.23.2)
+  (`v1.23.2`, same license). On Windows also `DirectML.dll` from
   [`Microsoft.AI.DirectML` 1.15.4](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4),
   under the license included in that package. The app talks to ONNX Runtime
   through the [`ort`](https://github.com/pykeio/ort) crate (MIT OR
@@ -61,6 +64,24 @@ each is checked against the SHA-256 pinned in
   [kha-white/manga-ocr](https://github.com/kha-white/manga-ocr) (Apache
   License 2.0); its half-width to full-width table follows
   [jaconv](https://github.com/ikegami-yukino/jaconv) (MIT License).
+
+- **meikiocr** (the optional "fast" built-in engine) —
+  [rtr46/meikiocr](https://github.com/rtr46/meikiocr) 0.3.5, Apache License
+  2.0. None of its code is included: the pipeline in
+  `src-tauri/src/manga/ocr/meiki.rs` (preprocessing, thresholds, the
+  per-line character selection and its list of swapped kanji pairs) was
+  reimplemented in Rust from reading it. Its models are separate downloads,
+  only if the user installs this engine:
+  - [rtr46/meiki.text.detect.v0](https://huggingface.co/rtr46/meiki.text.detect.v0)
+    (commit `a9cffa4f`), **GNU LGPL-3.0**: the unmodified
+    `meiki.text.detect.v0.1.960x544.onnx`;
+  - [rtr46/meiki.txt.recognition.v0](https://huggingface.co/rtr46/meiki.txt.recognition.v0)
+    (commit `a28cf587`), **GNU LGPL-3.0**: the unmodified
+    `meiki.text.rec.v0.960x32.onnx` and `meiki.text.rec.v0.vertical.32x480.onnx`.
+
+  The app does not ship or redistribute them: they are fetched from the
+  author's repositories at those commits, kept as separate files the app
+  only loads into ONNX Runtime, and "Delete models" removes them.
 
 The GPL-3.0 comic-text-detector used by mokuro is not used.
 

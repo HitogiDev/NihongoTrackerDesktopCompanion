@@ -1873,7 +1873,7 @@ fn ocr_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::ocr::Servi
     state.manga.ocr().ok_or_else(|| "error".to_string())
 }
 
-/// `not-installed` when the chosen engine is the built-in one and it is not
+/// `not-installed` when the chosen engine is a built-in one and it is not
 /// downloaded yet. owocr is always worth asking: if it is not running, the
 /// first page says so (`owocr-unavailable`).
 async fn ensure_ocr_ready(state: &AppState, ocr: &crate::manga::ocr::Service) -> CmdResult<()> {
@@ -1932,16 +1932,25 @@ pub async fn manga_ocr_process_volume(app: AppHandle, state: State<'_, AppState>
     Ok(pages.len())
 }
 
-/// Downloads the runtime and the chosen variant's models (the user has just
-/// agreed to, in the consent dialog). Progress on `manga://ocr-progress`.
+/// The models the consent dialog and "delete" are about: the chosen built-in
+/// engine's (manga-ocr in its variant, or meikiocr), manga-ocr's with owocr.
+async fn chosen_models(state: &AppState) -> crate::manga::ocr::assets::Models {
+    let settings = state.settings_snapshot().await;
+    let variant = settings.manga_ocr_variant;
+    settings.manga_ocr_engine.models(variant).unwrap_or(crate::manga::ocr::assets::Models::MangaOcr(variant))
+}
+
+/// Downloads the runtime and the chosen built-in engine's models (the user
+/// has just agreed to, in the consent dialog). Progress on
+/// `manga://ocr-progress`.
 #[tauri::command]
 pub async fn manga_ocr_install(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     let ocr = ocr_of(&state)?;
-    let variant = state.settings_snapshot().await.manga_ocr_variant;
+    let models = chosen_models(&state).await;
     if crate::manga::ocr::assets::runtime().is_none() {
         return Err("unsupported".into());
     }
-    if !ocr.install(&app, variant) {
+    if !ocr.install(&app, models) {
         return Err("downloading".into());
     }
     Ok(())
@@ -1953,11 +1962,13 @@ pub fn manga_ocr_cancel_install(state: State<'_, AppState>) -> CmdResult<bool> {
     Ok(ocr_of(&state)?.cancel_install())
 }
 
-/// Deletes the runtime and every model.
+/// Deletes the chosen built-in engine's models, in every variant, and the
+/// runtime when the other engine is not installed either.
 #[tauri::command]
 pub async fn manga_ocr_delete(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     let ocr = ocr_of(&state)?;
-    tauri::async_runtime::spawn_blocking(move || ocr.delete()).await.map_err(err)??;
+    let models = chosen_models(&state).await;
+    tauri::async_runtime::spawn_blocking(move || ocr.delete(models)).await.map_err(err)??;
     crate::manga::ocr::emit_status(&app);
     Ok(())
 }

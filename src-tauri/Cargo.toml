@@ -62,7 +62,9 @@ quick-xml = "0.41"
 percent-encoding = "2"
 # The built-in manga OCR (`manga::ocr`). ONNX Runtime is never linked: the
 # library is downloaded (with the user's consent) and loaded at run time.
-ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "api-24"] }
+# `api-23`: the C API of ONNX Runtime 1.23.2, the last one built for Intel
+# Macs (see `manga::ocr::assets`); 1.24 serves it too.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "api-23"] }
 # Checksums of the OCR downloads, and the runtime's library out of its NuGet
 # package (a deflated zip entry).
 sha2 = "0.10"

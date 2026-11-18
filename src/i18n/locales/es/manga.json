@@ -228,17 +228,26 @@
     },
     "install": {
       "title": "Descargar el OCR",
+      "titleMeiki": "Descargar meikiocr",
       "intro": "El OCR lee el texto de las páginas que no tienen .mokuro. Funciona en este ordenador: las páginas nunca se suben a ningún sitio. Necesita estos archivos, que se descargan una vez:",
+      "introMeiki": "meikiocr lee el texto de las páginas que no tienen .mokuro. Funciona en este ordenador: las páginas nunca se suben a ningún sitio. Necesita estos archivos, que se descargan una vez:",
+      "meikiTradeoffTitle": "Rápido, pero hecho para videojuegos",
+      "meikiTradeoff": "Lee una página varias veces más rápido que manga-ocr, pero sus modelos se entrenaron con videojuegos: en manga falla más, y su modelo de texto vertical está en beta. manga-ocr sigue siendo el motor recomendado; puedes instalar los dos y cambiar en Ajustes.",
+      "meikiLicense": "Los modelos de meikiocr (de rtr46) se publican con licencia LGPL-3.0. Se descargan sin modificar desde los repositorios de su autor en Hugging Face, y Ajustes puede borrarlos cuando quieras.",
       "variant": "Modelo de OCR",
       "component": {
         "runtime": "ONNX Runtime {{version}}",
         "detector": "Detector de texto",
-        "recognizer": "Reconocedor de japonés (manga-ocr)"
+        "recognizer": "Reconocedor de japonés (manga-ocr)",
+        "meikiDetector": "Detector de líneas (meikiocr)",
+        "meikiRecognizer": "Reconocedor de japonés (meikiocr)"
       },
       "componentHint": {
         "runtime": "Ejecuta los modelos · Microsoft",
         "detector": "Encuentra bocadillos y texto · comic-text-and-bubble-detector",
-        "recognizer": "Lee cada caja · kha-white/manga-ocr"
+        "recognizer": "Lee cada caja · kha-white/manga-ocr",
+        "meikiDetector": "Encuentra cada línea de texto · rtr46/meiki.text.detect",
+        "meikiRecognizer": "Lee filas y columnas · rtr46/meiki.txt.recognition"
       },
       "present": "Listo",
       "total": "Por descargar",

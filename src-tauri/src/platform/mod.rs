@@ -198,7 +198,7 @@ pub fn process_key(process: &sysinfo::Process) -> String {
 
 /// Which ONNX Runtime build the manga OCR downloads here (a key of
 /// `manga::ocr::assets::runtime_for`), or `None` where Microsoft publishes
-/// none (Intel Macs, 32-bit systems).
+/// none (32-bit systems). Intel Macs get an older release (see `assets`).
 pub fn ocr_runtime_target() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("windows", "x86_64") => Some("win-x64"),
@@ -206,6 +206,7 @@ pub fn ocr_runtime_target() -> Option<&'static str> {
         ("linux", "x86_64") => Some("linux-x64"),
         ("linux", "aarch64") => Some("linux-arm64"),
         ("macos", "aarch64") => Some("osx-arm64"),
+        ("macos", "x86_64") => Some("osx-x64"),
         _ => None,
     }
 }

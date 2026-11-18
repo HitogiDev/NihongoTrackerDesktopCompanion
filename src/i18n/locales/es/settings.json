@@ -257,15 +257,29 @@
     "ocrDelete": "Eliminar modelos",
     "ocrDeleteConfirm": "Eliminar",
     "ocrDeleted": "Modelos de OCR eliminados",
+    "ocrMeiki": "OCR integrado rápido",
+    "ocrMeikiHint": "meikiocr lee en este ordenador el texto de las páginas sin .mokuro, mucho más rápido que manga-ocr pero con menos acierto en manga. Sus modelos solo se descargan cuando lo pides, aparte de los de manga-ocr: puedes tener uno, el otro o los dos.",
+    "ocrMeikiDeleted": "Modelos de meikiocr eliminados",
     "ocrAuto": "Leer las páginas sin texto mientras lees",
-    "ocrAutoHint": "Con el OCR listo (owocr elegido, o el integrado instalado), el lector lee la página en pantalla y las siguientes en cuanto ve que no tienen texto.",
+    "ocrAutoHint": "Con el OCR listo (owocr elegido, o un motor integrado instalado), el lector lee la página en pantalla y las siguientes en cuanto ve que no tienen texto.",
     "ocrEngine": "Motor de OCR",
-    "ocrEngineBuiltinHint": "Quién lee el texto de las páginas sin .mokuro. El OCR integrado funciona dentro de la app.",
-    "ocrEngineOwocrHint": "Quién lee el texto de las páginas sin .mokuro. owocr es un programa aparte que instalas y arrancas tú.",
+    "ocrEngineHint": "Quién lee el texto de las páginas sin .mokuro. Los dos motores integrados funcionan dentro de la app; owocr es un programa aparte que instalas y arrancas tú.",
     "ocrEngines": {
       "builtin": "Integrado",
+      "meiki": "Integrado rápido",
       "owocr": "owocr"
     },
+    "ocrEngineModel": {
+      "builtin": "manga-ocr",
+      "meiki": "meikiocr",
+      "owocr": "AuroraWright/owocr"
+    },
+    "ocrEngineTagline": {
+      "builtin": "El más preciso en manga, bocadillos y texto vertical incluidos. Más lento en la CPU.",
+      "meiki": "Varias veces más rápido, pero hecho para videojuegos: falla más en manga y el texto vertical está en beta.",
+      "owocr": "Un programa que arrancas tú, con el motor que elijas en él."
+    },
+    "ocrRecommended": "Recomendado",
     "owocrIntro": "owocr (AuroraWright/owocr) no forma parte de la app: instálalo con pip, elige su motor y arráncalo antes de leer. La app le manda cada página por un WebSocket y convierte las cajas que devuelve en el texto del lector.",
     "owocrCommand": "Arráncalo con",
     "owocrConfig": "o pon esto en la sección [general] de owocr_config.ini:",

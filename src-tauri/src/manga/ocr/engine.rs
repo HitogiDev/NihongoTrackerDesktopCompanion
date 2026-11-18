@@ -85,7 +85,7 @@ pub fn hex(bytes: &[u8]) -> String {
 
 /// Loads ONNX Runtime from `dir` once per process (a library cannot be
 /// unloaded), after checking that every runtime file is the one pinned.
-fn environment(dir: &Path, runtime: &[Asset]) -> Result<&'static Environment, String> {
+pub(super) fn environment(dir: &Path, runtime: &[Asset]) -> Result<&'static Environment, String> {
     static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
     if let Some(environment) = ENVIRONMENT.get() {
         return Ok(environment);
@@ -112,7 +112,7 @@ fn threads() -> usize {
     std::thread::available_parallelism().map(|n| (n.get() / 2).max(1)).unwrap_or(2)
 }
 
-fn session(environment: &Environment, path: &Path, accelerated: bool) -> Result<Session, String> {
+pub(super) fn session(environment: &Environment, path: &Path, accelerated: bool) -> Result<Session, String> {
     let mut builder = Session::builder(environment).map_err(|e| e.to_string())?;
     if accelerated {
         let providers: Vec<_> = crate::platform::ocr_execution_providers().into_iter().map(|ep| ep.error_on_failure()).collect();
@@ -318,7 +318,7 @@ mod tests {
     }
 
     /// The whole pipeline on a real page, with the real runtime and models.
-    /// Needs `NTDC_OCR_DIR` (a folder with the files of `assets::all`) and
+    /// Needs `NTDC_OCR_DIR` (a folder with the files of `assets::all_for`) and
     /// `NTDC_OCR_PAGE` (an image); prints what it read.
     #[test]
     #[ignore]
