@@ -9,7 +9,8 @@ function Keys({ keys }: { keys: string[][] }) {
   return (
     <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
       {keys.map((combo, index) => (
-        <Fragment key={combo.join('+')}>
+        // An alternative wraps with its "or", never leaving it at a line's end.
+        <span key={combo.join('+')} className="inline-flex items-center gap-1.5 whitespace-nowrap">
           {index > 0 ? <span className="text-[11px] text-base-content/40">{t('shortcuts.or')}</span> : null}
           <span className="inline-flex items-center gap-0.5">
             {combo.map((key, keyIndex) => (
@@ -19,7 +20,7 @@ function Keys({ keys }: { keys: string[][] }) {
               </Fragment>
             ))}
           </span>
-        </Fragment>
+        </span>
       ))}
     </span>
   );
