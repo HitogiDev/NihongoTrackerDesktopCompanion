@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, BookOpen, Check, CloudDownload, CloudOff, FileArchive, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
@@ -10,6 +10,7 @@ import { ipc } from '../../lib/ipc';
 import { displayUrl, formatBytes, mangaUrl, readPercent } from '../../lib/manga';
 import type { DownloadProgress, MangaSeries, MangaSource, MangaVolume, OcrStatus } from '../../lib/types';
 import { OcrInstallModal } from './ocr/OcrInstallModal';
+import { OcrExportModal } from './ocr/OcrExportModal';
 import { OcrVolumeLabel, OcrVolumeState } from './ocr/OcrVolumeState';
 import { useOcrStatus } from './ocr/useOcr';
 import { toast } from '../../store/useToastStore';
@@ -177,8 +178,9 @@ function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; p
   );
 }
 
-function VolumeRow({ volume, offline, ocr }: { volume: MangaVolume; offline: boolean; ocr: OcrStatus | undefined }) {
+function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offline: boolean; ocr: OcrStatus | undefined; source: MangaSource | null }) {
   const { t, i18n } = useTranslation('manga');
+  const [exporting, setExporting] = useState(false);
   const progress = useDownloadStore((s) => s.running[volume.id]);
   const percent = readPercent(volume.page, Number(volume.page_count), volume.finished);
   const remote = isRemote(volume);
@@ -236,6 +238,22 @@ function VolumeRow({ volume, offline, ocr }: { volume: MangaVolume; offline: boo
         </DropdownSelect>
       ) : null}
       <OcrVolumeState volume={volume} status={ocr} disabled={unreachable || !isReadable(volume)} />
+      {Number(volume.ocr_pages) > 0 ? (
+        <>
+          <Button
+            appearance="ghost"
+            size="sm"
+            shape="square"
+            disabled={remote && offline}
+            aria-label={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
+            title={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
+            onClick={() => setExporting(true)}
+          >
+            {remote ? <UploadCloud className="h-4 w-4" /> : <FileDown className="h-4 w-4" />}
+          </Button>
+          <OcrExportModal open={exporting} onClose={() => setExporting(false)} volume={volume} source={source} />
+        </>
+      ) : null}
       {remote ? <DownloadControl volume={volume} progress={progress} offline={offline} /> : null}
     </li>
   );
@@ -332,7 +350,7 @@ export default function SeriesDetailScreen() {
                 </span>
               </div>
               <ul className="surface divide-y divide-base-300/60 overflow-hidden">
-                {volumes.map((volume) => <VolumeRow key={volume.id} volume={volume} offline={offline} ocr={ocr} />)}
+                {volumes.map((volume) => <VolumeRow key={volume.id} volume={volume} offline={offline} ocr={ocr} source={source} />)}
               </ul>
             </section>
             <OcrInstallModal />

@@ -1945,6 +1945,28 @@ pub async fn manga_save_page_text(
         .map_err(err)?
 }
 
+/// Writes a volume's text as a `.mokuro`: beside it on disk, or (`webdav`,
+/// which the user confirmed) uploaded beside it on its server. Errors are
+/// codes: `no-text`, `exists` (without `overwrite`), `read-only`, `changed`…
+#[tauri::command]
+pub async fn manga_ocr_export(app: AppHandle, state: State<'_, AppState>, volume_id: String, overwrite: bool) -> CmdResult<crate::manga::ocr::export::OcrExport> {
+    let db = state.db.clone();
+    let remote = state.manga.remote();
+    let done = tauri::async_runtime::spawn_blocking(move || {
+        let location = db.manga_volume_location(&volume_id).map_err(err)?.ok_or("not-found")?;
+        if crate::manga::store::is_remote_format(&location.format) {
+            let remote = remote.ok_or("error")?;
+            crate::manga::ocr::export::to_webdav(&db, &remote, &volume_id, overwrite)
+        } else {
+            crate::manga::ocr::export::to_local(&db, &volume_id, overwrite)
+        }
+    })
+    .await
+    .map_err(err)??;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(done)
+}
+
 #[tauri::command]
 pub fn manga_ocr_cancel_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<bool> {
     Ok(ocr_of(&state)?.cancel_volume(&app, &volume_id))

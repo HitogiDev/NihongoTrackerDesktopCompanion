@@ -124,7 +124,7 @@ pub fn file_path(series_path: &str) -> Option<String> {
     base_name.eq_ignore_ascii_case(super::layout::LIBRARY_FOLDER).then(|| format!("{base}/{FILE_NAME}"))
 }
 
-fn uuid_key(volume_id: &str) -> String {
+pub(crate) fn uuid_key(volume_id: &str) -> String {
     format!("manga:uuid:{volume_id}")
 }
 

@@ -276,7 +276,16 @@
       "cancelled": "Descarga detenida.",
       "disk": "No se pudo guardar el archivo. Comprueba el espacio libre.",
       "unreadable": "No se pudo leer la imagen de la página.",
-      "not-found": "Esta página ya no está en la biblioteca."
+      "not-found": "Esta página ya no está en la biblioteca.",
+      "no-text": "Este tomo aún no tiene texto que exportar.",
+      "read-only": "El servidor no deja escribir ahí a esta cuenta.",
+      "changed": "El archivo cambió en el servidor entretanto. Vuelve a intentarlo.",
+      "unauthorized": "El servidor rechazó las credenciales.",
+      "not-local": "Este tomo no es una carpeta ni un archivo de este ordenador.",
+      "not-remote": "Este tomo no está en un servidor WebDAV.",
+      "exists": "Ya hay un .mokuro ahí.",
+      "bad-size": "Aún no se conoce el tamaño de la página. Espera a que cargue y vuelve a intentarlo.",
+      "too-many": "Demasiadas cajas en una página."
     },
     "volume": {
       "process": "Leer texto",
@@ -284,6 +293,23 @@
       "installHint": "Descarga el OCR integrado para leer el texto de este tomo.",
       "cancel": "Dejar de leer este tomo",
       "progress": "Leyendo el texto de {{title}}"
+    },
+    "export": {
+      "title": "Exportar como .mokuro",
+      "titleRemote": "Subir el .mokuro al servidor",
+      "body": "Escribe el texto del tomo (el de mokuro, el del OCR y tus correcciones) en un archivo .mokuro junto al tomo, para que lo usen Mokuro Reader y otros lectores.",
+      "bodyRemote": "Sube el texto del tomo (el de mokuro, el del OCR y tus correcciones) como un archivo .mokuro junto al tomo en el servidor, para que lo usen Mokuro Reader y otros clientes de ese servidor.",
+      "permission": "Esto escribe en el servidor: tu cuenta allí necesita permiso de escritura. No se cambia nada más del servidor.",
+      "besideVolume": "Junto a {{title}}",
+      "save": "Exportar",
+      "upload": "Subir",
+      "replace": "Reemplazarlo",
+      "exists": "Ya hay un .mokuro junto a este tomo. ¿Reemplazarlo por este?",
+      "existsRemote": "El servidor ya tiene un .mokuro de este tomo. ¿Reemplazarlo por este? Solo se reemplaza si nadie lo ha cambiado entretanto.",
+      "saved_one": "Guardado {{path}} ({{count}} página con texto)",
+      "saved_other": "Guardado {{path}} ({{count}} páginas con texto)",
+      "uploaded_one": "Subido {{path}} ({{count}} página con texto)",
+      "uploaded_other": "Subido {{path}} ({{count}} páginas con texto)"
     }
   }
 }

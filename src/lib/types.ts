@@ -29,6 +29,7 @@ import type { MokuroPage } from './bindings/MokuroPage';
 import type { EditedBlock } from './bindings/EditedBlock';
 import type { OcrComponent } from './bindings/OcrComponent';
 import type { OcrDownload } from './bindings/OcrDownload';
+import type { OcrExport } from './bindings/OcrExport';
 import type { OcrPage } from './bindings/OcrPage';
 import type { OcrStatus } from './bindings/OcrStatus';
 import type { OcrVariant } from './bindings/OcrVariant';
@@ -93,6 +94,7 @@ export type {
   EditedBlock,
   OcrComponent,
   OcrDownload,
+  OcrExport,
   OcrPage,
   OcrStatus,
   OcrVariant,

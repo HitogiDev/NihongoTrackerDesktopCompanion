@@ -21,6 +21,7 @@ import type {
   MangaSource,
   MokuroPage,
   EditedBlock,
+  OcrExport,
   OcrStatus,
   ReaderPrefs,
   ReaderTarget,
@@ -309,6 +310,11 @@ export const ipc = {
   /** The text inside a box (image pixels) of a page, read before anything queued. */
   mangaOcrRegion: (volumeId: string, page: number, bbox: [number, number, number, number]) =>
     invoke<string>('manga_ocr_region', { volumeId, page, bbox }),
+  /**
+   * Writes a volume's text as a `.mokuro` beside it (on its WebDAV server for a
+   * remote volume). Rejects with `exists` unless `overwrite`, `read-only`, `no-text`…
+   */
+  mangaOcrExport: (volumeId: string, overwrite: boolean) => invoke<OcrExport>('manga_ocr_export', { volumeId, overwrite }),
   /** Saves a page's blocks as corrected by hand; they win over the `.mokuro`. */
   mangaSavePageText: (volumeId: string, page: number, imageWidth: number, imageHeight: number, blocks: EditedBlock[]) =>
     invoke<MokuroPage>('manga_save_page_text', { volumeId, page, imageWidth, imageHeight, blocks }),

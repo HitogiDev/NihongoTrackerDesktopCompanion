@@ -276,7 +276,16 @@
       "cancelled": "Download stopped.",
       "disk": "The file could not be saved. Check the free space.",
       "unreadable": "The page image could not be read.",
-      "not-found": "This page is no longer in the library."
+      "not-found": "This page is no longer in the library.",
+      "no-text": "This volume has no text to export yet.",
+      "read-only": "The server does not let this account write there.",
+      "changed": "The file changed on the server meanwhile. Try again.",
+      "unauthorized": "The server refused the credentials.",
+      "not-local": "This volume is not a folder or archive on this computer.",
+      "not-remote": "This volume is not on a WebDAV server.",
+      "exists": "There is already a .mokuro there.",
+      "bad-size": "The page's size is not known yet. Wait for it to load and try again.",
+      "too-many": "Too many boxes on one page."
     },
     "volume": {
       "process": "Read text",
@@ -284,6 +293,23 @@
       "installHint": "Download the built-in OCR to read the text of this volume.",
       "cancel": "Stop reading this volume",
       "progress": "Reading the text of {{title}}"
+    },
+    "export": {
+      "title": "Export as .mokuro",
+      "titleRemote": "Upload .mokuro to the server",
+      "body": "Writes the volume's text (mokuro's, the OCR's and your corrections) as a .mokuro file next to the volume, so Mokuro Reader and other readers can use it.",
+      "bodyRemote": "Uploads the volume's text (mokuro's, the OCR's and your corrections) as a .mokuro file next to the volume on the server, so Mokuro Reader and other clients of that server can use it.",
+      "permission": "This writes to the server: your account there needs permission to write. Nothing else on the server is changed.",
+      "besideVolume": "Next to {{title}}",
+      "save": "Export",
+      "upload": "Upload",
+      "replace": "Replace it",
+      "exists": "There is already a .mokuro next to this volume. Replace it with this one?",
+      "existsRemote": "The server already has a .mokuro for this volume. Replace it with this one? It is only replaced if nobody changed it since.",
+      "saved_one": "Saved {{path}} ({{count}} page with text)",
+      "saved_other": "Saved {{path}} ({{count}} pages with text)",
+      "uploaded_one": "Uploaded {{path}} ({{count}} page with text)",
+      "uploaded_other": "Uploaded {{path}} ({{count}} pages with text)"
     }
   }
 }

@@ -14,6 +14,7 @@ pub mod assets;
 pub mod beam;
 pub mod download;
 pub mod engine;
+pub mod export;
 pub mod layout;
 pub mod text;
 pub mod worker;

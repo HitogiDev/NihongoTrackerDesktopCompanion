@@ -924,6 +924,13 @@ impl Db {
         })
     }
 
+    /// A `.mokuro` was written beside a volume: it is the volume's now.
+    pub fn set_manga_volume_mokuro(&self, volume_id: &str, path: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute("UPDATE manga_volumes SET mokuro_path = ?2, ocr_state = 'mokuro' WHERE id = ?1", params![volume_id, path]).map(|_| ())
+        })
+    }
+
     /// The engine that wrote a page's stored text, if any.
     pub fn manga_page_text_engine(&self, volume_id: &str, page: i64) -> Result<Option<String>> {
         self.with(|c| {
