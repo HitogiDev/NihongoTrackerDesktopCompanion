@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
+import { inViewTransition, withViewTransition } from '../../../lib/viewTransition';
 import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { OcrInstallModal } from '../ocr/OcrInstallModal';
 import { ShortcutsSheet } from '../ShortcutsSheet';
@@ -67,9 +68,13 @@ export default function MangaReaderWindow() {
   useEffect(() => {
     let alive = true;
     void ipc.mangaReaderTarget().then((value) => { if (alive) setTarget(value); });
+    // Another volume in the open window: the old page cross-fades into the
+    // new one where the webview has View Transitions.
     const off = listen<ReaderTarget>(events.mangaReaderOpen, (event) => {
-      setTarget(event.payload);
-      setOpened((count) => count + 1);
+      withViewTransition(() => {
+        setTarget(event.payload);
+        setOpened((count) => count + 1);
+      }, () => Boolean(document.querySelector<HTMLImageElement>('[data-page] img')?.complete), 600);
     });
     // Where a session's log went, when it ends with the reader still open
     // (idle too long, or the next volume opened).
@@ -132,6 +137,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const viewport = useViewport();
   const chrome = useAutoHide();
   const strip = useRef<StripHandle>(null);
+  // The first page fades in, unless a view transition already brought it.
+  const [fadeIn] = useState(() => !inViewTransition());
 
   const [prefs, setPrefs] = useState<ReaderPrefs>(data.prefs);
   const [page, setPage] = useState(initialPage);
@@ -644,7 +651,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'}`}
+      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'} ${fadeIn ? 'manga-reader-in' : ''}`}
       onClick={onClick}
       onWheel={onWheel}
     >

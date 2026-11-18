@@ -480,3 +480,38 @@ textarea,
     transition: none;
   }
 }
+
+/* From a cover to its series and back (coverTransition.ts): the cover morphs
+   with View Transitions where the webview has them; otherwise the series
+   page fades in. The reader's window fades its first page in. */
+@media (prefers-reduced-motion: no-preference) {
+  .manga-fade-in {
+    animation: manga-fade-in 220ms ease-out both;
+  }
+  .manga-reader-in {
+    animation: manga-reader-in 260ms ease-out both;
+  }
+  ::view-transition-group(manga-cover) {
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+@keyframes manga-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes manga-reader-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

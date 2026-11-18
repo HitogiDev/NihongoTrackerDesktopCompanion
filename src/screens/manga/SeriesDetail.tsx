@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, BookOpen, Puzzle, Check, ShieldAlert, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
@@ -15,6 +15,8 @@ import { OcrVolumeLabel, OcrVolumeState } from './ocr/OcrVolumeState';
 import { useOcrStatus } from './ocr/useOcr';
 import { toast } from '../../store/useToastStore';
 import { Cover, MANGA } from './Cover';
+import { backToLibrary, COVER_TRANSITION } from './coverTransition';
+import { inViewTransition } from '../../lib/viewTransition';
 import { openVolume, useMangaLibraryEvents, useMangaSeries } from './useMangaLibrary';
 import { ServerStatus } from './Servers';
 import { extErrorText } from './ext/useExtensions';
@@ -70,7 +72,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
       <img src={cover} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-80 blur-3xl saturate-150" />
       <div className="absolute inset-0 -z-10 bg-linear-to-r from-base-100/95 via-base-100/70 to-base-100/25" />
       <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-end">
-        <div className="aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-box shadow-lg ring-1 ring-base-content/10 sm:w-44">
+        <div data-hero-cover style={{ viewTransitionName: COVER_TRANSITION }} className="aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-box shadow-lg ring-1 ring-base-content/10 sm:w-44">
           <Cover src={cover} eager />
         </div>
         <div className="min-w-0 flex-1 space-y-4">
@@ -357,6 +359,9 @@ export default function SeriesDetailScreen() {
   const source = detail.data?.source ?? null;
   const offline = unreachableReason(source);
   const remoteSeries = series?.source === 'webdav';
+  const navigate = useNavigate();
+  // Arrived by a view transition, the cover already moved: no fade on top.
+  const [fade] = useState(() => !inViewTransition());
 
   // A remote series: its texts come down in the background while it is looked at.
   useEffect(() => {
@@ -367,13 +372,23 @@ export default function SeriesDetailScreen() {
     <div className="min-h-full bg-base-300">
       <header className="sticky top-0 z-20 border-b border-base-300/60 bg-base-100">
         <div className="flex min-h-14 items-center gap-3 px-6 py-2.5">
-          <Link to="/manga" className="btn btn-ghost btn-sm btn-square" aria-label={t('detail.back')} title={t('detail.back')}>
+          <Link
+            to="/manga"
+            className="btn btn-ghost btn-sm btn-square"
+            aria-label={t('detail.back')}
+            title={t('detail.back')}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              backToLibrary(seriesId, navigate);
+            }}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight">{series?.title ?? t('title')}</h1>
         </div>
       </header>
-      <div className="space-y-6 px-6 py-5">
+      <div className={fade ? 'manga-fade-in space-y-6 px-6 py-5' : 'space-y-6 px-6 py-5'}>
         {detail.isPending ? (
           <DetailSkeleton />
         ) : detail.isError ? (

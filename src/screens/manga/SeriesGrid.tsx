@@ -1,10 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Play, ScanText } from 'lucide-react';
 import { mangaUrl, readPercent } from '../../lib/manga';
 import type { MangaContinue, MangaSeries } from '../../lib/types';
 import { Cover, CoverProgress, MANGA } from './Cover';
 import { openVolume } from './useMangaLibrary';
+import { openSeries } from './coverTransition';
 
 const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-6';
 
@@ -21,11 +22,17 @@ export function TextBadge({ className = '' }: { className?: string }) {
 
 export function SeriesCard({ series }: { series: MangaSeries }) {
   const { t } = useTranslation('manga');
+  const navigate = useNavigate();
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   return (
     <li>
-      <Link to={`/manga/${series.id}`} className="group block rounded-box focus-visible:outline-offset-4" title={series.title}>
-        <div className="relative aspect-[2/3] overflow-hidden rounded-box shadow-sm ring-1 ring-base-content/5 motion-safe:transition motion-safe:duration-200 motion-safe:ease-out group-hover:shadow-lg motion-safe:group-hover:-translate-y-1">
+      <Link
+        to={`/manga/${series.id}`}
+        className="group block rounded-box focus-visible:outline-offset-4"
+        title={series.title}
+        onClick={(event) => openSeries(event, series.id, navigate)}
+      >
+        <div data-series-cover={series.id} className="relative aspect-[2/3] overflow-hidden rounded-box shadow-sm ring-1 ring-base-content/5 motion-safe:transition motion-safe:duration-200 motion-safe:ease-out group-hover:shadow-lg motion-safe:group-hover:-translate-y-1">
           <Cover src={mangaUrl.cover(series.id)} />
           <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-neutral/40 via-transparent to-transparent opacity-0 motion-safe:transition-opacity group-hover:opacity-100" />
           {series.has_text ? <TextBadge className="absolute right-2 top-2" /> : null}
