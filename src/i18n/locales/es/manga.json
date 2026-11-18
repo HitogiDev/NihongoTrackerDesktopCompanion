@@ -189,7 +189,8 @@
       "downloaded": "Descargado",
       "downloadedHint": "Descargado: se puede leer sin el servidor",
       "remove": "Quitar la descarga de {{title}}",
-      "offline": "El servidor no responde y este tomo no está descargado"
+      "offline": "El servidor no responde y este tomo no está descargado",
+      "unauthorized": "El servidor rechaza las credenciales y este tomo no está descargado"
     },
     "detail": {
       "pagesOnOpen": "Las páginas se leen al abrirlo",
@@ -198,7 +199,9 @@
       "layerMain": "Texto principal",
       "offlineTitle": "{{name}} no responde",
       "offlineBody": "Los tomos descargados se pueden seguir leyendo. El resto vuelve cuando vuelva el servidor.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "unauthorizedTitle": "{{name}} rechaza las credenciales",
+      "unauthorizedBody": "Los tomos descargados se pueden seguir leyendo. Revisa el usuario y la contraseña del servidor y vuelve a intentarlo."
     }
   },
   "ocr": {

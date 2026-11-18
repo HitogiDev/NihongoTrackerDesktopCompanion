@@ -189,7 +189,8 @@
       "downloaded": "Downloaded",
       "downloadedHint": "Downloaded: it can be read without the server",
       "remove": "Remove the download of {{title}}",
-      "offline": "The server is offline and this volume is not downloaded"
+      "offline": "The server is offline and this volume is not downloaded",
+      "unauthorized": "The server refuses the credentials and this volume is not downloaded"
     },
     "detail": {
       "pagesOnOpen": "Pages are read when opened",
@@ -198,7 +199,9 @@
       "layerMain": "Main text",
       "offlineTitle": "{{name}} is offline",
       "offlineBody": "Downloaded volumes can still be read. The rest come back when the server does.",
-      "retry": "Retry"
+      "retry": "Retry",
+      "unauthorizedTitle": "{{name}} refused the credentials",
+      "unauthorizedBody": "Downloaded volumes can still be read. Check the user and password of the server, then retry."
     }
   },
   "ocr": {

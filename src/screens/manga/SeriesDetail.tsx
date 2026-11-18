@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, BookOpen, Puzzle, Check, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Puzzle, Check, ShieldAlert, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
 import { EmptyState, ErrorState, Skeleton } from '../../components/ui/Empty';
 import { ipc } from '../../lib/ipc';
-import { displayUrl, formatBytes, mangaUrl, readPercent } from '../../lib/manga';
+import { displayUrl, formatBytes, formatCount, mangaUrl, readPercent } from '../../lib/manga';
 import type { DownloadProgress, MangaSeries, MangaSource, MangaVolume, OcrStatus } from '../../lib/types';
 import { OcrInstallModal } from './ocr/OcrInstallModal';
 import { OcrExportModal } from './ocr/OcrExportModal';
@@ -25,6 +25,12 @@ const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
 const isRemote = (volume: MangaVolume) => volume.format === 'remote-archive' || volume.format === 'remote-folder' || isChapter(volume);
 /** Something can be opened: pages, or a remote archive whose pages are read on opening. */
 const isReadable = (volume: MangaVolume) => volume.page_count > 0 || isRemote(volume);
+/** Why the series' server cannot be read from right now, if it cannot. */
+export type Unreachable = 'offline' | 'unauthorized' | null;
+export function unreachableReason(source: MangaSource | null): Unreachable {
+  const error = source?.last_error;
+  return error === 'offline' || error === 'unauthorized' ? error : null;
+}
 
 /** The volume "Read" opens: the one in progress, else the first unread one. */
 export function nextVolume(volumes: MangaVolume[]): { volume: MangaVolume; resume: boolean } | null {
@@ -40,9 +46,9 @@ export function nextVolume(volumes: MangaVolume[]): { volume: MangaVolume; resum
 
 function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volumes: MangaVolume[]; source: MangaSource | null; onLink: () => void }) {
   const { t } = useTranslation(['manga', 'common']);
-  // Offline, "Read" only offers what is on this computer.
-  const offline = source?.last_error === 'offline';
-  const next = nextVolume(offline ? volumes.filter((volume) => volume.downloaded || !isRemote(volume)) : volumes);
+  // Offline, or refused by the server, "Read" only offers what is on this computer.
+  const cut = unreachableReason(source) !== null;
+  const next = nextVolume(cut ? volumes.filter((volume) => volume.downloaded || !isRemote(volume)) : volumes);
   const cover = mangaUrl.cover(series.id);
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   const [unlinking, setUnlinking] = useState(false);
@@ -125,7 +131,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
 }
 
 /** Download state of a remote volume: a button, the bar while it runs, or "downloaded". */
-function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; progress?: DownloadProgress; offline: boolean }) {
+function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; progress?: DownloadProgress; offline: Unreachable }) {
   const { t, i18n } = useTranslation('manga');
   const [removing, setRemoving] = useState(false);
   if (progress) {
@@ -176,9 +182,9 @@ function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; p
       appearance="ghost"
       size="sm"
       shape="square"
-      disabled={offline}
+      disabled={offline !== null}
       aria-label={t('webdav.download.action', { title: volume.title })}
-      title={offline ? t('webdav.download.offline') : t('webdav.download.action', { title: volume.title })}
+      title={offline ? t(`webdav.download.${offline}`) : t('webdav.download.action', { title: volume.title })}
       onClick={() => void downloadForOffline(volume.id, volume.title)}
     >
       <CloudDownload className="h-4 w-4" />
@@ -186,7 +192,7 @@ function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; p
   );
 }
 
-function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offline: boolean; ocr: OcrStatus | undefined; source: MangaSource | null }) {
+function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offline: Unreachable; ocr: OcrStatus | undefined; source: MangaSource | null }) {
   const { t, i18n } = useTranslation('manga');
   const [exporting, setExporting] = useState(false);
   const progress = useDownloadStore((s) => s.running[volume.id]);
@@ -194,14 +200,14 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
   const remote = isRemote(volume);
   const Format = isChapter(volume) ? Puzzle : volume.format === 'archive' || volume.format === 'remote-archive' ? FileArchive : Folder;
   // Offline, only what is on this computer can be opened.
-  const unreachable = remote && offline && !volume.downloaded;
+  const unreachable = remote && offline !== null && !volume.downloaded;
   const disabled = !isReadable(volume) || unreachable || Boolean(progress && !progress.offline);
   return (
     <li className={unreachable ? 'flex items-center gap-2 pr-3 opacity-60' : 'flex items-center gap-2 pr-3'}>
       <button
         type="button"
         disabled={disabled}
-        title={unreachable ? t('webdav.download.offline') : undefined}
+        title={unreachable && offline ? t(`webdav.download.${offline}`) : undefined}
         onClick={() => void openVolume(volume.id)}
         className="group flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 text-left motion-safe:transition-colors enabled:hover:bg-base-200/70 focus-visible:-outline-offset-2 disabled:cursor-not-allowed"
       >
@@ -259,7 +265,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
             appearance="ghost"
             size="sm"
             shape="square"
-            disabled={remote && offline}
+            disabled={remote && offline !== null}
             aria-label={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
             title={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
             onClick={() => setExporting(true)}
@@ -296,17 +302,19 @@ function RefreshChapters({ seriesId }: { seriesId: string }) {
   );
 }
 
-/** The server is not answering: what can still be read, and a way to retry. */
-function OfflineBanner({ source }: { source: MangaSource }) {
+/** The server is not answering, or refuses the credentials: what can still
+ *  be read, and a way to retry. */
+function OfflineBanner({ source, reason }: { source: MangaSource; reason: 'offline' | 'unauthorized' }) {
   const { t } = useTranslation('manga');
+  const refused = reason === 'unauthorized';
   return (
-    <div role="status" className="surface-muted flex flex-wrap items-center gap-3 border border-warning/30 px-4 py-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warning/15 text-warning">
-        <CloudOff className="h-4 w-4" aria-hidden="true" />
+    <div role="status" className={refused ? 'surface-muted flex flex-wrap items-center gap-3 border border-error/30 px-4 py-3' : 'surface-muted flex flex-wrap items-center gap-3 border border-warning/30 px-4 py-3'}>
+      <span className={refused ? 'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-error/15 text-error' : 'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warning/15 text-warning'}>
+        {refused ? <ShieldAlert className="h-4 w-4" aria-hidden="true" /> : <CloudOff className="h-4 w-4" aria-hidden="true" />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{t('webdav.detail.offlineTitle', { name: source.name })}</p>
-        <p className="text-xs text-base-content/60">{t('webdav.detail.offlineBody')}</p>
+        <p className="text-sm font-semibold">{t(refused ? 'webdav.detail.unauthorizedTitle' : 'webdav.detail.offlineTitle', { name: source.name })}</p>
+        <p className="text-xs text-base-content/60">{t(refused ? 'webdav.detail.unauthorizedBody' : 'webdav.detail.offlineBody')}</p>
       </div>
       <Button appearance="outline" size="sm" loading={source.syncing} onClick={() => void syncSource(source.id)}>
         {source.syncing ? null : <RefreshCw className="h-4 w-4" />}
@@ -336,7 +344,7 @@ function DetailSkeleton() {
 }
 
 export default function SeriesDetailScreen() {
-  const { t } = useTranslation(['manga', 'common']);
+  const { t, i18n } = useTranslation(['manga', 'common']);
   const { seriesId = '' } = useParams();
   useMangaLibraryEvents();
   useWebdavSyncEvents();
@@ -347,7 +355,7 @@ export default function SeriesDetailScreen() {
   const series = detail.data?.series;
   const volumes = detail.data?.volumes ?? [];
   const source = detail.data?.source ?? null;
-  const offline = source?.last_error === 'offline';
+  const offline = unreachableReason(source);
   const remoteSeries = series?.source === 'webdav';
 
   // A remote series: its texts come down in the background while it is looked at.
@@ -376,14 +384,14 @@ export default function SeriesDetailScreen() {
           </div>
         ) : (
           <>
-            {source && offline ? <OfflineBanner source={source} /> : null}
+            {source && offline ? <OfflineBanner source={source} reason={offline} /> : null}
             <Hero series={series} volumes={volumes} source={source} onLink={() => setLinking(true)} />
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{series.source === 'suwayomi' ? t('ext.manga.chapters') : t('detail.volumes')}</h2>
                 <span className="flex items-center gap-3 text-xs text-base-content/50">
                   {source && !offline && source.kind !== 'suwayomi' ? <ServerStatus source={source} /> : null}
-                  {volumes.length}
+                  {formatCount(volumes.length, i18n.language)}
                   {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
               </div>
