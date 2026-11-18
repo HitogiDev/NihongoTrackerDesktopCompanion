@@ -111,6 +111,8 @@ pub struct MangaVolume {
     pub text_layers: Vec<String>,
     /// The layer the reader shows; `None` is the main `.mokuro`.
     pub text_layer: Option<String>,
+    /// A remote volume downloaded for offline reading.
+    pub downloaded: bool,
 }
 
 /// One cover on the "continue reading" shelf.
@@ -589,6 +591,26 @@ impl Db {
         })
     }
 
+    pub fn set_manga_offline(&self, volume_id: &str, bytes: i64) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO manga_offline (volume_id, bytes, downloaded_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(volume_id) DO UPDATE SET bytes = excluded.bytes, downloaded_at = excluded.downloaded_at",
+                params![volume_id, bytes, now_iso()],
+            )
+            .map(|_| ())
+        })
+    }
+
+    pub fn delete_manga_offline(&self, volume_id: &str) -> Result<()> {
+        self.with(|c| c.execute("DELETE FROM manga_offline WHERE volume_id = ?1", params![volume_id]).map(|_| ()))
+    }
+
+    /// `(volumes, bytes)` downloaded for offline reading.
+    pub fn manga_offline_totals(&self) -> Result<(i64, i64)> {
+        self.with(|c| c.query_row("SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM manga_offline", [], |r| Ok((r.get(0)?, r.get(1)?))))
+    }
+
     /// The pages of a remote archive, once its index has been read.
     pub fn set_manga_volume_pages(&self, volume_id: &str, pages: &[String]) -> Result<()> {
         let json = serde_json::to_string(pages).unwrap_or_else(|_| "[]".into());
@@ -664,7 +686,8 @@ impl Db {
         self.with(|c| {
             let mut stmt = c.prepare(
                 "SELECT v.id, v.series_id, v.title, v.format, v.position, v.page_count, v.ocr_state, v.added_at,
-                        p.page, COALESCE(p.finished, 0), p.updated_at, v.size, v.layers_json
+                        p.page, COALESCE(p.finished, 0), p.updated_at, v.size, v.layers_json,
+                        EXISTS(SELECT 1 FROM manga_offline o WHERE o.volume_id = v.id)
                  FROM manga_volumes v LEFT JOIN manga_progress p ON p.volume_id = v.id
                  WHERE v.series_id = ?1 ORDER BY v.position, v.title",
             )?;
@@ -686,6 +709,7 @@ impl Db {
                     size: r.get(11)?,
                     text_layers: layers.into_iter().map(|(name, _)| name).collect(),
                     text_layer: None,
+                    downloaded: r.get::<_, i64>(13)? != 0,
                 })
             })?;
             rows.collect::<Result<Vec<_>>>()

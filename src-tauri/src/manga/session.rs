@@ -497,7 +497,7 @@ fn find_block(app: &AppHandle, volume_id: &str, page: i64, block: usize) -> Resu
     };
     let text = match cached {
         Some(text) => text,
-        None => Arc::new(super::mokuro::volume_text(db, volume_id)?),
+        None => Arc::new(super::mokuro::volume_text(db, state.manga.remote().as_deref(), volume_id)?),
     };
     let page_text = usize::try_from(page).ok().and_then(|index| text.get(index)).and_then(Option::as_ref).ok_or("errors.lineNotFound")?;
     let found = page_text.blocks.get(block).ok_or("errors.lineNotFound")?;
@@ -537,7 +537,7 @@ pub fn mine_block(app: &AppHandle, volume_id: &str, page: i64, block: usize) -> 
     }
     let picture = usize::try_from(found.page)
         .ok()
-        .and_then(|index| super::protocol::page_bytes(&found.location, index))
+        .and_then(|index| super::protocol::page_bytes(state.manga.remote().as_deref(), &found.location, index))
         .ok_or_else(|| "the page could not be read".to_string())
         .and_then(|bytes| super::crop::crop_png(&bytes, found.bbox, found.text_size));
     let saved = picture.and_then(|png| {

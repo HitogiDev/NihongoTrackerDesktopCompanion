@@ -25,7 +25,9 @@ import type {
   ReaderVolume,
   ScanSummary,
   WebdavAuth,
+  WebdavCacheUsage,
   WebdavProbe,
+  DownloadProgress,
   MinedSentence,
   MpvSetup,
   OutboxItem,
@@ -250,6 +252,22 @@ export const ipc = {
     invoke<string>('manga_webdav_save', { sourceId, name, url, auth }),
   /** `force` lists every series, not only the folders that changed. */
   mangaWebdavSync: (sourceId: string, force = false) => invoke<void>('manga_webdav_sync', { sourceId, force }),
+  /**
+   * Downloads a remote volume whole (progress on `events.mangaDownload`).
+   * `offline` keeps it for reading without the server; otherwise it goes to
+   * the cache, for a server that cannot send parts of files.
+   */
+  mangaDownloadVolume: (volumeId: string, offline: boolean) => invoke<void>('manga_download_volume', { volumeId, offline }),
+  mangaCancelDownload: (volumeId: string) => invoke<boolean>('manga_cancel_download', { volumeId }),
+  mangaDownloads: () => invoke<DownloadProgress[]>('manga_downloads'),
+  mangaRemoveDownload: (volumeId: string) => invoke<void>('manga_remove_download', { volumeId }),
+  mangaWebdavCacheUsage: () => invoke<WebdavCacheUsage>('manga_webdav_cache_usage'),
+  /** Empties the WebDAV cache; offline downloads stay. */
+  mangaWebdavClearCache: () => invoke<WebdavCacheUsage>('manga_webdav_clear_cache'),
+  /** The text a volume shows: one of its layers, or the main `.mokuro` with null. */
+  mangaSetTextLayer: (volumeId: string, layer: string | null) => invoke<void>('manga_set_text_layer', { volumeId, layer }),
+  /** A remote series was opened: Rust fetches its `.mokuro` files in the background. */
+  mangaPrepareSeries: (seriesId: string) => invoke<void>('manga_prepare_series', { seriesId }),
   mangaSeriesDetail: (seriesId: string) => invoke<MangaSeriesDetail | null>('manga_series_detail', { seriesId }),
   /** `mediaId: null` unlinks. */
   mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
@@ -314,6 +332,8 @@ export const events = {
   mangaLibrary: 'manga://library-changed',
   /** A WebDAV source being listed (`WebdavSyncProgress`). */
   mangaWebdavSync: 'manga://webdav-sync',
+  /** A remote volume downloading (`DownloadProgress`). */
+  mangaDownload: 'manga://download',
   /** To the reader window: show another volume. */
   mangaReaderOpen: 'manga://reader-open',
   /** The reading session (`MangaSession | null`) whenever it changes. */

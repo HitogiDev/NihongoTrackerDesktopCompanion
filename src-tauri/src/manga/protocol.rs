@@ -23,7 +23,8 @@ use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::archive::{self, safe_entry_name, MAX_ENTRY_BYTES};
-use super::store::{VolumeLocation, FORMAT_ARCHIVE, FORMAT_FOLDER};
+use super::store::{is_remote_format, VolumeLocation, FORMAT_ARCHIVE, FORMAT_FOLDER};
+use super::webdav::remote::Remote;
 use super::{is_image_name, thumbs};
 use crate::db::Db;
 use crate::state::AppState;
@@ -100,8 +101,12 @@ fn read_folder_page(dir: &Path, name: &str) -> Option<Vec<u8>> {
     read_image_file(&file)
 }
 
-/// The bytes of page `page` (0-based) of a volume.
-pub fn page_bytes(location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
+/// The bytes of page `page` (0-based) of a volume. A remote volume needs
+/// `remote` (and may wait on its server).
+pub fn page_bytes(remote: Option<&Remote>, location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
+    if is_remote_format(&location.format) {
+        return remote?.page_bytes(location, page);
+    }
     let name = location.pages.get(page)?;
     match location.format.as_str() {
         FORMAT_FOLDER => read_folder_page(Path::new(&location.source_ref), name),
@@ -146,8 +151,9 @@ fn file_signature(path: &Path) -> Option<String> {
     Some(format!("{}-{modified}", meta.len()))
 }
 
-/// Answers one request. `cache_dir` is where thumbnails are kept.
-pub fn serve(db: &Db, cache_dir: &Path, method: &str, path: &str, if_none_match: Option<&str>) -> Reply {
+/// Answers one request. `cache_dir` is where thumbnails are kept; `remote`
+/// reads volumes on WebDAV servers.
+pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, path: &str, if_none_match: Option<&str>) -> Reply {
     if method != "GET" && method != "HEAD" {
         return Reply::status(405);
     }
@@ -156,23 +162,51 @@ pub fn serve(db: &Db, cache_dir: &Path, method: &str, path: &str, if_none_match:
     let (etag, body) = match &asset {
         Asset::Page { volume, page } | Asset::Thumb { volume, page } => {
             let Ok(Some(location)) = db.manga_volume_location(volume) else { return Reply::status(404) };
-            if *page >= location.pages.len() {
+            let thumb = matches!(asset, Asset::Thumb { .. });
+            // A remote volume's first thumbnail is its own cover image, when
+            // the server has one: no need to open the archive for it.
+            let remote_cover = thumb && *page == 0 && is_remote_format(&location.format) && location.cover.is_some();
+            if *page >= location.pages.len() && !remote_cover {
                 return Reply::status(404);
             }
-            let thumb = matches!(asset, Asset::Thumb { .. });
             let etag = format!("\"{}-{}{page}\"", location.signature.as_deref().unwrap_or("0"), if thumb { 't' } else { 'p' });
             if if_none_match == Some(etag.as_str()) {
                 return Reply { etag: Some(etag), ..Reply::status(304) };
             }
-            let body = if thumb {
-                thumbs::cached(cache_dir, volume, *page, thumbs::THUMB_WIDTH, || page_bytes(&location, *page))
+            let body = if remote_cover {
+                thumbs::cached(cache_dir, volume, 0, thumbs::THUMB_WIDTH, || remote?.volume_cover(&location))
+            } else if thumb {
+                thumbs::cached(cache_dir, volume, *page, thumbs::THUMB_WIDTH, || page_bytes(remote, &location, *page))
             } else {
-                page_bytes(&location, *page)
+                page_bytes(remote, &location, *page)
             };
             (etag, body)
         }
         Asset::Cover { series } => {
             let Ok(Some((cover, first))) = db.manga_series_cover(series) else { return Reply::status(404) };
+            let remote_series = first.as_ref().is_some_and(|first| is_remote_format(&first.format));
+            if remote_series {
+                // A remote cover is a path on the server, its version the
+                // first volume's: a changed series is listed again.
+                let first = first.expect("first volume");
+                let signature = format!("{}-{}", cover.as_deref().unwrap_or(""), first.signature.as_deref().unwrap_or("0"));
+                let signature = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, signature.as_bytes()).simple().to_string();
+                let etag = format!("\"{signature}-c\"");
+                if if_none_match == Some(etag.as_str()) {
+                    return Reply { etag: Some(etag), ..Reply::status(304) };
+                }
+                let body = cached_cover(cache_dir, &format!("cover-{series}"), &signature, || {
+                    let remote = remote?;
+                    match cover.as_deref() {
+                        Some(path) => remote.image(&first.source_id, path),
+                        None => remote.volume_cover(&first).or_else(|| page_bytes(Some(remote), &first, 0)),
+                    }
+                });
+                return match body {
+                    Some(body) => Reply { status: 200, content_type: Some(sniff(&body)), etag: Some(etag), body: if method == "HEAD" { Vec::new() } else { body } },
+                    None => Reply::status(404),
+                };
+            }
             // The folder's own cover image, else the first page of the first volume.
             let own = cover.as_deref().map(Path::new).and_then(|path| Some((path, file_signature(path)?)));
             if let Some((path, signature)) = own {
@@ -189,7 +223,7 @@ pub fn serve(db: &Db, cache_dir: &Path, method: &str, path: &str, if_none_match:
                 if if_none_match == Some(etag.as_str()) {
                     return Reply { etag: Some(etag), ..Reply::status(304) };
                 }
-                let body = thumbs::cached(cache_dir, &first.id, 0, thumbs::COVER_WIDTH, || page_bytes(&first, 0));
+                let body = thumbs::cached(cache_dir, &first.id, 0, thumbs::COVER_WIDTH, || page_bytes(remote, &first, 0));
                 (etag, body)
             }
         }
@@ -241,7 +275,8 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, request: Request<Vec<u8>>, respond
         };
         let cache_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir().join("nt-companion"));
         let if_none_match = request.headers().get(header::IF_NONE_MATCH).and_then(|value| value.to_str().ok());
-        let reply = serve(&state.db, &cache_dir, request.method().as_str(), request.uri().path(), if_none_match);
+        let remote = state.manga.remote();
+        let reply = serve(&state.db, &cache_dir, remote.as_deref(), request.method().as_str(), request.uri().path(), if_none_match);
         responder.respond(response(reply));
     });
 }
@@ -284,10 +319,10 @@ mod tests {
     fn unknown_ids_and_paths_are_404_and_only_get_is_served() {
         let (db, path) = temp_db();
         let cache = std::env::temp_dir();
-        assert_eq!(serve(&db, &cache, "GET", &format!("/page/{VOL}/0"), None).status, 404);
-        assert_eq!(serve(&db, &cache, "GET", "/etc/passwd", None).status, 404);
-        assert_eq!(serve(&db, &cache, "GET", "/cover/nope", None).status, 404);
-        assert_eq!(serve(&db, &cache, "POST", &format!("/page/{VOL}/0"), None).status, 405);
+        assert_eq!(serve(&db, &cache, None, "GET", &format!("/page/{VOL}/0"), None).status, 404);
+        assert_eq!(serve(&db, &cache, None, "GET", "/etc/passwd", None).status, 404);
+        assert_eq!(serve(&db, &cache, None, "GET", "/cover/nope", None).status, 404);
+        assert_eq!(serve(&db, &cache, None, "POST", &format!("/page/{VOL}/0"), None).status, 405);
         drop(db);
         let _ = std::fs::remove_file(path);
     }
@@ -312,19 +347,19 @@ mod tests {
         db.add_manga_source("src", SOURCE_LOCAL, "Manga", &root.to_string_lossy()).unwrap();
         db.apply_manga_scan("src", SOURCE_LOCAL, &[series("s1", "Series", vec![record])]).unwrap();
 
-        let page = serve(&db, &cache, "GET", &format!("/page/{VOL}/0"), None);
+        let page = serve(&db, &cache, None, "GET", &format!("/page/{VOL}/0"), None);
         assert_eq!((page.status, page.content_type), (200, Some("image/png")));
         let etag = page.etag.clone().unwrap();
-        assert_eq!(serve(&db, &cache, "GET", &format!("/page/{VOL}/0"), Some(&etag)).status, 304);
-        assert_eq!(serve(&db, &cache, "HEAD", &format!("/page/{VOL}/0"), None).body.len(), 0);
-        assert_eq!(serve(&db, &cache, "GET", &format!("/page/{VOL}/1"), None).status, 404);
-        assert_eq!(serve(&db, &cache, "GET", &format!("/page/{VOL}/2"), None).status, 404);
+        assert_eq!(serve(&db, &cache, None, "GET", &format!("/page/{VOL}/0"), Some(&etag)).status, 304);
+        assert_eq!(serve(&db, &cache, None, "HEAD", &format!("/page/{VOL}/0"), None).body.len(), 0);
+        assert_eq!(serve(&db, &cache, None, "GET", &format!("/page/{VOL}/1"), None).status, 404);
+        assert_eq!(serve(&db, &cache, None, "GET", &format!("/page/{VOL}/2"), None).status, 404);
 
-        let thumb = serve(&db, &cache, "GET", &format!("/thumb/{VOL}/0"), None);
+        let thumb = serve(&db, &cache, None, "GET", &format!("/thumb/{VOL}/0"), None);
         assert_eq!(thumb.content_type, Some("image/jpeg"));
         assert_eq!(image::load_from_memory(&thumb.body).unwrap().width(), thumbs::THUMB_WIDTH);
 
-        let cover = serve(&db, &cache, "GET", "/cover/s1", None);
+        let cover = serve(&db, &cache, None, "GET", "/cover/s1", None);
         assert_eq!(cover.content_type, Some("image/jpeg"));
         assert_eq!(image::load_from_memory(&cover.body).unwrap().width(), thumbs::COVER_WIDTH);
 

@@ -47,6 +47,9 @@ src-tauri/src/
   commands.rs    Superficie IPC
   manga/         Lector de manga: biblioteca local, CBZ, .mokuro, protocolo manga://,
                  sesión de lectura, logs y minado con recorte (session.rs, crop.rs)
+    webdav/      Fuentes WebDAV: client (HTTP y credenciales), propfind, layout,
+                 sync (listado a la biblioteca), cache (LRU), ranged (CBZ por
+                 rangos como Read+Seek), remote (de dónde sale cada archivo, descargas)
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -282,7 +285,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0, M1 y M2.
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2 y M3.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -381,7 +384,52 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `Unresolved` (su título es el nombre de una carpeta) y `is_adult` viaja en
   la sesión desde `manga_series.is_adult`. Nunca se publica la portada local.
   Cuando haya fuentes con NSFW (M6), la serie se marca `is_adult` al añadirla.
-- Sin hacer todavía (M3+): WebDAV, OCR, extensiones. El `share_activity`
+- **WebDAV** (`manga/webdav/`, M3): mokuro-bunko o cualquier WebDAV. La
+  fuente (`manga_sources.kind = 'webdav'`) guarda la URL sin credenciales; el
+  `user:pass@` que se escriba en ella pasa a Basic. Las credenciales
+  (`auth_json`: anónimo, Basic o Bearer, `webdav::client::Auth`) solo viven en
+  Rust: `MangaSource.auth` dice su tipo y nada más, `Auth` no se formatea ni
+  en `Debug`, y el formulario de edición manda `null` para conservarlas. Hay un
+  test que serializa la biblioteca y la ficha con una contraseña puesta.
+- **Listado**: `PROPFIND Depth: 1` (`propfind.rs`, quick-xml por nombre local;
+  solo propstats `200`, solo hijos directos de la carpeta pedida, sin `..`; del
+  `href` se toma solo la ruta, así que un listado nunca manda a otro host).
+  Reglas de `layout.rs`: `mokuro-reader/` en la raíz es la biblioteca; cada
+  carpeta, una serie (y la base misma si tiene CBZ); `<Vol>.cbz` + `<Vol>.mokuro`
+  + `<Vol>.<img>` portada; `<Vol>.<capa>.mokuro` es una capa alternativa (se
+  elige por tomo, `kv:manga:layer:<tomo>`); carpetas de imágenes = tomos. Ids:
+  UUID v5 de `fuente + ruta` (`sync::series_id`/`volume_id`).
+- **Sincronizar** (`sync.rs`) lista la base siempre y cada serie solo si cambió
+  el ETag o la fecha de su carpeta (`manga_series.signature`), de 4 en 4, con
+  progreso en `manga://webdav-sync`. Al abrir la pantalla, como mucho cada
+  10 min; el botón de cada servidor fuerza la lista completa. Un CBZ cuya firma
+  no cambia conserva su índice de páginas. Sin red no se borra nada: la fuente
+  queda con `last_error = 'offline'` y lo que se vio por última vez. Cualquier
+  petición de `remote.rs` que falle por red la marca así, y la siguiente que
+  funcione la limpia (`set_manga_source_status`, que avisa solo si cambia).
+- **Lectura** (`remote.rs`), por orden: copia sin conexión
+  (`app_data_dir/manga/offline/<tomo>/`, tabla `manga_offline`, nunca se
+  desaloja), caché, servidor. Un CBZ remoto se lee con `ranged.rs`: un
+  `Read + Seek` por bloques de 512 KB pedidos con `Range` (comprobando
+  `Content-Range` y el tamaño listado), así que `archive.rs` funciona igual que
+  en disco y solo baja el directorio central y la entrada pedida. El índice
+  (`pages_json`) se lee al abrir el tomo (`reader::open`); si el servidor
+  responde 200 a un `Range`, se corta la respuesta y el error es
+  `needs-download`: la UI lo descarga entero con progreso (`manga://download`)
+  a la caché y lo abre. El `.mokuro`, las portadas y las páginas de carpetas
+  se bajan enteros a la caché; al abrir la ficha de una serie remota
+  (`manga_prepare_series`) se bajan sus `.mokuro`. La miniatura 0 de un tomo
+  remoto es su portada sidecar, sin abrir el CBZ.
+- **Caché** (`cache.rs`): `app_cache_dir/manga/webdav/`, LRU por fecha de
+  modificación (cada lectura la toca), límite `manga_webdav_cache_mb` (2 GB),
+  "vaciar" en Ajustes → Lector de manga. Las claves llevan la firma del
+  archivo remoto: uno que cambia es otra clave y el viejo envejece solo.
+- Todo es bloqueante y va en hilos de `spawn_blocking` (el protocolo, los
+  comandos) con `block_on` dentro; nunca en el tick. Formatos de tomo nuevos:
+  `remote-archive`, `remote-folder` (`store::is_remote_format`); su
+  `source_ref` es la ruta remota, no un archivo. `protocol::page_bytes` y
+  `mokuro::volume_text` reciben el `Remote` (`manga::Runtime::remote`).
+- Sin hacer todavía (M4+): OCR, extensiones. El `share_activity`
   (amigos inmersos) aún no incluye el manga.
 
 ### Copia de seguridad
@@ -402,7 +450,7 @@ capturas no van dentro.
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
 `discord://status`, `updater://available`, `updater://progress`,
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
-`manga://session-ended`. Están
+`manga://session-ended`, `manga://webdav-sync`, `manga://download`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve

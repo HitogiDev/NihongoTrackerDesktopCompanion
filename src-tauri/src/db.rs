@@ -301,6 +301,13 @@ CREATE TABLE IF NOT EXISTS manga_page_text (
     engine TEXT NOT NULL,
     PRIMARY KEY (volume_id, page)
 );
+-- Remote volumes downloaded for offline reading (`manga::webdav::remote`),
+-- in `app_data_dir/manga/offline/<volume_id>/`.
+CREATE TABLE IF NOT EXISTS manga_offline (
+    volume_id TEXT PRIMARY KEY,
+    bytes INTEGER NOT NULL DEFAULT 0,
+    downloaded_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manga_page_read (
     volume_id TEXT NOT NULL,
     page INTEGER NOT NULL,

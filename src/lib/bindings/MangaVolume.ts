@@ -24,4 +24,8 @@ text_layers: Array<string>,
 /**
  * The layer the reader shows; `None` is the main `.mokuro`.
  */
-text_layer: string | null, };
+text_layer: string | null, 
+/**
+ * A remote volume downloaded for offline reading.
+ */
+downloaded: boolean, };

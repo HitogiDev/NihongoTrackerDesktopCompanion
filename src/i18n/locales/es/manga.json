@@ -177,7 +177,30 @@
     "toast": {
       "added": "Servidor añadido: listando sus series",
       "updated": "Servidor actualizado",
-      "syncFailed": "No se pudo sincronizar: {{message}}"
+      "syncFailed": "No se pudo sincronizar: {{message}}",
+      "downloaded": "{{title}} ya se puede leer sin conexión",
+      "downloadFailed": "No se pudo descargar: {{message}}",
+      "downloadingToRead": "Este servidor no envía partes de archivos: descargando el tomo para leerlo…"
+    },
+    "download": {
+      "action": "Descargar {{title}} para leer sin conexión",
+      "downloading": "Descargando",
+      "preparing": "Preparándolo",
+      "progress": "Descargando {{title}}",
+      "cancel": "Cancelar la descarga",
+      "downloaded": "Descargado",
+      "downloadedHint": "Descargado: se puede leer sin el servidor",
+      "remove": "Quitar la descarga de {{title}}",
+      "offline": "El servidor no responde y este tomo no está descargado"
+    },
+    "detail": {
+      "pagesOnOpen": "Las páginas se leen al abrirlo",
+      "layer": "Texto de {{title}}",
+      "layerHint": "Textos alternativos del servidor (capas .mokuro)",
+      "layerMain": "Texto principal",
+      "offlineTitle": "{{name}} no responde",
+      "offlineBody": "Los tomos descargados se pueden seguir leyendo. El resto vuelve cuando vuelva el servidor.",
+      "retry": "Reintentar"
     }
   }
 }

@@ -177,7 +177,30 @@
     "toast": {
       "added": "Server added: listing its series",
       "updated": "Server updated",
-      "syncFailed": "Could not sync: {{message}}"
+      "syncFailed": "Could not sync: {{message}}",
+      "downloaded": "{{title}} is ready to read offline",
+      "downloadFailed": "Could not download: {{message}}",
+      "downloadingToRead": "This server cannot send parts of files: downloading the volume to read it…"
+    },
+    "download": {
+      "action": "Download {{title}} for offline reading",
+      "downloading": "Downloading",
+      "preparing": "Getting it ready",
+      "progress": "Downloading {{title}}",
+      "cancel": "Cancel the download",
+      "downloaded": "Downloaded",
+      "downloadedHint": "Downloaded: it can be read without the server",
+      "remove": "Remove the download of {{title}}",
+      "offline": "The server is offline and this volume is not downloaded"
+    },
+    "detail": {
+      "pagesOnOpen": "Pages are read when opened",
+      "layer": "Text of {{title}}",
+      "layerHint": "Alternative texts from the server (.mokuro layers)",
+      "layerMain": "Main text",
+      "offlineTitle": "{{name}} is offline",
+      "offlineBody": "Downloaded volumes can still be read. The rest come back when the server does.",
+      "retry": "Retry"
     }
   }
 }

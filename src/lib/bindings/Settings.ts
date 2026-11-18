@@ -77,7 +77,11 @@ manga_confirm_before_log: boolean,
  * End (and log) a session after this many minutes without reading. 0
  * keeps it open until the reader closes.
  */
-manga_idle_log_minutes: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
+manga_idle_log_minutes: number, 
+/**
+ * Megabytes the WebDAV cache may hold (offline downloads not included).
+ */
+manga_webdav_cache_mb: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
 /**
  * AnkiConnect server address, same as Yomitan's "AnkiConnect server
  * address": users who changed `webBindAddress`/`webBindPort` need it.

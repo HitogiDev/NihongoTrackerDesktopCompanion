@@ -124,6 +124,20 @@ pub fn run() {
                 connection_last: Default::default(),
                 manga: Default::default(),
             });
+            {
+                // WebDAV volumes: cached under the cache dir, offline copies
+                // with the app's data (see `manga::webdav::remote`).
+                let state = app.state::<AppState>();
+                let cache_root = app.path().app_cache_dir().unwrap_or_else(|_| data_dir.join("cache")).join("manga").join("webdav");
+                let remote = manga::webdav::remote::Remote::new(
+                    state.db.clone(),
+                    cache_root,
+                    data_dir.join("manga").join("offline"),
+                    settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024),
+                    Some(app.handle().clone()),
+                );
+                let _ = state.manga.remote.set(Arc::new(remote));
+            }
 
             // Started minimized, the main window is not built at all until the
             // tray or another instance asks for it: a webview the user never
@@ -368,6 +382,14 @@ pub fn run() {
             commands::manga_webdav_test,
             commands::manga_webdav_save,
             commands::manga_webdav_sync,
+            commands::manga_download_volume,
+            commands::manga_cancel_download,
+            commands::manga_downloads,
+            commands::manga_remove_download,
+            commands::manga_webdav_cache_usage,
+            commands::manga_webdav_clear_cache,
+            commands::manga_set_text_layer,
+            commands::manga_prepare_series,
             commands::manga_library,
             commands::manga_series_detail,
             commands::manga_link_series,

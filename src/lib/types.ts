@@ -6,6 +6,7 @@ import type { AnimeSession } from './bindings/AnimeSession';
 import type { BlacklistEntry } from './bindings/BlacklistEntry';
 import type { Capabilities } from './bindings/Capabilities';
 import type { DictionaryEntry } from './bindings/DictionaryEntry';
+import type { DownloadProgress } from './bindings/DownloadProgress';
 import type { DictionaryLookupResponse } from './bindings/DictionaryLookupResponse';
 import type { DictionarySummary } from './bindings/DictionarySummary';
 import type { DiscordDecision } from './bindings/DiscordDecision';
@@ -53,6 +54,7 @@ import type { UpdateInfo } from './bindings/UpdateInfo';
 import type { VnApp } from './bindings/VnApp';
 import type { VnSession } from './bindings/VnSession';
 import type { WebdavAuth } from './bindings/WebdavAuth';
+import type { WebdavCacheUsage } from './bindings/WebdavCacheUsage';
 import type { WebdavProbe } from './bindings/WebdavProbe';
 import type { WebdavSyncProgress } from './bindings/WebdavSyncProgress';
 
@@ -61,6 +63,7 @@ export type {
   BlacklistEntry,
   Capabilities,
   DictionaryEntry,
+  DownloadProgress,
   DictionaryLookupResponse,
   DictionarySummary,
   DiscordDecision,
@@ -108,6 +111,7 @@ export type {
   VnApp,
   VnSession,
   WebdavAuth,
+  WebdavCacheUsage,
   WebdavProbe,
   WebdavSyncProgress,
 };
