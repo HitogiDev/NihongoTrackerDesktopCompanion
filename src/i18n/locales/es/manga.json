@@ -12,7 +12,6 @@
   },
   "actions": {
     "addFolder": "Añadir carpeta",
-    "folders": "Carpetas",
     "rescan": "Volver a escanear la biblioteca",
     "readVolume": "Leer {{volume}}",
     "continueAt": "Seguir con {{volume}} · p. {{page}}"
@@ -103,7 +102,6 @@
   },
   "webdav": {
     "actions": {
-      "servers": "Servidores",
       "add": "Conectar un servidor",
       "sync": "Buscar cambios en {{name}}",
       "syncAll": "Volver a listar todo {{name}}",
@@ -537,5 +535,19 @@
       "cancelled": "Cancelado.",
       "invalid-url": "Escribe una dirección completa http:// o https://."
     }
+  },
+  "menu": {
+    "label": "Ajustes de la biblioteca",
+    "local": "Carpetas de este equipo",
+    "manageFolders": "Gestionar carpetas…",
+    "addFolder": "Añadir una carpeta…",
+    "addingFolder": "Añadiendo la carpeta…",
+    "webdav": "Servidores WebDAV",
+    "manageServers": "Gestionar servidores…",
+    "addServer": "Conectar un servidor…",
+    "extensions": "Extensiones",
+    "openExtensions": "Explorar extensiones",
+    "extSettings": "Ajustes de extensiones…",
+    "readerSettings": "Ajustes del lector de manga…"
   }
 }

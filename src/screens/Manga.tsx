@@ -12,6 +12,7 @@ import { FoldersModal } from './manga/FoldersModal';
 import { ServerFormModal } from './manga/ServerFormModal';
 import { ServersModal, ServerStrip, SyncRing, useWebdavSyncSummary } from './manga/Servers';
 import { ExtensionsPanel } from './manga/ext/ExtensionsPanel';
+import { LibraryMenu, type Origin } from './manga/LibraryMenu';
 import { useWebdavSyncEvents } from './manga/useWebdav';
 import { ContinueShelf, SeriesGrid, SeriesGridSkeleton, ShelfSkeleton } from './manga/SeriesGrid';
 import { useAddFolder, useRescan } from './manga/useAddFolder';
@@ -19,7 +20,6 @@ import { useMangaLibrary, useMangaLibraryEvents } from './manga/useMangaLibrary'
 import { formatCount } from '../lib/manga';
 import type { MangaSource } from '../lib/types';
 
-type Origin = 'all' | 'local' | 'webdav' | 'extensions';
 const ORIGINS: Origin[] = ['all', 'local', 'webdav', 'extensions'];
 const ORIGIN_SOURCE: Record<Origin, string | null> = { all: null, local: 'local', webdav: 'webdav', extensions: 'suwayomi' };
 
@@ -91,21 +91,21 @@ export default function MangaScreen() {
             <Button appearance="ghost" size="sm" shape="square" aria-label={t('mangaReader:shortcuts.title')} title={t('mangaReader:shortcuts.open')} onClick={() => setShortcutsOpen(true)}>
               <Keyboard className="h-4 w-4" />
             </Button>
-            <Button appearance="ghost" size="sm" shape="square" loading={scanning} aria-label={t('actions.rescan')} title={t('actions.rescan')} onClick={() => void rescan()}>
-              {scanning ? null : <RefreshCw className="h-4 w-4" />}
-            </Button>
-            <Button appearance="ghost" size="sm" onClick={() => setFoldersOpen(true)}>
-              <FolderCog className="h-4 w-4" />
-              {t('actions.folders')}
-            </Button>
-            <Button appearance="ghost" size="sm" onClick={() => (servers.length ? setServersOpen(true) : openForm(null))}>
-              <Server className="h-4 w-4" />
-              {t('webdav.actions.servers')}
-            </Button>
-            <Button variant="primary" size="sm" loading={adding} onClick={() => void add()}>
-              {adding ? null : <FolderPlus className="h-4 w-4" />}
-              {t('actions.addFolder')}
-            </Button>
+            {origin === 'extensions' ? null : (
+              <Button appearance="ghost" size="sm" shape="square" loading={scanning} aria-label={t('actions.rescan')} title={t('actions.rescan')} onClick={() => void rescan()}>
+                {scanning ? null : <RefreshCw className="h-4 w-4" />}
+              </Button>
+            )}
+            <LibraryMenu
+              origin={origin}
+              sources={data?.sources ?? []}
+              adding={adding}
+              onFolders={() => setFoldersOpen(true)}
+              onAddFolder={() => void add()}
+              onServers={() => setServersOpen(true)}
+              onAddServer={() => openForm(null)}
+              onExtensions={() => setOrigin('extensions')}
+            />
           </>
         ) : null
       }
@@ -200,7 +200,7 @@ export default function MangaScreen() {
                       </Button>
                       <Button size="sm" appearance="ghost" onClick={() => setFoldersOpen(true)}>
                         <FolderCog className="h-4 w-4" />
-                        {t('actions.folders')}
+                        {t('menu.manageFolders')}
                       </Button>
                     </div>
                   }

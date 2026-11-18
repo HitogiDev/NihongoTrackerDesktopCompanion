@@ -12,7 +12,6 @@
   },
   "actions": {
     "addFolder": "Add folder",
-    "folders": "Folders",
     "rescan": "Rescan the library",
     "readVolume": "Read {{volume}}",
     "continueAt": "Continue {{volume}} · p. {{page}}"
@@ -103,7 +102,6 @@
   },
   "webdav": {
     "actions": {
-      "servers": "Servers",
       "add": "Connect a server",
       "sync": "Check {{name}} for changes",
       "syncAll": "List everything on {{name}} again",
@@ -537,5 +535,19 @@
       "cancelled": "Cancelled.",
       "invalid-url": "Enter a full http:// or https:// address."
     }
+  },
+  "menu": {
+    "label": "Library settings",
+    "local": "Folders on this computer",
+    "manageFolders": "Manage folders…",
+    "addFolder": "Add a folder…",
+    "addingFolder": "Adding the folder…",
+    "webdav": "WebDAV servers",
+    "manageServers": "Manage servers…",
+    "addServer": "Connect a server…",
+    "extensions": "Extensions",
+    "openExtensions": "Browse extensions",
+    "extSettings": "Extension settings…",
+    "readerSettings": "Manga reader settings…"
   }
 }
