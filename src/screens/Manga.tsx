@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server, Sparkles } from 'lucide-react';
+import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server, Sparkles, ArrowLeft } from 'lucide-react';
 import { MANGA } from './manga/Cover';
 import { Button } from '../components/ui/Button';
 import { EmptyState, ErrorState } from '../components/ui/Empty';
@@ -152,13 +152,6 @@ export default function MangaScreen() {
               <Search className="h-4 w-4 opacity-60" />
               <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
             </label>
-            {origin !== 'extensions' && waiting > 0 && !reviewing ? (
-              <button type="button" className="btn btn-ghost btn-sm gap-1.5 text-base-content/70" onClick={() => setView({ ...view, link: 'suggested' })} title={t('suggest.review.open')}>
-                <Sparkles className={`h-4 w-4 ${MANGA.color}`} aria-hidden="true" />
-                {t('suggest.review.waiting', { count: waiting })}
-              </button>
-            ) : null}
-            {origin === 'extensions' ? null : <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} />}
             <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
               {ORIGINS.map((id) => (
                 <button
@@ -188,7 +181,29 @@ export default function MangaScreen() {
           ) : null}
 
           {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
-            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}</span>}>{reviewing ? t('suggest.review.title') : t('grid.title')}</SectionTitle>
+            <SectionTitle
+              aside={
+                <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                  <span className="text-xs tabular-nums text-base-content/50">
+                    {narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}
+                  </span>
+                  {reviewing ? (
+                    <button type="button" className="btn btn-ghost btn-sm gap-1.5" onClick={() => setView({ ...view, link: 'any' })}>
+                      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                      {t('suggest.review.back')}
+                    </button>
+                  ) : waiting > 0 ? (
+                    <button type="button" className="btn btn-ghost btn-sm gap-1.5" onClick={() => setView({ ...view, link: 'suggested' })} title={t('suggest.review.open')}>
+                      <Sparkles className={`h-4 w-4 ${MANGA.color}`} aria-hidden="true" />
+                      {t('suggest.review.waiting', { count: waiting })}
+                    </button>
+                  ) : null}
+                  <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} />
+                </div>
+              }
+            >
+              {reviewing ? t('suggest.review.title') : t('grid.title')}
+            </SectionTitle>
             {reviewing && searched.length > 0 ? (
               <SuggestionReview series={filtered} suggestions={suggestions.byId} />
             ) : filtered.length > 0 ? (

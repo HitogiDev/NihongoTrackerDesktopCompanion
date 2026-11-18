@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, Plug, Puzzle, Server, Settings2, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import { FolderCog, FolderPlus, Plug, Puzzle, Server, Settings, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { MangaSource } from '../../lib/types';
 import { formatCount } from '../../lib/manga';
 
@@ -157,7 +157,7 @@ export function LibraryMenu({ origin, sources, adding, onFolders, onAddFolder, o
           }
         }}
       >
-        <Settings2 className="h-4 w-4" />
+        <Settings className="h-4 w-4" />
       </button>
       {open ? (
         <div

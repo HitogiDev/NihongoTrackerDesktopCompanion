@@ -584,7 +584,7 @@
       "any": "Todas",
       "linked": "Vinculadas",
       "unlinked": "Sin vincular",
-      "suggested": "Con sugerencia"
+      "suggested": "Sugeridas"
     }
   },
   "suggest": {
@@ -613,7 +613,8 @@
       "confirmOne": "Vincular {{title}}",
       "dismissOne": "Descartar la sugerencia de {{title}}",
       "none": "No hay sugerencias por revisar",
-      "noneBody": "Las series sin vincular se buscan en NihongoTracker en segundo plano. Las coincidencias aparecen aquí."
+      "noneBody": "Las series sin vincular se buscan en NihongoTracker en segundo plano. Las coincidencias aparecen aquí.",
+      "back": "Todas las series"
     }
   }
 }

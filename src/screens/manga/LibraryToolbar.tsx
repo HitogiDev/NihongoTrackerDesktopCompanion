@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ListFilter } from 'lucide-react';
-import DropdownSelect from '../../components/ui/DropdownSelect';
+import { ArrowDownUp, Check, ChevronDown, ListFilter } from 'lucide-react';
 import { formatCount } from '../../lib/manga';
 import type { MangaSeries } from '../../lib/types';
 import { activeFilters, DEFAULT_VIEW, LINK_FILTERS, optionCounts, SORTS, STATUS_FILTERS, TEXT_FILTERS, type LibraryView } from './libraryView';
@@ -13,7 +12,7 @@ const GROUPS: { key: FilterKey; options: readonly string[] }[] = [
   { key: 'link', options: LINK_FILTERS },
 ];
 
-/** Sort and filters for the library grid, next to the search. */
+/** Sort and filters for the library grid, in its header. */
 export function LibraryToolbar({ series, view, onChange, suggested }: {
   /** The series the tab and search leave, before these filters. */
   series: MangaSeries[];
@@ -21,19 +20,91 @@ export function LibraryToolbar({ series, view, onChange, suggested }: {
   onChange: (view: LibraryView) => void;
   suggested: ReadonlySet<string>;
 }) {
-  const { t } = useTranslation('manga');
   return (
-    <div className="flex items-center gap-2">
-      <DropdownSelect
-        className="select select-sm w-48"
-        aria-label={t('view.sortLabel')}
-        title={t('view.sortLabel')}
-        value={view.sort}
-        onChange={(event) => onChange({ ...view, sort: event.target.value as LibraryView['sort'] })}
-      >
-        {SORTS.map((sort) => <option key={sort} value={sort}>{t(`view.sort.${sort}`)}</option>)}
-      </DropdownSelect>
+    <div className="flex items-center gap-1">
+      <SortMenu value={view.sort} onChange={(sort) => onChange({ ...view, sort })} />
       <FilterPopover series={series} view={view} onChange={onChange} suggested={suggested} />
+    </div>
+  );
+}
+
+/** The order of the grid: a menu of radio items (arrows, Home/End, Esc). */
+function SortMenu({ value, onChange }: { value: LibraryView['sort']; onChange: (sort: LibraryView['sort']) => void }) {
+  const { t } = useTranslation('manga');
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const items = () => Array.from(panel.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
+  useEffect(() => {
+    if (!open) return;
+    (items().find((item) => item.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!panel.current?.contains(target) && !button.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [open]);
+  const close = () => { setOpen(false); button.current?.focus(); };
+  return (
+    <div className="relative">
+      <button
+        ref={button}
+        type="button"
+        className={open ? 'btn btn-ghost btn-sm btn-active gap-1.5' : 'btn btn-ghost btn-sm gap-1.5'}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label={`${t('view.sortLabel')}: ${t(`view.sort.${value}`)}`}
+        title={t('view.sortLabel')}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
+        {t(`view.sort.${value}`)}
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          ref={panel}
+          id={menuId}
+          role="menu"
+          aria-label={t('view.sortLabel')}
+          className="surface-raised manga-menu-in absolute right-0 top-full z-30 mt-2 w-56 p-1.5"
+          onKeyDown={(event) => {
+            const list = items();
+            const index = list.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'ArrowDown' ? (index + 1) % list.length
+              : event.key === 'ArrowUp' ? (index - 1 + list.length) % list.length
+              : event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : null;
+            if (next !== null) {
+              event.preventDefault();
+              list[next]?.focus();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            } else if (event.key === 'Tab') {
+              setOpen(false);
+            }
+          }}
+        >
+          {SORTS.map((sort) => (
+            <button
+              key={sort}
+              type="button"
+              role="menuitemradio"
+              aria-checked={sort === value}
+              tabIndex={-1}
+              onClick={() => { onChange(sort); close(); }}
+              className="flex w-full items-center gap-3 rounded-field px-2.5 py-2 text-left text-sm outline-none motion-safe:transition-colors hover:bg-base-200 focus-visible:bg-base-200"
+            >
+              <span className="min-w-0 flex-1 truncate">{t(`view.sort.${sort}`)}</span>
+              {sort === value ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

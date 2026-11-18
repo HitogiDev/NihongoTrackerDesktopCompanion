@@ -584,7 +584,7 @@
       "any": "Any",
       "linked": "Linked",
       "unlinked": "Not linked",
-      "suggested": "Suggestion waiting"
+      "suggested": "Suggested"
     }
   },
   "suggest": {
@@ -613,7 +613,8 @@
       "confirmOne": "Link {{title}}",
       "dismissOne": "Dismiss the suggestion for {{title}}",
       "none": "No suggestions to review",
-      "noneBody": "Unlinked series are looked up on NihongoTracker in the background. Matches show up here."
+      "noneBody": "Unlinked series are looked up on NihongoTracker in the background. Matches show up here.",
+      "back": "All series"
     }
   }
 }
