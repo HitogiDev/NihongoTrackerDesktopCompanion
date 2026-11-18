@@ -54,6 +54,9 @@ pub fn is_served_format(format: &str) -> bool {
 pub const ENGINE_BUILTIN: &str = "builtin";
 /// `manga_page_text.engine` of a page read by owocr (`manga::ocr::owocr`).
 pub const ENGINE_OWOCR: &str = "owocr";
+/// `manga_page_text.engine` of a page read by the built-in meikiocr
+/// (`manga::ocr::meiki`).
+pub const ENGINE_MEIKI: &str = "meiki";
 /// `manga_page_text.engine` of a page the user corrected: it wins over the
 /// `.mokuro` too.
 pub const ENGINE_MANUAL: &str = "manual";

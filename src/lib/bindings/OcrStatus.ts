@@ -15,7 +15,7 @@ export type OcrStatus = {
 engine: OcrEngine, 
 /**
  * The chosen engine can be asked for pages now without installing
- * anything: owocr, or the built-in OCR once installed. Whether owocr
+ * anything: owocr, or a built-in engine once installed. Whether owocr
  * really answers shows when it is asked (`error`).
  */
 ready: boolean, 
@@ -28,9 +28,18 @@ usable: boolean,
  */
 supported: boolean, 
 /**
- * The runtime and the chosen variant's models are on disk.
+ * The runtime and the chosen built-in engine's models (manga-ocr in the
+ * chosen variant, or meikiocr) are on disk.
  */
-installed: boolean, variant: OcrVariant, 
+installed: boolean, 
+/**
+ * manga-ocr in the chosen variant is installed, whichever engine is chosen.
+ */
+manga_ocr_installed: boolean, 
+/**
+ * meikiocr is installed, whichever engine is chosen.
+ */
+meiki_installed: boolean, variant: OcrVariant, 
 /**
  * What the accelerator would be (`directml`, `coreml`), if any.
  */
@@ -48,15 +57,16 @@ busy: boolean, error: string | null,
  */
 runs: Array<OcrVolumeRun>, 
 /**
- * For the consent dialog: what would be downloaded, and where.
+ * For the consent dialog: what the chosen built-in engine would
+ * download (manga-ocr's when owocr is chosen).
  */
 components: Array<OcrComponent>, 
 /**
- * Bytes still to download for the chosen variant.
+ * Bytes still to download for it.
  */
 download_bytes: number, 
 /**
- * Bytes the OCR's files take on disk now.
+ * Bytes its files (and the runtime) take on disk now.
  */
 installed_bytes: number, 
 /**

@@ -17,6 +17,12 @@
 //!   rejects it: a Cast typed float16
 //!   feeding a float32 input), so the "precise" variant pairs the fp16
 //!   encoder with the full-precision decoder.
+//! - **meikiocr** (rtr46/meikiocr, the "fast" built-in engine): the models
+//!   its pipeline uses, `rtr46/meiki.text.detect.v0` (the v0.1 960×544 line
+//!   detector) and `rtr46/meiki.txt.recognition.v0` (the horizontal 960×32
+//!   and vertical 32×480 recognizers), both LGPL-3.0. Unmodified files,
+//!   fetched from the author's repositories at pinned commits only when the
+//!   user asks for them; the app is not built from them (see `meiki`).
 //! - **ONNX Runtime** (MIT) 1.24.4, the official build Microsoft publishes on
 //!   nuget.org: `Microsoft.ML.OnnxRuntime` for Linux and macOS (the macOS
 //!   build has CoreML), `Microsoft.ML.OnnxRuntime.DirectML` for Windows plus
@@ -50,6 +56,10 @@ const DETECTOR_REV: &str = "16e8a622f91fabc6b5b65c96d32d1183f8843546";
 const OCR_ONNX_REV: &str = "f9023406bb2f6b17df67bc4a327c56ecd20611f0";
 #[cfg(test)]
 const OCR_BASE_REV: &str = "aa6573bd10b0d446cbf622e29c3e084914df9741";
+#[cfg(test)]
+const MEIKI_DETECT_REV: &str = "a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6";
+#[cfg(test)]
+const MEIKI_REC_REV: &str = "a28cf5874dc2438ebb1c86336be26bcec51e3375";
 
 const NUGET_ORT: &str = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.24.4/microsoft.ml.onnxruntime.1.24.4.nupkg";
 const NUGET_ORT_DML: &str =
@@ -156,6 +166,35 @@ const DECODER_FP32: Asset = Asset {
     source: hf!("onnx-community/manga-ocr-base-ONNX", "f9023406bb2f6b17df67bc4a327c56ecd20611f0", "onnx/decoder_model.onnx"),
 };
 
+/// meikiocr's line detector (D-FINE, at most 64 lines a page).
+pub const MEIKI_DETECTOR: Asset = Asset {
+    file: "meiki.text.detect.v0.1.960x544.onnx",
+    size: 14_503_825,
+    sha256: "40b6a016667745cae7d3055929ae3b8b1e7716aac795f5904cd3c2c7c3b8404b",
+    source: hf!("rtr46/meiki.text.detect.v0", "a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6", "meiki.text.detect.v0.1.960x544.onnx"),
+};
+
+/// meikiocr's recognizer for horizontal lines (48 characters at most).
+pub const MEIKI_HORIZONTAL: Asset = Asset {
+    file: "meiki.text.rec.v0.960x32.onnx",
+    size: 18_593_254,
+    sha256: "3e96bc772fbee9717e536a6353032bb944c3382dd2f6960ef4890decda43b000",
+    source: hf!("rtr46/meiki.txt.recognition.v0", "a28cf5874dc2438ebb1c86336be26bcec51e3375", "meiki.text.rec.v0.960x32.onnx"),
+};
+
+/// meikiocr's recognizer for vertical lines (24 characters a segment).
+pub const MEIKI_VERTICAL: Asset = Asset {
+    file: "meiki.text.rec.v0.vertical.32x480.onnx",
+    size: 12_872_961,
+    sha256: "2c2a83a23bc3b7e6c63962175f507ecc6c5e85cc174f17bdec37d9bbd0bf895a",
+    source: hf!("rtr46/meiki.txt.recognition.v0", "a28cf5874dc2438ebb1c86336be26bcec51e3375", "meiki.text.rec.v0.vertical.32x480.onnx"),
+};
+
+/// meikiocr's models, in the order they are downloaded.
+pub fn meiki_models() -> Vec<Asset> {
+    vec![MEIKI_DETECTOR, MEIKI_HORIZONTAL, MEIKI_VERTICAL]
+}
+
 /// The encoder and decoder of a variant for a runtime target. ONNX Runtime
 /// 1.23 (Intel Macs) cannot run the int8 encoder: its int8 variant takes the
 /// fp16 one, with the int8 decoder.
@@ -251,19 +290,54 @@ pub fn runtime_version() -> &'static str {
     crate::platform::ocr_runtime_target().map_or(RUNTIME_VERSION, runtime_version_for)
 }
 
-/// Everything a variant needs here, runtime first.
-pub fn all(variant: Variant) -> Option<Vec<Asset>> {
+/// Which models a download is for: manga-ocr in a variant, or meikiocr.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Models {
+    MangaOcr(Variant),
+    Meiki,
+}
+
+impl Models {
+    pub fn assets(self) -> Vec<Asset> {
+        match self {
+            Models::MangaOcr(variant) => models(variant),
+            Models::Meiki => meiki_models(),
+        }
+    }
+
+    /// Every file of these models in any variant, for "delete".
+    pub fn files(self) -> Vec<&'static str> {
+        match self {
+            Models::MangaOcr(_) => [DETECTOR, VOCAB, ENCODER_INT8, DECODER_INT8, ENCODER_FP16, DECODER_FP32].iter().map(|asset| asset.file).collect(),
+            Models::Meiki => meiki_models().iter().map(|asset| asset.file).collect(),
+        }
+    }
+}
+
+/// Everything some models need here, runtime first.
+pub fn all_for(models: Models) -> Option<Vec<Asset>> {
     let mut assets = runtime()?.to_vec();
-    assets.extend(models(variant));
+    assets.extend(models.assets());
     Some(assets)
+}
+
+/// The runtime's files of every target, for "delete".
+pub fn runtime_files() -> Vec<&'static str> {
+    let mut files: Vec<&'static str> = [WIN_X64, WIN_ARM64, LINUX_X64, LINUX_ARM64, MACOS_ARM64, MACOS_X64]
+        .iter()
+        .flat_map(|assets| assets.iter().map(|asset| asset.file))
+        .collect();
+    files.sort_unstable();
+    files.dedup();
+    files
 }
 
 /// Every file name the OCR may have written, for "delete models".
 pub fn known_files() -> Vec<&'static str> {
-    let mut files: Vec<&'static str> = [WIN_X64, WIN_ARM64, LINUX_X64, LINUX_ARM64, MACOS_ARM64, MACOS_X64]
-        .iter()
-        .flat_map(|assets| assets.iter().map(|asset| asset.file))
-        .chain([DETECTOR, VOCAB, ENCODER_INT8, DECODER_INT8, ENCODER_FP16, DECODER_FP32].iter().map(|asset| asset.file))
+    let mut files: Vec<&'static str> = runtime_files()
+        .into_iter()
+        .chain(Models::MangaOcr(Variant::Int8).files())
+        .chain(Models::Meiki.files())
         .collect();
     files.sort_unstable();
     files.dedup();
@@ -276,10 +350,14 @@ mod tests {
 
     #[test]
     fn urls_point_at_the_pinned_revisions() {
-        for asset in models(Variant::Int8).into_iter().chain(models(Variant::Fp16)) {
+        for asset in models(Variant::Int8).into_iter().chain(models(Variant::Fp16)).chain(meiki_models()) {
             let Source::Url(url) = asset.source else { panic!("models are plain files") };
             assert!(url.starts_with("https://huggingface.co/"), "{url}");
-            assert!([DETECTOR_REV, OCR_ONNX_REV, OCR_BASE_REV].iter().any(|rev| url.contains(&format!("/resolve/{rev}/"))), "{url}");
+            assert_eq!(asset.sha256.len(), 64);
+            assert!(
+                [DETECTOR_REV, OCR_ONNX_REV, OCR_BASE_REV, MEIKI_DETECT_REV, MEIKI_REC_REV].iter().any(|rev| url.contains(&format!("/resolve/{rev}/"))),
+                "{url}"
+            );
             assert!(url.ends_with(asset.file), "{url} is saved as {}", asset.file);
         }
     }
@@ -322,6 +400,18 @@ mod tests {
         assert_eq!(recognizer_for(Some("osx-x64"), Variant::Fp16), [ENCODER_FP16, DECODER_FP32]);
         assert_eq!(recognizer_for(Some("osx-arm64"), Variant::Int8), [ENCODER_INT8, DECODER_INT8]);
         assert_eq!(recognizer_for(Some("linux-x64"), Variant::Int8), [ENCODER_INT8, DECODER_INT8]);
+    }
+
+    #[test]
+    fn meikiocr_and_manga_ocr_install_apart() {
+        let meiki: Vec<&str> = Models::Meiki.assets().iter().map(|asset| asset.file).collect();
+        assert_eq!(meiki, ["meiki.text.detect.v0.1.960x544.onnx", "meiki.text.rec.v0.960x32.onnx", "meiki.text.rec.v0.vertical.32x480.onnx"]);
+        let manga = Models::MangaOcr(Variant::Int8).files();
+        assert!(meiki.iter().all(|file| !manga.contains(file)), "no file is shared but the runtime");
+        assert!(Models::Meiki.assets().iter().all(|asset| matches!(asset.source, Source::Url(url) if url.contains("/rtr46/meiki."))));
+        for file in Models::Meiki.files().into_iter().chain(manga).chain(runtime_files()) {
+            assert!(known_files().contains(&file), "{file}");
+        }
     }
 
     #[test]

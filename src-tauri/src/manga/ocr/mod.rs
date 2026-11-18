@@ -1,11 +1,12 @@
 //! The OCR: text for manga pages that have none, read on this computer by
-//! ONNX models (see `engine`) or, if the user chooses it, by owocr running
-//! on this computer (see `owocr`), on a thread of its own with a queue (see
-//! `worker`). Each job uses the engine chosen when it starts; owocr is never
-//! replaced by the built-in OCR (or the other way round) when it fails.
+//! ONNX models (manga-ocr, see `engine`, or the faster meikiocr, see
+//! `meiki`) or, if the user chooses it, by owocr running on this computer
+//! (see `owocr`), on a thread of its own with a queue (see `worker`). Each
+//! job uses the engine chosen when it starts; no engine is ever replaced by
+//! another when it fails.
 //!
 //! What it reads is stored as `.mokuro` pages in `manga_page_text` (engine
-//! `builtin` or `owocr`), which `mokuro::volume_text` uses for the pages a
+//! `builtin`, `meiki` or `owocr`), which `mokuro::volume_text` uses for the pages a
 //! `.mokuro` does not cover. The reader asks for the pages it shows when they have no
 //! text; "process volume" queues every page without text.
 //!
@@ -18,6 +19,7 @@ pub mod download;
 pub mod engine;
 pub mod export;
 pub mod layout;
+pub mod meiki;
 pub mod owocr;
 pub mod text;
 pub mod worker;
@@ -29,10 +31,10 @@ use std::sync::{mpsc, Arc, Condvar, Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
-use self::assets::Variant;
+use self::assets::{Models, Variant};
 use self::worker::{OcrVolumeRun, Priority, Queue, Shared, Work};
 use super::mokuro::MokuroPage;
-use super::store::{ENGINE_BUILTIN, ENGINE_OWOCR};
+use super::store::{ENGINE_BUILTIN, ENGINE_MEIKI, ENGINE_OWOCR};
 use crate::state::AppState;
 
 pub const STATUS_EVENT: &str = "manga://ocr-status";
@@ -45,11 +47,25 @@ pub const PAGE_EVENT: &str = "manga://ocr-page";
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum OcrEngine {
-    /// The ONNX models of `engine`, downloaded on demand.
+    /// manga-ocr's ONNX models (`engine`), downloaded on demand.
     #[default]
     Builtin,
+    /// meikiocr's ONNX models (`meiki`), downloaded on demand: much faster,
+    /// made for games, less accurate on manga.
+    Meiki,
     /// owocr, which the user installs and runs (see `owocr`).
     Owocr,
+}
+
+impl OcrEngine {
+    /// The models it downloads, or `None` for owocr.
+    pub fn models(self, variant: Variant) -> Option<Models> {
+        match self {
+            OcrEngine::Builtin => Some(Models::MangaOcr(variant)),
+            OcrEngine::Meiki => Some(Models::Meiki),
+            OcrEngine::Owocr => None,
+        }
+    }
 }
 
 /// The OCR as the UI shows it.
@@ -59,15 +75,20 @@ pub struct OcrStatus {
     /// The engine chosen in settings.
     pub engine: OcrEngine,
     /// The chosen engine can be asked for pages now without installing
-    /// anything: owocr, or the built-in OCR once installed. Whether owocr
+    /// anything: owocr, or a built-in engine once installed. Whether owocr
     /// really answers shows when it is asked (`error`).
     pub ready: bool,
     /// The chosen engine can run on this computer at all.
     pub usable: bool,
     /// ONNX Runtime has a build for this computer.
     pub supported: bool,
-    /// The runtime and the chosen variant's models are on disk.
+    /// The runtime and the chosen built-in engine's models (manga-ocr in the
+    /// chosen variant, or meikiocr) are on disk.
     pub installed: bool,
+    /// manga-ocr in the chosen variant is installed, whichever engine is chosen.
+    pub manga_ocr_installed: bool,
+    /// meikiocr is installed, whichever engine is chosen.
+    pub meiki_installed: bool,
     pub variant: Variant,
     /// What the accelerator would be (`directml`, `coreml`), if any.
     pub accelerator: Option<String>,
@@ -79,11 +100,12 @@ pub struct OcrStatus {
     pub error: Option<String>,
     /// Volumes being processed whole.
     pub runs: Vec<OcrVolumeRun>,
-    /// For the consent dialog: what would be downloaded, and where.
+    /// For the consent dialog: what the chosen built-in engine would
+    /// download (manga-ocr's when owocr is chosen).
     pub components: Vec<OcrComponent>,
-    /// Bytes still to download for the chosen variant.
+    /// Bytes still to download for it.
     pub download_bytes: u64,
-    /// Bytes the OCR's files take on disk now.
+    /// Bytes its files (and the runtime) take on disk now.
     pub installed_bytes: u64,
     /// Free space on the disk they go to.
     pub free_bytes: Option<u64>,
@@ -97,7 +119,8 @@ pub struct OcrStatus {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct OcrComponent {
-    /// `runtime`, `detector` or `recognizer`.
+    /// `runtime`, `detector`, `recognizer`, `meikiDetector` or
+    /// `meikiRecognizer`.
     pub kind: String,
     /// Over the network.
     pub bytes: u64,
@@ -132,8 +155,19 @@ const DELETE_PENDING: &str = ".delete-pending";
 
 impl Service {
     pub fn new(dir: PathBuf) -> Self {
-        if dir.join(DELETE_PENDING).exists() && download::delete_all(&dir).is_empty() {
-            let _ = std::fs::remove_file(dir.join(DELETE_PENDING));
+        if let Ok(pending) = std::fs::read_to_string(dir.join(DELETE_PENDING)) {
+            // Only what "delete" could not remove then, and only files the OCR
+            // downloads: the list is a file on disk, not to be trusted with paths.
+            let known = assets::known_files();
+            let names: Vec<&str> = pending
+                .lines()
+                .map(str::trim)
+                .filter(|name| known.iter().any(|file| name.strip_prefix(file).is_some_and(|rest| ["", ".part", ".zpart", ".zhead"].contains(&rest))))
+                .collect();
+            let left: Vec<String> = names.into_iter().filter(|name| std::fs::remove_file(dir.join(name)).is_err() && dir.join(name).exists()).map(str::to_string).collect();
+            if left.is_empty() {
+                let _ = std::fs::remove_file(dir.join(DELETE_PENDING));
+            }
         }
         Service {
             dir,
@@ -145,7 +179,7 @@ impl Service {
         }
     }
 
-    fn components(&self, variant: Variant) -> Vec<OcrComponent> {
+    fn components(&self, models: Models) -> Vec<OcrComponent> {
         let group = |kind: &str, assets: &[assets::Asset], license: &str| OcrComponent {
             kind: kind.to_string(),
             bytes: assets.iter().filter(|asset| !asset.present(&self.dir)).map(|asset| asset.transfer_size()).sum(),
@@ -157,21 +191,41 @@ impl Service {
         if let Some(runtime) = assets::runtime() {
             list.push(group("runtime", runtime, "MIT"));
         }
-        list.push(group("detector", &[assets::DETECTOR], "Apache-2.0"));
-        let [encoder, decoder] = assets::recognizer(variant);
-        list.push(group("recognizer", &[encoder, decoder, assets::VOCAB], "Apache-2.0"));
+        match models {
+            Models::MangaOcr(variant) => {
+                list.push(group("detector", &[assets::DETECTOR], "Apache-2.0"));
+                let [encoder, decoder] = assets::recognizer(variant);
+                list.push(group("recognizer", &[encoder, decoder, assets::VOCAB], "Apache-2.0"));
+            }
+            Models::Meiki => {
+                list.push(group("meikiDetector", &[assets::MEIKI_DETECTOR], "LGPL-3.0"));
+                list.push(group("meikiRecognizer", &[assets::MEIKI_HORIZONTAL, assets::MEIKI_VERTICAL], "LGPL-3.0"));
+            }
+        }
         list
     }
 
-    fn installed_bytes(&self) -> u64 {
-        assets::known_files().iter().filter_map(|file| std::fs::metadata(self.dir.join(file)).ok()).map(|meta| meta.len()).sum()
+    /// What some models (in every variant) take on disk, with the runtime
+    /// they use. Nothing while none of their files is there, even if the
+    /// other engine left the runtime: there is nothing of theirs to delete.
+    fn installed_bytes(&self, models: Models) -> u64 {
+        let own = models.files();
+        if !download::any_present(&self.dir, &own) {
+            return 0;
+        }
+        assets::runtime_files()
+            .into_iter()
+            .chain(own)
+            .filter_map(|file| std::fs::metadata(self.dir.join(file)).ok())
+            .map(|meta| meta.len())
+            .sum()
     }
 
-    /// Downloads what the variant still needs, on a thread of its own, with
+    /// Downloads what some models still need, on a thread of its own, with
     /// progress on `manga://ocr-progress`. The UI asks first: this is only
     /// called once the user has agreed. `false` if one is already running.
-    pub fn install(&self, app: &AppHandle, variant: Variant) -> bool {
-        let Some(assets) = assets::all(variant) else { return false };
+    pub fn install(&self, app: &AppHandle, models: Models) -> bool {
+        let Some(assets) = assets::all_for(models) else { return false };
         if self.downloading.swap(true, Ordering::SeqCst) {
             return false;
         }
@@ -244,9 +298,10 @@ impl Service {
         running
     }
 
-    /// Deletes the runtime and every model (and unfinished downloads). The
+    /// Deletes some models in every variant (and their unfinished
+    /// downloads), and the runtime too once no other models are left. The
     /// engine goes first; what is still in use goes at the next start.
-    pub fn delete(&self) -> Result<(), String> {
+    pub fn delete(&self, models: Models) -> Result<(), String> {
         if self.downloading.load(Ordering::SeqCst) {
             return Err("downloading".into());
         }
@@ -254,7 +309,15 @@ impl Service {
             queue.reload = true;
             queue.runs.clear();
         });
-        let left = download::delete_all(&self.dir);
+        let others = match models {
+            Models::MangaOcr(_) => Models::Meiki,
+            Models::Meiki => Models::MangaOcr(Variant::Int8),
+        };
+        let mut files = models.files();
+        if !download::any_present(&self.dir, &others.files()) {
+            files.extend(assets::runtime_files());
+        }
+        let left = download::delete_files(&self.dir, &files);
         *self.download.lock().unwrap() = None;
         if !left.is_empty() {
             log::info!("OCR files in use, deleted at the next start: {left:?}");
@@ -264,17 +327,14 @@ impl Service {
         Ok(())
     }
 
-    /// Everything the chosen variant needs is here.
-    pub fn installed(&self, variant: Variant) -> bool {
-        assets::all(variant).is_some_and(|assets| assets.iter().all(|asset| asset.present(&self.dir)))
+    /// Everything some models need is here.
+    pub fn installed(&self, models: Models) -> bool {
+        assets::all_for(models).is_some_and(|assets| assets.iter().all(|asset| asset.present(&self.dir)))
     }
 
     /// The chosen engine can be asked for pages (see `OcrStatus::ready`).
     pub fn ready(&self, engine: OcrEngine, variant: Variant) -> bool {
-        match engine {
-            OcrEngine::Owocr => true,
-            OcrEngine::Builtin => self.installed(variant),
-        }
+        engine.models(variant).is_none_or(|models| self.installed(models))
     }
 
     pub fn status(&self, engine: OcrEngine, variant: Variant) -> OcrStatus {
@@ -282,12 +342,17 @@ impl Service {
         let mut runs: Vec<OcrVolumeRun> = queue.runs.values().cloned().collect();
         runs.sort_by(|a, b| a.title.cmp(&b.title));
         let supported = assets::runtime().is_some();
+        // What the consent dialog and "delete" are about: the chosen
+        // built-in engine, or manga-ocr while owocr is chosen.
+        let models = engine.models(variant).unwrap_or(Models::MangaOcr(variant));
         OcrStatus {
             engine,
             ready: self.ready(engine, variant),
             usable: engine == OcrEngine::Owocr || supported,
             supported,
-            installed: self.installed(variant),
+            installed: self.installed(models),
+            manga_ocr_installed: self.installed(Models::MangaOcr(variant)),
+            meiki_installed: self.installed(Models::Meiki),
             variant,
             accelerator: crate::platform::ocr_accelerator().map(str::to_string),
             provider: queue.provider.map(str::to_string),
@@ -295,11 +360,11 @@ impl Service {
             busy: queue.current.is_some(),
             error: queue.error.clone(),
             runs,
-            components: self.components(variant),
-            download_bytes: assets::all(variant)
+            components: self.components(models),
+            download_bytes: assets::all_for(models)
                 .map(|assets| assets.iter().filter(|asset| !asset.present(&self.dir)).map(|asset| asset.transfer_size()).sum())
                 .unwrap_or(0),
-            installed_bytes: self.installed_bytes(),
+            installed_bytes: self.installed_bytes(models),
             free_bytes: download::free_space(&self.dir),
             dir: self.dir.to_string_lossy().into_owned(),
             runtime_version: assets::runtime_version().to_string(),
@@ -431,6 +496,7 @@ impl Service {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Choice {
     Builtin(Variant),
+    Meiki,
     Owocr(u16),
 }
 
@@ -439,6 +505,7 @@ fn choice(app: &AppHandle) -> Choice {
     let settings = state.settings.blocking_read();
     match settings.manga_ocr_engine {
         OcrEngine::Builtin => Choice::Builtin(settings.manga_ocr_variant),
+        OcrEngine::Meiki => Choice::Meiki,
         OcrEngine::Owocr => Choice::Owocr(settings.manga_owocr_port),
     }
 }
@@ -457,9 +524,43 @@ fn set(shared: &Shared, f: impl FnOnce(&mut Queue)) {
     f(&mut shared.0.lock().unwrap());
 }
 
+/// A built-in engine, loaded.
+enum Loaded {
+    MangaOcr(engine::Engine),
+    Meiki(meiki::Engine),
+}
+
+impl Loaded {
+    fn load(dir: &Path, choice: Choice) -> Result<Loaded, String> {
+        match choice {
+            Choice::Meiki => meiki::Engine::load(dir).map(Loaded::Meiki),
+            Choice::Builtin(variant) => engine::Engine::load(dir, variant).map(Loaded::MangaOcr),
+            Choice::Owocr(_) => Err("error".into()),
+        }
+    }
+
+    fn is(&self, choice: Choice) -> bool {
+        matches!((self, choice), (Loaded::MangaOcr(_), Choice::Builtin(_)) | (Loaded::Meiki(_), Choice::Meiki))
+    }
+
+    fn provider(&self) -> engine::Provider {
+        match self {
+            Loaded::MangaOcr(engine) => engine.provider,
+            Loaded::Meiki(engine) => engine.provider,
+        }
+    }
+
+    fn recognizer(&mut self) -> Recognizer<'_> {
+        match self {
+            Loaded::MangaOcr(engine) => Recognizer::Builtin(engine),
+            Loaded::Meiki(engine) => Recognizer::Meiki(engine),
+        }
+    }
+}
+
 /// The OCR thread: takes jobs until the app closes.
 fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
-    let mut engine: Option<engine::Engine> = None;
+    let mut engine: Option<Loaded> = None;
     let mut owocr_client: Option<owocr::Client> = None;
     loop {
         let job = match worker::next(shared, engine.is_none() && owocr_client.is_none()) {
@@ -487,7 +588,8 @@ fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
             engine = None;
             owocr_client = None;
         }
-        let result = match choice(app) {
+        let chosen = choice(app);
+        let result = match chosen {
             Choice::Owocr(port) => {
                 // The built-in engine is not used meanwhile: its memory goes.
                 engine = None;
@@ -509,17 +611,21 @@ fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
                 }
                 result
             }
-            Choice::Builtin(variant) => {
+            Choice::Builtin(_) | Choice::Meiki => {
                 owocr_client = None;
+                if engine.as_ref().is_some_and(|loaded| !loaded.is(chosen)) {
+                    // The other built-in engine was chosen: this one's memory goes.
+                    engine = None;
+                }
                 if engine.is_none() {
                     set(shared, |queue| {
                         queue.loading = true;
                         queue.provider = None;
                     });
                     emit_status(app);
-                    match engine::Engine::load(dir, variant) {
+                    match Loaded::load(dir, chosen) {
                         Ok(loaded) => {
-                            let provider = loaded.provider.name();
+                            let provider = loaded.provider().name();
                             log::info!("OCR ready on {provider}");
                             set(shared, |queue| {
                                 queue.loading = false;
@@ -537,10 +643,10 @@ fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
                     }
                     emit_status(app);
                 }
-                let engine_ref = engine.as_mut().expect("loaded above");
-                let result = read(app, &mut Recognizer::Builtin(engine_ref), &job);
+                let loaded = engine.as_mut().expect("loaded above");
+                let result = read(app, &mut loaded.recognizer(), &job);
                 // The accelerator may have given way to the CPU.
-                let provider = engine_ref.provider.name();
+                let provider = loaded.provider().name();
                 set(shared, |queue| queue.provider = Some(provider));
                 result
             }
@@ -596,6 +702,7 @@ enum Read {
 /// The engine a job is read with.
 enum Recognizer<'a> {
     Builtin(&'a mut engine::Engine),
+    Meiki(&'a mut meiki::Engine),
     Owocr(&'a mut owocr::Client),
 }
 
@@ -676,6 +783,7 @@ fn read(app: &AppHandle, recognizer: &mut Recognizer, job: &worker::Job) -> Resu
         Work::Page => {
             let (page, tag) = match recognizer {
                 Recognizer::Builtin(engine) => (engine.recognize_page(&image, &name)?, ENGINE_BUILTIN),
+                Recognizer::Meiki(engine) => (engine.recognize_page(&image, &name)?, ENGINE_MEIKI),
                 // The page as it is: every format the library reads, Pillow
                 // opens too.
                 Recognizer::Owocr(client) => {
@@ -694,6 +802,7 @@ fn read(app: &AppHandle, recognizer: &mut Recognizer, job: &worker::Job) -> Resu
         }
         Work::Region { bbox, .. } => match recognizer {
             Recognizer::Builtin(engine) => Ok(Read::Region(engine.recognize_box(&image, *bbox)?)),
+            Recognizer::Meiki(engine) => Ok(Read::Region(engine.recognize_box(&image, *bbox)?)),
             Recognizer::Owocr(client) => {
                 let crop = crop_png(&image, *bbox).ok_or("bad-box")?;
                 let result = client.recognize(&crop.png, crop.size).map_err(ReadError::Owocr)?;
