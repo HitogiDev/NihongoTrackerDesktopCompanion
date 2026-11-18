@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSpreads, clickAction, fitSpread, keyAction, onScreen, preloadPages, spreadOf } from './layout';
+import { blockStep, buildSpreads, clickAction, fitSpread, keyAction, orderBlocks, preloadPages, spreadOf } from './layout';
 
 const key = (k: string, shiftKey = false) => ({ key: k, shiftKey, ctrlKey: false, metaKey: false, altKey: false });
 
@@ -29,11 +29,6 @@ describe('navigation', () => {
     expect(spreadOf(spreads, 4)).toBe(2);
     expect(spreadOf(spreads, 99)).toBe(3);
     expect(spreadOf(spreads, -1)).toBe(0);
-  });
-
-  it('puts the first page on the right in right-to-left books', () => {
-    expect(onScreen([1, 2], 'rtl')).toEqual([2, 1]);
-    expect(onScreen([1, 2], 'ltr')).toEqual([1, 2]);
   });
 
   it('turns arrows with the reading direction, and scrolls the strip', () => {
@@ -81,5 +76,21 @@ describe('fitSpread', () => {
   it('gives the pages of a spread the same height', () => {
     const [a, b] = fitSpread([{ width: 1000, height: 1500 }, { width: 500, height: 750 }], window, 'height');
     expect(a.height).toBe(b.height);
+  });
+});
+
+describe('walking the text blocks with the keyboard', () => {
+  it('goes forward with ↓ and with the arrow of the reading direction', () => {
+    expect(blockStep('ArrowDown', 'rtl')).toBe(1);
+    expect(blockStep('ArrowLeft', 'rtl')).toBe(1);
+    expect(blockStep('ArrowRight', 'rtl')).toBe(-1);
+    expect(blockStep('ArrowRight', 'ltr')).toBe(1);
+    expect(blockStep('ArrowUp', 'ltr')).toBe(-1);
+    expect(blockStep('Enter', 'ltr')).toBe(0);
+  });
+
+  it('orders the blocks by page and then by mokuro, whatever the DOM order', () => {
+    const blocks = [{ page: 5, block: 0 }, { page: 4, block: 2 }, { page: 4, block: 0 }];
+    expect(orderBlocks(blocks)).toEqual([{ page: 4, block: 0 }, { page: 4, block: 2 }, { page: 5, block: 0 }]);
   });
 });

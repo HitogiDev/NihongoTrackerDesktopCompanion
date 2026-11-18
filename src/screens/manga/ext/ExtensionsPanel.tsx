@@ -6,6 +6,7 @@ import { Compass, Library, Puzzle, Store } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { EmptyState, ErrorState } from '../../../components/ui/Empty';
 import { ipc } from '../../../lib/ipc';
+import { formatCount } from '../../../lib/manga';
 import type { MangaSeries } from '../../../lib/types';
 import { useAppStore } from '../../../store/useAppStore';
 import { SeriesGrid } from '../SeriesGrid';
@@ -89,7 +90,7 @@ function Sources({ onStore }: { onStore: () => void }) {
  * store. Opening it starts the server (only once it is installed or saved).
  */
 export function ExtensionsPanel({ series }: { series: MangaSeries[] }) {
-  const { t } = useTranslation('manga');
+  const { t, i18n } = useTranslation('manga');
   const queryClient = useQueryClient();
   const status = useExtStatus();
   const [view, setView] = useState<View>(storedView);
@@ -149,7 +150,7 @@ export function ExtensionsPanel({ series }: { series: MangaSeries[] }) {
           <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'tab tab-active gap-2' : 'tab gap-2'} onClick={() => choose(id)}>
             <Icon className="h-4 w-4" aria-hidden="true" />
             {t(`ext.view.${id}`)}
-            {id === 'library' && series.length > 0 ? <span className="badge badge-ghost badge-xs">{series.length}</span> : null}
+            {id === 'library' && series.length > 0 ? <span className="badge badge-ghost badge-xs">{formatCount(series.length, i18n.language)}</span> : null}
           </button>
         ))}
       </div>

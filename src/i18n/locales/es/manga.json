@@ -20,15 +20,15 @@
   "shelf": {
     "title": "Seguir leyendo",
     "upNext": "Siguiente",
-    "page": "p. {{page}} / {{count}}",
+    "page": "p. {{page}} / {{count, number}}",
     "open": "{{title}} — {{volume}}"
   },
   "grid": {
     "title": "Series",
-    "volumes_one": "{{count}} tomo",
-    "volumes_other": "{{count}} tomos",
-    "finished_one": "{{count}} leído",
-    "finished_other": "{{count}} leídos",
+    "volumes_one": "{{count, number}} tomo",
+    "volumes_other": "{{count, number}} tomos",
+    "finished_one": "{{count, number}} leído",
+    "finished_other": "{{count, number}} leídos",
     "text": "OCR",
     "textHint": "Tiene texto para consultar al pasar el ratón",
     "progress": "{{percent}} % leído",
@@ -43,8 +43,8 @@
     "gone": "Esta serie ya no está en la biblioteca",
     "goneBody": "Su carpeta se quitó o se movió. Vuelve a escanear o añade la carpeta otra vez.",
     "volumes": "Tomos",
-    "pages_one": "{{count}} página",
-    "pages_other": "{{count}} páginas",
+    "pages_one": "{{count, number}} página",
+    "pages_other": "{{count, number}} páginas",
     "hasText": "Con texto",
     "percentRead": "{{percent}} % leído",
     "textMokuro": "Texto de mokuro",
@@ -59,8 +59,8 @@
     "body": "Se buscan series en cada carpeta de esta lista. Cada subcarpeta con tomos es una serie.",
     "pick": "Elige una carpeta de manga",
     "none": "Todavía no hay carpetas.",
-    "series_one": "{{count}} serie",
-    "series_other": "{{count}} series",
+    "series_one": "{{count, number}} serie",
+    "series_other": "{{count, number}} series",
     "remove": "Quitar {{name}} de la biblioteca",
     "removeHint": "Quitar una carpeta solo la olvida aquí: no se borra ningún archivo."
   },
@@ -87,12 +87,12 @@
     "alreadyAdded": "Esa carpeta, o una que la contiene, ya está en la biblioteca."
   },
   "toast": {
-    "added_one": "Se encontró {{count}} serie",
-    "added_other": "Se encontraron {{count}} series",
+    "added_one": "Se encontró {{count, number}} serie",
+    "added_other": "Se encontraron {{count, number}} series",
     "addedEmpty": "Carpeta añadida, pero todavía no tiene manga",
     "addFailed": "No se pudo añadir la carpeta: {{message}}",
-    "rescanned_one": "Biblioteca al día: {{count}} serie",
-    "rescanned_other": "Biblioteca al día: {{count}} series",
+    "rescanned_one": "Biblioteca al día: {{count, number}} serie",
+    "rescanned_other": "Biblioteca al día: {{count, number}} series",
     "rescanFailed": "No se pudo escanear: {{message}}",
     "offline": "No disponible ahora mismo: {{names}}",
     "removed": "{{name}} se quitó de la biblioteca",
@@ -118,7 +118,7 @@
     },
     "status": {
       "syncing": "Listando…",
-      "syncingCount": "Listando series: {{done}} de {{total}}",
+      "syncingCount": "Listando series: {{done, number}} de {{total, number}}",
       "offline": "Sin conexión: se muestra lo último que se vio",
       "unauthorized": "El servidor rechazó las credenciales",
       "failed": "La última sincronización falló",
@@ -148,8 +148,8 @@
       "test": "Probar conexión",
       "add": "Añadir servidor",
       "save": "Guardar",
-      "found_one": "Conectado: {{count}} serie",
-      "found_other": "Conectado: {{count}} series",
+      "found_one": "Conectado: {{count, number}} serie",
+      "found_other": "Conectado: {{count, number}} series",
       "foundBunko": "En {{path}}, como lo sirve mokuro-bunko.",
       "foundAt": "En {{path}}.",
       "privacy": "Las credenciales se quedan en este equipo: solo se envían a este servidor y no se vuelven a mostrar."
@@ -189,7 +189,8 @@
       "downloaded": "Descargado",
       "downloadedHint": "Descargado: se puede leer sin el servidor",
       "remove": "Quitar la descarga de {{title}}",
-      "offline": "El servidor no responde y este tomo no está descargado"
+      "offline": "El servidor no responde y este tomo no está descargado",
+      "unauthorized": "El servidor rechaza las credenciales y este tomo no está descargado"
     },
     "detail": {
       "pagesOnOpen": "Las páginas se leen al abrirlo",
@@ -198,7 +199,9 @@
       "layerMain": "Texto principal",
       "offlineTitle": "{{name}} no responde",
       "offlineBody": "Los tomos descargados se pueden seguir leyendo. El resto vuelve cuando vuelva el servidor.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "unauthorizedTitle": "{{name}} rechaza las credenciales",
+      "unauthorizedBody": "Los tomos descargados se pueden seguir leyendo. Revisa el usuario y la contraseña del servidor y vuelve a intentarlo."
     }
   },
   "ocr": {
@@ -207,8 +210,8 @@
       "none": "Sin texto",
       "mokuro": "mokuro",
       "done": "Texto listo",
-      "partial": "Texto en {{count}} de {{total}}",
-      "processing": "Leyendo {{done}}/{{total}}",
+      "partial": "Texto en {{count, number}} de {{total, number}}",
+      "processing": "Leyendo {{done, number}}/{{total, number}}",
       "queued": "En cola"
     },
     "provider": {
@@ -252,7 +255,7 @@
       "paused": "En pausa",
       "stopped": "Detenida",
       "progress": "Descarga del OCR",
-      "of": "{{received}} de {{total}}",
+      "of": "{{received}} de {{total, number}}",
       "background": "Puedes cerrar esta ventana: la descarga sigue y Ajustes enseña cómo va.",
       "resumes": "Lo que ya se bajó se conserva: la descarga sigue donde se quedó.",
       "resume": "Reanudar",
@@ -313,10 +316,10 @@
       "replace": "Reemplazarlo",
       "exists": "Ya hay un .mokuro junto a este tomo. ¿Reemplazarlo por este?",
       "existsRemote": "El servidor ya tiene un .mokuro de este tomo. ¿Reemplazarlo por este? Solo se reemplaza si nadie lo ha cambiado entretanto.",
-      "saved_one": "Guardado {{path}} ({{count}} página con texto)",
-      "saved_other": "Guardado {{path}} ({{count}} páginas con texto)",
-      "uploaded_one": "Subido {{path}} ({{count}} página con texto)",
-      "uploaded_other": "Subido {{path}} ({{count}} páginas con texto)"
+      "saved_one": "Guardado {{path}} ({{count, number}} página con texto)",
+      "saved_other": "Guardado {{path}} ({{count, number}} páginas con texto)",
+      "uploaded_one": "Subido {{path}} ({{count, number}} página con texto)",
+      "uploaded_other": "Subido {{path}} ({{count, number}} páginas con texto)"
     }
   },
   "ext": {
@@ -368,7 +371,7 @@
         "cancelled": "En pausa"
       },
       "progress": "Progreso de la instalación",
-      "of": "{{received}} de {{total}}",
+      "of": "{{received}} de {{total, number}}",
       "background": "Puedes cerrar esta ventana: la descarga sigue.",
       "resumes": "Continúa donde se quedó.",
       "hide": "Ocultar",
@@ -456,8 +459,8 @@
       "loadFailed": "No se pudo leer la tienda",
       "none": "Ninguna extensión coincide",
       "noneBody": "Prueba con otro idioma u otra búsqueda.",
-      "count_one": "{{count}} extensión",
-      "count_other": "{{count}} extensiones",
+      "count_one": "{{count, number}} extensión",
+      "count_other": "{{count, number}} extensiones",
       "install": "Instalar",
       "update": "Actualizar",
       "installed": "Instalada",
@@ -498,8 +501,8 @@
     },
     "detail": {
       "from": "De una extensión · {{server}}",
-      "chapters_one": "{{count}} capítulo",
-      "chapters_other": "{{count}} capítulos",
+      "chapters_one": "{{count, number}} capítulo",
+      "chapters_other": "{{count, number}} capítulos",
       "pagesOnOpen": "Las páginas se cargan al abrirlo",
       "refreshed": "Capítulos actualizados"
     },

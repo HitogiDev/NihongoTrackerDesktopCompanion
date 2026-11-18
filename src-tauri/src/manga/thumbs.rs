@@ -2,7 +2,10 @@
 //! on disk under `app_cache_dir/manga/thumbs/<volume id>/`.
 //!
 //! A volume's folder goes when a scan finds its files changed or gone
-//! (`purge`), so a thumbnail never outlives the page it shows.
+//! (`purge`), so a thumbnail never outlives the page it shows. A series' own
+//! cover (`cover.*`, or a remote one) is cached as `cover-<series>-<version>/`:
+//! a new version drops the older ones (`drop_other_covers`) and a series that
+//! is gone loses its own (`sweep_covers`).
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -93,6 +96,52 @@ pub fn purge(cache_dir: &Path, volume_ids: &[String]) {
     }
 }
 
+const COVER_PREFIX: &str = "cover-";
+/// Length of a series id (a hyphenated UUID).
+const SERIES_ID_LEN: usize = 36;
+
+/// The series a cached cover folder belongs to, or `None` for a volume's.
+fn cover_series(name: &str) -> Option<&str> {
+    let rest = name.strip_prefix(COVER_PREFIX)?;
+    let series = rest.get(..SERIES_ID_LEN)?;
+    (rest.as_bytes().get(SERIES_ID_LEN) == Some(&b'-')).then_some(series)
+}
+
+/// The cover folders cached for a series other than `keep`, once a new
+/// version of its cover has been cached as `keep`.
+pub fn drop_other_covers(cache_dir: &Path, keep: &str) {
+    let Some(series) = cover_series(keep) else { return };
+    let Ok(entries) = std::fs::read_dir(root(cache_dir)) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if name != keep && cover_series(name) == Some(series) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// Drops the cached covers of series that are no longer in the library
+/// (`live`): a folder removed, a server forgotten, a series gone from it.
+pub fn sweep_covers(cache_dir: &Path, live: &std::collections::HashSet<String>) {
+    let Ok(entries) = std::fs::read_dir(root(cache_dir)) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if cover_series(name).is_some_and(|series| !live.contains(series)) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// `sweep_covers` against the library as it is now.
+pub fn sweep_library_covers(db: &crate::db::Db, cache_dir: &Path) {
+    match db.manga_series_ids() {
+        Ok(live) => sweep_covers(cache_dir, &live),
+        Err(error) => log::debug!("manga cover sweep skipped: {error}"),
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -129,6 +178,29 @@ pub(crate) mod tests {
         assert!(!path(&cache, &id, 0, 240).exists());
         // An unreadable page is served as it came.
         assert_eq!(cached(&cache, &id, 1, 240, || Some(b"raw".to_vec())).unwrap(), b"raw");
+        let _ = std::fs::remove_dir_all(cache);
+    }
+
+    #[test]
+    fn covers_of_gone_series_and_old_versions_are_dropped() {
+        let cache = std::env::temp_dir().join(format!("ntdc-covers-{}", uuid::Uuid::new_v4()));
+        let kept = "11111111-0000-4000-8000-000000000001";
+        let gone = "22222222-0000-4000-8000-000000000002";
+        let volume = "33333333-0000-4000-8000-000000000003";
+        for bucket in [format!("cover-{kept}-old"), format!("cover-{kept}-new"), format!("cover-{gone}-v1"), volume.to_string()] {
+            cached(&cache, &bucket, 0, 240, || Some(png(60, 90))).unwrap();
+        }
+        let exists = |bucket: &str| root(&cache).join(bucket).exists();
+
+        drop_other_covers(&cache, &format!("cover-{kept}-new"));
+        assert!(!exists(&format!("cover-{kept}-old")));
+        assert!(exists(&format!("cover-{kept}-new")));
+        assert!(exists(&format!("cover-{gone}-v1")), "another series' cover stays");
+
+        sweep_covers(&cache, &[kept.to_string()].into_iter().collect());
+        assert!(!exists(&format!("cover-{gone}-v1")));
+        assert!(exists(&format!("cover-{kept}-new")));
+        assert!(exists(volume), "a volume's thumbnails are not covers");
         let _ = std::fs::remove_dir_all(cache);
     }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { BookImage } from 'lucide-react';
 import { MEDIA_TYPE_CLASSES } from '../../constants/mediaColors';
 
@@ -17,6 +17,17 @@ export function Cover({ src, alt = '', className = '', eager = false }: {
   eager?: boolean;
 }) {
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  // Already decoded (the same cover seen a moment ago): shown at once, with
+  // no fade, so a view transition morphs the picture and not its skeleton.
+  const image = useRef<HTMLImageElement>(null);
+  const [instant, setInstant] = useState(false);
+  useLayoutEffect(() => {
+    const element = image.current;
+    if (element?.complete && element.naturalWidth > 0) {
+      setInstant(true);
+      setState('ready');
+    }
+  }, [src]);
   return (
     <div className={`relative h-full w-full overflow-hidden bg-base-100 ${className}`}>
       {state === 'loading' ? <div className="skeleton absolute inset-0 rounded-none bg-base-100" /> : null}
@@ -26,6 +37,7 @@ export function Cover({ src, alt = '', className = '', eager = false }: {
         </div>
       ) : null}
       <img
+        ref={image}
         src={src}
         alt={alt}
         loading={eager ? 'eager' : 'lazy'}
@@ -33,9 +45,11 @@ export function Cover({ src, alt = '', className = '', eager = false }: {
         draggable={false}
         onLoad={() => setState('ready')}
         onError={() => setState('failed')}
-        className={state === 'ready'
-          ? 'absolute inset-0 h-full w-full object-cover opacity-100 motion-safe:transition-opacity motion-safe:duration-300'
-          : 'absolute inset-0 h-full w-full object-cover opacity-0'}
+        className={state !== 'ready'
+          ? 'absolute inset-0 h-full w-full object-cover opacity-0'
+          : instant
+          ? 'absolute inset-0 h-full w-full object-cover opacity-100'
+          : 'absolute inset-0 h-full w-full object-cover opacity-100 motion-safe:transition-opacity motion-safe:duration-300'}
       />
     </div>
   );

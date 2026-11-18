@@ -78,6 +78,28 @@ export function useDictionaryHover(dictionaryPopupDelay: number) {
     [openDictionaryAt],
   );
 
+  /** A lookup from the keyboard: the start of `element`'s text, anchored at
+   *  its first glyph (buttons inside it are not text). */
+  const openDictionaryForElement = useCallback((element: HTMLElement, text: string, context?: { lineId: string; contentId: string }) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let first: Text | null = null;
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      if (node.parentElement?.closest('button') || !node.data.trim()) continue;
+      first = node;
+      break;
+    }
+    if (!first || !text) return;
+    const range = element.ownerDocument.createRange();
+    range.setStart(first, 0);
+    range.setEnd(first, String.fromCodePoint(first.data.codePointAt(0)!).length);
+    setDictionaryContext(context);
+    setDictionaryAnchor(range.getClientRects()[0] ?? element.getBoundingClientRect());
+    setDictionaryVertical(getComputedStyle(element).writingMode.startsWith('vertical'));
+    setDictionaryEntries(undefined);
+    setDictionaryRequest({ query: text, offset: 0 });
+  }, []);
+
   const cancelDictionaryHover = useCallback(() => {
     if (dictionaryHoverTimerRef.current !== null) {
       window.clearTimeout(dictionaryHoverTimerRef.current);
@@ -120,6 +142,7 @@ export function useDictionaryHover(dictionaryPopupDelay: number) {
     lookupDictionary,
     openDictionaryAt,
     openDictionaryAtPointer,
+    openDictionaryForElement,
     cancelDictionaryHover,
     closeDictionary,
   };

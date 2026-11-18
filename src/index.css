@@ -305,6 +305,14 @@ textarea,
   100% { outline-color: transparent; }
 }
 
+/* A modal whose content scrolls is itself focusable (Chromium focuses the
+   scroller when the dialog opens), which drew the engine's black ring around
+   the whole box. The box is the dialog: its arrows still scroll it. */
+.modal-box:focus,
+.modal-box:focus-visible {
+  outline: none;
+}
+
 /* One focus ring for everything reached with the keyboard: daisyUI buttons
    draw theirs in the button's own colour, plain buttons and tabs got the
    engine's default. Unlayered, so it wins over both; fields keep daisyUI's. */
@@ -365,6 +373,8 @@ textarea,
   display: block;
 }
 .manga-text-layer[data-mode='hover'] .manga-block:hover,
+.manga-text-layer[data-mode='hover'] .manga-block:focus-visible,
+.manga-text-layer[data-mode='hover'] .manga-block:has(:focus-visible),
 .manga-text-layer[data-mode='always'] .manga-block {
   color: #141414;
   background-color: rgb(255 255 255 / 0.96);
@@ -374,6 +384,11 @@ textarea,
 /* Where the pointer is: the block that a lookup or Ctrl+C would use. */
 .manga-text-layer:not([data-mode='hidden']) .manga-block:hover {
   outline: 2px solid color-mix(in oklch, var(--color-primary) 60%, transparent);
+  outline-offset: 0.3em;
+}
+/* Reached with Tab or the arrows: the app's focus ring, around the padding. */
+.manga-text-layer .manga-block:focus-visible {
+  outline: 2px solid var(--color-primary);
   outline-offset: 0.3em;
 }
 /* Copy / mine, over the block the pointer is on. A child of the block, so
@@ -401,6 +416,8 @@ textarea,
   padding-top: 0.55rem;
 }
 .manga-text-layer .manga-block:hover > .manga-block-actions,
+.manga-text-layer .manga-block:focus-visible > .manga-block-actions,
+.manga-text-layer .manga-block:has(:focus-visible) > .manga-block-actions,
 .manga-text-layer .manga-block-actions[data-busy] {
   opacity: 1;
   pointer-events: auto;
@@ -462,4 +479,47 @@ textarea,
   .manga-text-layer .manga-block {
     transition: color 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;
   }
+}
+/* The shortcuts sheet (ShortcutsSheet.tsx) appears without moving when the
+   system asks for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .modal:has(> .manga-shortcuts),
+  .modal > .manga-shortcuts {
+    transition: none;
+  }
+}
+
+/* From a cover to its series and back (coverTransition.ts): the cover morphs
+   with View Transitions where the webview has them; otherwise the series
+   page fades in. The reader's window fades its first page in. */
+@media (prefers-reduced-motion: no-preference) {
+  .manga-fade-in {
+    animation: manga-fade-in 220ms ease-out both;
+  }
+  .manga-reader-in {
+    animation: manga-reader-in 260ms ease-out both;
+  }
+  ::view-transition-group(manga-cover) {
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+@keyframes manga-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes manga-reader-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

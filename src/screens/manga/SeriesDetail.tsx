@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, BookOpen, Puzzle, Check, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Puzzle, Check, ShieldAlert, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
 import { EmptyState, ErrorState, Skeleton } from '../../components/ui/Empty';
 import { ipc } from '../../lib/ipc';
-import { displayUrl, formatBytes, mangaUrl, readPercent } from '../../lib/manga';
+import { displayUrl, formatBytes, formatCount, mangaUrl, readPercent } from '../../lib/manga';
 import type { DownloadProgress, MangaSeries, MangaSource, MangaVolume, OcrStatus } from '../../lib/types';
 import { OcrInstallModal } from './ocr/OcrInstallModal';
 import { OcrExportModal } from './ocr/OcrExportModal';
@@ -15,6 +15,8 @@ import { OcrVolumeLabel, OcrVolumeState } from './ocr/OcrVolumeState';
 import { useOcrStatus } from './ocr/useOcr';
 import { toast } from '../../store/useToastStore';
 import { Cover, MANGA } from './Cover';
+import { backToLibrary, COVER_TRANSITION } from './coverTransition';
+import { inViewTransition } from '../../lib/viewTransition';
 import { openVolume, useMangaLibraryEvents, useMangaSeries } from './useMangaLibrary';
 import { ServerStatus } from './Servers';
 import { extErrorText } from './ext/useExtensions';
@@ -25,6 +27,12 @@ const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
 const isRemote = (volume: MangaVolume) => volume.format === 'remote-archive' || volume.format === 'remote-folder' || isChapter(volume);
 /** Something can be opened: pages, or a remote archive whose pages are read on opening. */
 const isReadable = (volume: MangaVolume) => volume.page_count > 0 || isRemote(volume);
+/** Why the series' server cannot be read from right now, if it cannot. */
+export type Unreachable = 'offline' | 'unauthorized' | null;
+export function unreachableReason(source: MangaSource | null): Unreachable {
+  const error = source?.last_error;
+  return error === 'offline' || error === 'unauthorized' ? error : null;
+}
 
 /** The volume "Read" opens: the one in progress, else the first unread one. */
 export function nextVolume(volumes: MangaVolume[]): { volume: MangaVolume; resume: boolean } | null {
@@ -40,9 +48,9 @@ export function nextVolume(volumes: MangaVolume[]): { volume: MangaVolume; resum
 
 function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volumes: MangaVolume[]; source: MangaSource | null; onLink: () => void }) {
   const { t } = useTranslation(['manga', 'common']);
-  // Offline, "Read" only offers what is on this computer.
-  const offline = source?.last_error === 'offline';
-  const next = nextVolume(offline ? volumes.filter((volume) => volume.downloaded || !isRemote(volume)) : volumes);
+  // Offline, or refused by the server, "Read" only offers what is on this computer.
+  const cut = unreachableReason(source) !== null;
+  const next = nextVolume(cut ? volumes.filter((volume) => volume.downloaded || !isRemote(volume)) : volumes);
   const cover = mangaUrl.cover(series.id);
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   const [unlinking, setUnlinking] = useState(false);
@@ -64,7 +72,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
       <img src={cover} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-80 blur-3xl saturate-150" />
       <div className="absolute inset-0 -z-10 bg-linear-to-r from-base-100/95 via-base-100/70 to-base-100/25" />
       <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-end">
-        <div className="aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-box shadow-lg ring-1 ring-base-content/10 sm:w-44">
+        <div data-hero-cover style={{ viewTransitionName: COVER_TRANSITION }} className="aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-box shadow-lg ring-1 ring-base-content/10 sm:w-44">
           <Cover src={cover} eager />
         </div>
         <div className="min-w-0 flex-1 space-y-4">
@@ -125,7 +133,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
 }
 
 /** Download state of a remote volume: a button, the bar while it runs, or "downloaded". */
-function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; progress?: DownloadProgress; offline: boolean }) {
+function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; progress?: DownloadProgress; offline: Unreachable }) {
   const { t, i18n } = useTranslation('manga');
   const [removing, setRemoving] = useState(false);
   if (progress) {
@@ -176,9 +184,9 @@ function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; p
       appearance="ghost"
       size="sm"
       shape="square"
-      disabled={offline}
+      disabled={offline !== null}
       aria-label={t('webdav.download.action', { title: volume.title })}
-      title={offline ? t('webdav.download.offline') : t('webdav.download.action', { title: volume.title })}
+      title={offline ? t(`webdav.download.${offline}`) : t('webdav.download.action', { title: volume.title })}
       onClick={() => void downloadForOffline(volume.id, volume.title)}
     >
       <CloudDownload className="h-4 w-4" />
@@ -186,7 +194,7 @@ function DownloadControl({ volume, progress, offline }: { volume: MangaVolume; p
   );
 }
 
-function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offline: boolean; ocr: OcrStatus | undefined; source: MangaSource | null }) {
+function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offline: Unreachable; ocr: OcrStatus | undefined; source: MangaSource | null }) {
   const { t, i18n } = useTranslation('manga');
   const [exporting, setExporting] = useState(false);
   const progress = useDownloadStore((s) => s.running[volume.id]);
@@ -194,14 +202,16 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
   const remote = isRemote(volume);
   const Format = isChapter(volume) ? Puzzle : volume.format === 'archive' || volume.format === 'remote-archive' ? FileArchive : Folder;
   // Offline, only what is on this computer can be opened.
-  const unreachable = remote && offline && !volume.downloaded;
+  const unreachable = remote && offline !== null && !volume.downloaded;
   const disabled = !isReadable(volume) || unreachable || Boolean(progress && !progress.offline);
   return (
-    <li className={unreachable ? 'flex items-center gap-2 pr-3 opacity-60' : 'flex items-center gap-2 pr-3'}>
+    // A row of the list's subgrid: the actions of every row share one column,
+    // so the play buttons line up whatever each row offers.
+    <li className={unreachable ? 'col-span-2 grid grid-cols-subgrid items-center opacity-60' : 'col-span-2 grid grid-cols-subgrid items-center'}>
       <button
         type="button"
         disabled={disabled}
-        title={unreachable ? t('webdav.download.offline') : undefined}
+        title={unreachable && offline ? t(`webdav.download.${offline}`) : undefined}
         onClick={() => void openVolume(volume.id)}
         className="group flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 text-left motion-safe:transition-colors enabled:hover:bg-base-200/70 focus-visible:-outline-offset-2 disabled:cursor-not-allowed"
       >
@@ -240,6 +250,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
           {unreachable ? <CloudOff className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
         </span>
       </button>
+      <div className="flex items-center justify-end gap-2 pr-3 empty:pr-0">
       {volume.text_layers.length > 0 ? (
         <DropdownSelect
           className="select select-sm w-36 shrink-0"
@@ -259,7 +270,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
             appearance="ghost"
             size="sm"
             shape="square"
-            disabled={remote && offline}
+            disabled={remote && offline !== null}
             aria-label={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
             title={t(remote ? 'ocr.export.titleRemote' : 'ocr.export.title')}
             onClick={() => setExporting(true)}
@@ -270,6 +281,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
         </>
       ) : null}
       {remote ? <DownloadControl volume={volume} progress={progress} offline={offline} /> : null}
+      </div>
     </li>
   );
 }
@@ -296,17 +308,19 @@ function RefreshChapters({ seriesId }: { seriesId: string }) {
   );
 }
 
-/** The server is not answering: what can still be read, and a way to retry. */
-function OfflineBanner({ source }: { source: MangaSource }) {
+/** The server is not answering, or refuses the credentials: what can still
+ *  be read, and a way to retry. */
+function OfflineBanner({ source, reason }: { source: MangaSource; reason: 'offline' | 'unauthorized' }) {
   const { t } = useTranslation('manga');
+  const refused = reason === 'unauthorized';
   return (
-    <div role="status" className="surface-muted flex flex-wrap items-center gap-3 border border-warning/30 px-4 py-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warning/15 text-warning">
-        <CloudOff className="h-4 w-4" aria-hidden="true" />
+    <div role="status" className={refused ? 'surface-muted flex flex-wrap items-center gap-3 border border-error/30 px-4 py-3' : 'surface-muted flex flex-wrap items-center gap-3 border border-warning/30 px-4 py-3'}>
+      <span className={refused ? 'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-error/15 text-error' : 'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warning/15 text-warning'}>
+        {refused ? <ShieldAlert className="h-4 w-4" aria-hidden="true" /> : <CloudOff className="h-4 w-4" aria-hidden="true" />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{t('webdav.detail.offlineTitle', { name: source.name })}</p>
-        <p className="text-xs text-base-content/60">{t('webdav.detail.offlineBody')}</p>
+        <p className="text-sm font-semibold">{t(refused ? 'webdav.detail.unauthorizedTitle' : 'webdav.detail.offlineTitle', { name: source.name })}</p>
+        <p className="text-xs text-base-content/60">{t(refused ? 'webdav.detail.unauthorizedBody' : 'webdav.detail.offlineBody')}</p>
       </div>
       <Button appearance="outline" size="sm" loading={source.syncing} onClick={() => void syncSource(source.id)}>
         {source.syncing ? null : <RefreshCw className="h-4 w-4" />}
@@ -336,7 +350,7 @@ function DetailSkeleton() {
 }
 
 export default function SeriesDetailScreen() {
-  const { t } = useTranslation(['manga', 'common']);
+  const { t, i18n } = useTranslation(['manga', 'common']);
   const { seriesId = '' } = useParams();
   useMangaLibraryEvents();
   useWebdavSyncEvents();
@@ -347,8 +361,11 @@ export default function SeriesDetailScreen() {
   const series = detail.data?.series;
   const volumes = detail.data?.volumes ?? [];
   const source = detail.data?.source ?? null;
-  const offline = source?.last_error === 'offline';
+  const offline = unreachableReason(source);
   const remoteSeries = series?.source === 'webdav';
+  const navigate = useNavigate();
+  // Arrived by a view transition, the cover already moved: no fade on top.
+  const [fade] = useState(() => !inViewTransition());
 
   // A remote series: its texts come down in the background while it is looked at.
   useEffect(() => {
@@ -359,13 +376,23 @@ export default function SeriesDetailScreen() {
     <div className="min-h-full bg-base-300">
       <header className="sticky top-0 z-20 border-b border-base-300/60 bg-base-100">
         <div className="flex min-h-14 items-center gap-3 px-6 py-2.5">
-          <Link to="/manga" className="btn btn-ghost btn-sm btn-square" aria-label={t('detail.back')} title={t('detail.back')}>
+          <Link
+            to="/manga"
+            className="btn btn-ghost btn-sm btn-square"
+            aria-label={t('detail.back')}
+            title={t('detail.back')}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              backToLibrary(seriesId, navigate);
+            }}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight">{series?.title ?? t('title')}</h1>
         </div>
       </header>
-      <div className="space-y-6 px-6 py-5">
+      <div className={fade ? 'manga-fade-in space-y-6 px-6 py-5' : 'space-y-6 px-6 py-5'}>
         {detail.isPending ? (
           <DetailSkeleton />
         ) : detail.isError ? (
@@ -376,18 +403,18 @@ export default function SeriesDetailScreen() {
           </div>
         ) : (
           <>
-            {source && offline ? <OfflineBanner source={source} /> : null}
+            {source && offline ? <OfflineBanner source={source} reason={offline} /> : null}
             <Hero series={series} volumes={volumes} source={source} onLink={() => setLinking(true)} />
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{series.source === 'suwayomi' ? t('ext.manga.chapters') : t('detail.volumes')}</h2>
                 <span className="flex items-center gap-3 text-xs text-base-content/50">
                   {source && !offline && source.kind !== 'suwayomi' ? <ServerStatus source={source} /> : null}
-                  {volumes.length}
+                  {formatCount(volumes.length, i18n.language)}
                   {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
               </div>
-              <ul className="surface divide-y divide-base-300/60 overflow-hidden">
+              <ul className="surface grid grid-cols-[minmax(0,1fr)_auto] divide-y divide-base-300/60 overflow-hidden">
                 {volumes.map((volume) => <VolumeRow key={volume.id} volume={volume} offline={offline} ocr={ocr} source={source} />)}
               </ul>
             </section>

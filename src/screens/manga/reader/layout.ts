@@ -35,14 +35,6 @@ export function spreadOf(spreads: number[][], page: number): number {
   return page <= 0 ? 0 : Math.max(0, spreads.length - 1);
 }
 
-/**
- * Pages left to right on screen. Right-to-left books put the first page of a
- * spread on the right.
- */
-export function onScreen(spread: number[], direction: ReadingDirection): number[] {
-  return direction === 'rtl' ? [...spread].reverse() : spread;
-}
-
 export type ReaderAction =
   | 'next' | 'previous' | 'first' | 'last' | 'fullscreen' | 'escape'
   /** Cycle the text layer: on hover, always, hidden. */
@@ -76,6 +68,26 @@ export function keyAction(event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlK
     case 'Escape': return 'escape';
     default: return null;
   }
+}
+
+/**
+ * With a text block focused, the arrows go from block to block instead of
+ * turning the page: down and the reading direction forward (← in a
+ * right-to-left book), up and the other way back. 0: not a block key.
+ */
+export function blockStep(key: string, direction: ReadingDirection): 1 | -1 | 0 {
+  switch (key) {
+    case 'ArrowDown': return 1;
+    case 'ArrowUp': return -1;
+    case 'ArrowLeft': return direction === 'rtl' ? 1 : -1;
+    case 'ArrowRight': return direction === 'rtl' ? -1 : 1;
+    default: return 0;
+  }
+}
+
+/** The text blocks on screen, in reading order: by page, then mokuro's order. */
+export function orderBlocks<T extends { page: number; block: number }>(blocks: T[]): T[] {
+  return [...blocks].sort((a, b) => a.page - b.page || a.block - b.block);
 }
 
 /** A click on the page: the outer thirds turn it, the middle shows the controls. */

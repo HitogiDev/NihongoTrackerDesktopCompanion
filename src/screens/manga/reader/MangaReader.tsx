@@ -12,16 +12,20 @@ import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
 import { mangaUrl } from '../../../lib/manga';
+import { inViewTransition, withViewTransition } from '../../../lib/viewTransition';
 import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { OcrInstallModal } from '../ocr/OcrInstallModal';
+import { ShortcutsSheet } from '../ShortcutsSheet';
+import { isSheetKey, readerShortcuts } from '../shortcuts';
 import { ocrErrorText, useOcrInstallStore, useOcrStatus } from '../ocr/useOcr';
 import { BlockEditor } from './BlockEditor';
 import { EditLayer } from './EditLayer';
-import { buildSpreads, clickAction, DEFAULT_PAGE, keyAction, preloadPages, spreadOf, type Size } from './layout';
+import { blockStep, buildSpreads, clickAction, DEFAULT_PAGE, keyAction, orderBlocks, preloadPages, spreadOf, type Size } from './layout';
 import { PagedView } from './PagedView';
 import { BottomBar, EndCard, SettingsPanel, TopBar } from './ReaderChrome';
 import { BACKGROUND_CLASS } from './styles';
 import { TextLayer, type HoveredBlock } from './TextLayer';
+import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
 import { useMangaSession } from '../useMangaSession';
 import { SessionIndicator } from './SessionIndicator';
@@ -64,9 +68,13 @@ export default function MangaReaderWindow() {
   useEffect(() => {
     let alive = true;
     void ipc.mangaReaderTarget().then((value) => { if (alive) setTarget(value); });
+    // Another volume in the open window: the old page cross-fades into the
+    // new one where the webview has View Transitions.
     const off = listen<ReaderTarget>(events.mangaReaderOpen, (event) => {
-      setTarget(event.payload);
-      setOpened((count) => count + 1);
+      withViewTransition(() => {
+        setTarget(event.payload);
+        setOpened((count) => count + 1);
+      }, () => Boolean(document.querySelector<HTMLImageElement>('[data-page] img')?.complete), 600);
     });
     // Where a session's log went, when it ends with the reader still open
     // (idle too long, or the next volume opened).
@@ -129,11 +137,14 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const viewport = useViewport();
   const chrome = useAutoHide();
   const strip = useRef<StripHandle>(null);
+  // The first page fades in, unless a view transition already brought it.
+  const [fadeIn] = useState(() => !inViewTransition());
 
   const [prefs, setPrefs] = useState<ReaderPrefs>(data.prefs);
   const [page, setPage] = useState(initialPage);
   const [atEnd, setAtEnd] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [natural, setNatural] = useState<Record<number, Size>>({});
   const vertical = prefs.layout === 'vertical';
@@ -168,6 +179,15 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     window.getSelection()?.addRange(range);
     copyingBlock.current = block.text;
   }, []);
+  /** The block focused with Tab or the arrows, if one is. */
+  const focusedBlock = useCallback((): HoveredBlock | null => {
+    const element = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-text-block]');
+    if (!element) return null;
+    const pageIndex = Number(element.dataset.blockPage);
+    const blockIndex = Number(element.dataset.block);
+    const block = text[pageIndex]?.blocks[blockIndex];
+    return block ? { text: blockText(block), element, page: pageIndex, block: blockIndex } : null;
+  }, [text]);
   const copyBlock = useCallback((block: HoveredBlock) => {
     selectForCopy(block);
     // Runs the `copy` handler now, with the block's text.
@@ -453,21 +473,63 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // `?` opens the list of shortcuts; while it is open, keys are its own.
+      if (isSheetKey(event)) {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (shortcutsOpen) return;
       const element = event.target as HTMLElement | null;
       if (element?.closest('input, textarea, select, [role="dialog"] button')) return;
       // Ctrl+C with nothing selected copies the block under the pointer: it
       // is selected for the copy (no clipboard permission needed in any
       // webview) and the `copy` handler below writes its lines joined.
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && hoveredBlock.current) {
-        selectForCopy(hoveredBlock.current);
+      // A focused block (Tab, arrows) stands in for the pointer.
+      const target = hoveredBlock.current ?? focusedBlock();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && !window.getSelection()?.toString() && target) {
+        selectForCopy(target);
         return;
       }
       // Ctrl+M mines the block under the pointer, as its button does.
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'm') {
         event.preventDefault();
-        if (hoveredBlock.current) void mineBlock(hoveredBlock.current);
+        if (target) void mineBlock(target);
         else toast.info(t('mine.hoverFirst'));
         return;
+      }
+      // On a focused block: Enter looks it up, Esc goes back to the page and
+      // the arrows walk the blocks on screen; past the last one they turn the
+      // page as usual.
+      const focused = element?.matches('[data-text-block]') ? focusedBlock() : null;
+      if (focused && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          dictionary.openDictionaryForElement(focused.element, focused.text, lineContext(focused.page)(focused.block));
+          return;
+        }
+        if (event.key === 'Escape' && !dictionary.dictionaryRequest) {
+          event.preventDefault();
+          focused.element.blur();
+          return;
+        }
+        const step = blockStep(event.key, prefs.direction);
+        if (step !== 0) {
+          const blocks = orderBlocks(Array.from(document.querySelectorAll<HTMLElement>('[data-text-block]'), (node) => ({
+            node,
+            page: Number(node.dataset.blockPage),
+            block: Number(node.dataset.block),
+          })));
+          const at = blocks.findIndex((entry) => entry.node === focused.element);
+          const next = blocks[at + step];
+          if (next) {
+            event.preventDefault();
+            dictionary.closeDictionary();
+            next.node.focus();
+            return;
+          }
+          focused.element.blur();
+        }
       }
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'e') {
         event.preventDefault();
@@ -510,13 +572,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
+  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
     if (vertical || prefs.fit !== 'height' || Math.abs(event.deltaY) < 4) return;
     // The dictionary and the settings scroll on their own.
-    if ((event.target as HTMLElement).closest('[role="dialog"], [data-reader-chrome]')) return;
+    if ((event.target as HTMLElement).closest('dialog, [role="dialog"], [data-reader-chrome]')) return;
     const now = performance.now();
     if (now - lastWheel.current < WHEEL_GAP_MS) return;
     lastWheel.current = now;
@@ -526,7 +588,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   const onClick = (event: ReactMouseEvent) => {
     const element = event.target as HTMLElement;
-    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], [role="dialog"]')) return;
+    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]')) return;
     if (settingsOpen) {
       setSettingsOpen(false);
       return;
@@ -540,6 +602,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
+  useEffect(() => { pin('shortcuts', shortcutsOpen); }, [pin, shortcutsOpen]);
+  const shortcutGroups = useMemo(() => readerShortcuts(prefs.direction, prefs.layout), [prefs.direction, prefs.layout]);
 
   const overlay = editing
     ? (index: number, size: Size) => {
@@ -587,7 +651,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'}`}
+      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'} ${fadeIn ? 'manga-reader-in' : ''}`}
       onClick={onClick}
       onWheel={onWheel}
     >
@@ -626,7 +690,9 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onFullscreen={() => void toggleFullscreen()}
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
+        onShortcuts={() => setShortcutsOpen(true)}
         onHover={(hovering) => chrome.pin('top', hovering)}
+        onFocusWithin={(inside) => chrome.pin('top-focus', inside)}
         extra={<>
           {ownSession ? <SessionIndicator session={ownSession} /> : null}
           {readingShown ? (
@@ -711,7 +777,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         />
       ) : null}
       <OcrInstallModal />
-      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} /> : null}
+      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /> : null}
+      <ShortcutsSheet
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        groups={shortcutGroups}
+        note={vertical ? undefined : t(prefs.direction === 'rtl' ? 'shortcuts.noteRtl' : 'shortcuts.noteLtr')}
+      />
       <BottomBar
         visible={chrome.visible || settingsOpen}
         volumeId={volume.id}
@@ -722,6 +794,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         direction={prefs.direction}
         onSeek={seek}
         onHover={(hovering) => chrome.pin('bottom', hovering)}
+        onFocusWithin={(inside) => chrome.pin('bottom-focus', inside)}
       />
       {dictionary.dictionaryRequest ? (
         <DictionaryPopup

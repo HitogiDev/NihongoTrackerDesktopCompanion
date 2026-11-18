@@ -271,7 +271,13 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
 /// with the file.
 fn cached_cover(cache_dir: &Path, key: &str, signature: &str, bytes: impl FnOnce() -> Option<Vec<u8>>) -> Option<Vec<u8>> {
     let bucket = format!("{key}-{}", signature.replace(|c: char| !c.is_ascii_alphanumeric(), "-"));
-    thumbs::cached(cache_dir, &bucket, 0, thumbs::COVER_WIDTH, bytes)
+    let fresh = !thumbs::path(cache_dir, &bucket, 0, thumbs::COVER_WIDTH).exists();
+    let body = thumbs::cached(cache_dir, &bucket, 0, thumbs::COVER_WIDTH, bytes);
+    // A new version of the cover: the older ones would never be asked for again.
+    if fresh && body.is_some() {
+        thumbs::drop_other_covers(cache_dir, &bucket);
+    }
+    body
 }
 
 fn response(reply: Reply) -> Response<Vec<u8>> {

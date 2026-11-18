@@ -284,6 +284,9 @@ pub async fn rescan(app: &AppHandle, force: bool) -> Result<ScanSummary, String>
             summary.series += changes.series;
             summary.volumes += changes.volumes;
         }
+        if let Some(cache_dir) = &cache_dir {
+            thumbs::sweep_library_covers(&db, cache_dir);
+        }
         Ok(summary)
     })
     .await

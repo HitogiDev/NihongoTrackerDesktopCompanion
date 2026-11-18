@@ -44,6 +44,8 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
   const { t } = useTranslation('mangaReader');
   if (mode === 'hidden' || !page || page.blocks.length === 0 || page.img_width <= 0) return null;
   const scale = size.width / page.img_width;
+  const total = page.blocks.filter((block) => blockText(block)).length;
+  let shown = 0;
   return (
     <div className="manga-text-layer absolute inset-0" data-mode={mode} lang="ja">
       {page.blocks.map((block, index) => {
@@ -52,21 +54,39 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
         const box = blockBox(block, scale);
         const busy = mining === `${pageIndex}:${index}`;
         const hovered = (element: HTMLElement): HoveredBlock => ({ text, element, page: pageIndex, block: index });
+        const place = (element: HTMLElement) => {
+          element.dataset.actions = element.getBoundingClientRect().top < ACTIONS_ROOM_PX ? 'below' : 'above';
+        };
+        shown += 1;
         return (
+          // A stop for Tab and the arrows (MangaReader), read out as "text n
+          // of N"; focused, it is the block Enter, Ctrl+C and Ctrl+M act on.
           <div
             key={index}
             data-text-block
+            data-block-page={pageIndex}
+            data-block={index}
+            role="group"
+            tabIndex={0}
+            aria-label={t('text.block', { n: shown, count: total, page: pageIndex + 1 })}
             className={block.vertical ? 'manga-block manga-block-vertical' : 'manga-block'}
             style={{ ...box, fontSize: blockFontSize(block, scale) }}
             onMouseMove={(event) => onPointer(event, text, lineContext(index))}
             onMouseEnter={(event) => {
-              const element = event.currentTarget;
-              element.dataset.actions = element.getBoundingClientRect().top < ACTIONS_ROOM_PX ? 'below' : 'above';
-              onHoverBlock(hovered(element));
+              place(event.currentTarget);
+              onHoverBlock(hovered(event.currentTarget));
             }}
             onMouseLeave={() => {
               onHoverBlock(null);
               onLeave();
+            }}
+            onFocus={(event) => {
+              if (event.target !== event.currentTarget) return;
+              place(event.currentTarget);
+              onHoverBlock(hovered(event.currentTarget));
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHoverBlock(null);
             }}
           >
             {block.lines.map((line, lineIndex) => <span key={lineIndex} className="manga-line">{line}</span>)}

@@ -218,7 +218,13 @@ pub async fn sync_source(app: &AppHandle, source_id: &str, force: bool, automati
         Ok(outcome) => {
             let _ = db.set_manga_source_status(source_id, None, true);
             if let Ok(cache_dir) = app.path().app_cache_dir() {
-                crate::manga::thumbs::purge(&cache_dir, &outcome.stale);
+                let db = db.clone();
+                let stale = outcome.stale.clone();
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    crate::manga::thumbs::purge(&cache_dir, &stale);
+                    crate::manga::thumbs::sweep_library_covers(&db, &cache_dir);
+                })
+                .await;
             }
             emit(outcome.listed, outcome.listed, false, None);
             Ok(())

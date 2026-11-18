@@ -15,20 +15,50 @@ pub const EVT_OUTBOX: &str = "outbox://changed";
 pub const EVT_PENDING: &str = "pending://changed";
 pub const EVT_CELEBRATION: &str = "log://celebration";
 
+/// What friends see in "immersing now": the first session that counts, in
+/// the same order as Discord (a VN or game, the manga reader, a video).
+///
+/// A manga session follows Discord's policy (`discord::manga_privacy`): a
+/// blacklisted series says nothing at all, and an adult or unlinked one (its
+/// title would be a folder name) only says that the user is reading manga.
+/// The blacklist is the user's list of works not to publish, whether or not
+/// Discord is on.
+pub fn immersion_presence(snapshot: &crate::state::TrackerSnapshot, settings: &crate::config::Settings, blacklist: &[crate::db::BlacklistEntry]) -> Value {
+    if !settings.share_activity {
+        return json!({"sharing": false, "active": false});
+    }
+    let inactive = json!({"sharing": true, "active": false});
+    let current = if let Some(session) = snapshot.vn.as_ref().filter(|session| session.counting) {
+        Some((session.media_title.clone(), session.media_type.clone(), session.started_at.clone(), session.elapsed_secs))
+    } else if let Some(manga) = snapshot.manga.as_ref().filter(|session| session.counting) {
+        match crate::discord::manga_privacy(manga, settings, blacklist) {
+            Err(_) => return inactive,
+            Ok(reason) => {
+                let title = if reason == crate::discord::Reason::Full {
+                    manga.title().to_string()
+                } else {
+                    crate::i18n::discord_generic(&settings.language).to_string()
+                };
+                Some((title, "manga".to_string(), manga.started_at.clone(), manga.elapsed_secs))
+            }
+        }
+    } else {
+        snapshot.anime.as_ref().filter(|session| !session.paused).and_then(|session| session.media.as_ref().map(|media| (media.title.clone(), "anime".to_string(), session.started_at.clone(), session.elapsed_secs)))
+    };
+    match current {
+        Some((title, media_type, started_at, elapsed)) => json!({"sharing": true, "active": true, "mediaTitle": title, "mediaType": media_type, "startedAt": started_at, "elapsedSeconds": elapsed}),
+        None => inactive,
+    }
+}
+
 pub fn spawn_presence_sync(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             let state = app.state::<AppState>();
             let settings = state.settings_snapshot().await;
             let snapshot = state.tracker.read().await.clone();
-            let current = if settings.share_activity {
-                snapshot.vn.as_ref().filter(|session| session.counting).map(|session| (session.media_title.clone(), session.media_type.clone(), session.started_at.clone(), session.elapsed_secs))
-                    .or_else(|| snapshot.anime.as_ref().filter(|session| !session.paused).and_then(|session| session.media.as_ref().map(|media| (media.title.clone(), "anime".to_string(), session.started_at.clone(), session.elapsed_secs))))
-            } else { None };
-            let payload = match current {
-                Some((title, media_type, started_at, elapsed)) => json!({"sharing": true, "active": true, "mediaTitle": title, "mediaType": media_type, "startedAt": started_at, "elapsedSeconds": elapsed}),
-                None => json!({"sharing": settings.share_activity, "active": false}),
-            };
+            let blacklist = if settings.share_activity { state.db.discord_blacklist().unwrap_or_default() } else { Vec::new() };
+            let payload = immersion_presence(&snapshot, &settings, &blacklist);
             let _ = state.client().await.update_immersion_presence(&payload).await;
             tokio::time::sleep(Duration::from_secs(30)).await;
         }
@@ -538,5 +568,60 @@ mod anki_url_tests {
         assert_eq!(with("  http://127.0.0.1:8765/ "), "http://127.0.0.1:8765");
         assert_eq!(with("192.168.1.20:8765"), "http://192.168.1.20:8765");
         assert_eq!(with("https://anki.local:9000"), "https://anki.local:9000");
+    }
+}
+
+#[cfg(test)]
+mod presence_tests {
+    use super::immersion_presence;
+    use crate::config::Settings;
+    use crate::discord::tests::{entry, manga};
+    use crate::state::TrackerSnapshot;
+
+    fn sharing() -> Settings {
+        Settings { share_activity: true, ..Default::default() }
+    }
+
+    fn reading(media_id: Option<&str>, is_adult: bool) -> TrackerSnapshot {
+        TrackerSnapshot { manga: Some(manga(media_id, is_adult)), ..Default::default() }
+    }
+
+    #[test]
+    fn a_linked_manga_is_shared_with_its_title() {
+        let payload = immersion_presence(&reading(Some("30104"), false), &sharing(), &[]);
+        assert_eq!(payload["active"], true);
+        assert_eq!(payload["mediaTitle"], "Yotsuba&!");
+        assert_eq!(payload["mediaType"], "manga");
+        assert_eq!(payload["elapsedSeconds"], 600);
+        assert_eq!(payload["startedAt"], "2026-08-12T20:00:00Z");
+    }
+
+    #[test]
+    fn an_adult_or_unlinked_manga_only_says_manga() {
+        for snapshot in [reading(Some("30104"), true), reading(None, false)] {
+            let payload = immersion_presence(&snapshot, &sharing(), &[]);
+            assert_eq!(payload["active"], true);
+            assert_eq!(payload["mediaType"], "manga");
+            let title = payload["mediaTitle"].as_str().unwrap();
+            assert_eq!(title, crate::i18n::discord_generic("en"));
+            assert!(!title.contains("Yotsuba") && !title.contains("第1巻"));
+        }
+    }
+
+    #[test]
+    fn a_blacklisted_manga_shares_nothing() {
+        for (snapshot, key) in [(reading(Some("30104"), false), "30104"), (reading(None, true), "manga:ser-1")] {
+            let payload = immersion_presence(&snapshot, &sharing(), &[entry(key, "media")]);
+            assert_eq!(payload, serde_json::json!({"sharing": true, "active": false}));
+        }
+    }
+
+    #[test]
+    fn a_paused_manga_or_sharing_off_is_not_active() {
+        let mut paused = reading(Some("30104"), false);
+        paused.manga.as_mut().unwrap().counting = false;
+        assert_eq!(immersion_presence(&paused, &sharing(), &[])["active"], false);
+        let off = immersion_presence(&reading(Some("30104"), false), &Settings::default(), &[]);
+        assert_eq!(off, serde_json::json!({"sharing": false, "active": false}));
     }
 }
