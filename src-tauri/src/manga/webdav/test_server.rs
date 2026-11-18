@@ -13,6 +13,7 @@ pub struct Request {
     /// As sent, still percent-encoded.
     pub path: String,
     pub headers: HashMap<String, String>,
+    pub body: Vec<u8>,
 }
 
 impl Request {
@@ -113,7 +114,7 @@ impl TestServer {
                 let mut body = vec![0; length];
                 let _ = reader.read_exact(&mut body);
                 request_count.fetch_add(1, Ordering::Relaxed);
-                let reply = handler(&Request { method: method.clone(), path, headers });
+                let reply = handler(&Request { method: method.clone(), path, headers, body });
                 let mut stream = stream;
                 let length = reply
                     .headers

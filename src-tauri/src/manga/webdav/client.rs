@@ -321,6 +321,41 @@ impl Client {
         Ok(body)
     }
 
+    /// A small file with its ETag, or `None` if it does not exist yet.
+    pub async fn get_tagged(&self, path: &str, max: u64) -> Result<Option<(Vec<u8>, Option<String>)>, DavError> {
+        let url = self.url_for(path);
+        let response = self.send(|| self.http.get(url.clone()).timeout(FILE_TIMEOUT)).await?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        Self::check(&response)?;
+        let etag = response.headers().get(header::ETAG).and_then(|v| v.to_str().ok()).map(str::to_string);
+        Ok(Some((read_capped(response, max).await?, etag)))
+    }
+
+    /// Writes a file only if it is still the version read: `Match` its ETag,
+    /// `Absent` if it did not exist. Someone else's write in between is
+    /// `Changed`, never overwritten. `Unconditional` is for a server that
+    /// gave no ETag to compare.
+    pub async fn put_if_unchanged(&self, path: &str, body: Vec<u8>, precondition: Precondition<'_>) -> Result<(), DavError> {
+        let url = self.url_for(path);
+        let response = self
+            .send(|| {
+                let request = self.http.put(url.clone()).timeout(FILE_TIMEOUT).header(header::CONTENT_TYPE, "application/json").body(body.clone());
+                match precondition {
+                    Precondition::Match(etag) => request.header(header::IF_MATCH, etag),
+                    Precondition::Absent => request.header(header::IF_NONE_MATCH, "*"),
+                    Precondition::Unconditional => request,
+                }
+            })
+            .await?;
+        match response.status() {
+            StatusCode::PRECONDITION_FAILED => Err(DavError::Changed),
+            StatusCode::METHOD_NOT_ALLOWED => Err(DavError::Unauthorized),
+            _ => Self::check(&response),
+        }
+    }
+
     /// The size of a file, for when a listing did not say.
     pub async fn size(&self, path: &str) -> Result<Option<u64>, DavError> {
         let url = self.url_for(path);
@@ -378,6 +413,13 @@ impl Client {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Precondition<'a> {
+    Match(&'a str),
+    Absent,
+    Unconditional,
 }
 
 const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>

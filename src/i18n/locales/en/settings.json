@@ -244,6 +244,8 @@
     "cacheClear": "Empty cache",
     "cacheCleared": "WebDAV cache emptied",
     "offlineUsage_one": "{{count}} volume downloaded for offline reading ({{size}}), kept apart.",
-    "offlineUsage_other": "{{count}} volumes downloaded for offline reading ({{size}}), kept apart."
+    "offlineUsage_other": "{{count}} volumes downloaded for offline reading ({{size}}), kept apart.",
+    "shareProgress": "Share progress with Mokuro Reader",
+    "shareProgressHint": "On servers laid out like mokuro-bunko, read and write the page you are on in mokuro-reader/volume-data.json, the file Mokuro Reader syncs. Only that volume's page and finished state are changed; the server must accept writes."
   }
 }

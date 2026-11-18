@@ -94,7 +94,7 @@ impl Remote {
         Remote { db, cache: Cache::new(cache_root, limit_bytes), offline_root, app, downloads: Mutex::new(HashMap::new()) }
     }
 
-    fn client(&self, source_id: &str) -> Result<Client, DavError> {
+    pub(crate) fn client(&self, source_id: &str) -> Result<Client, DavError> {
         let row = self.db.manga_source_row(source_id).map_err(|e| DavError::Other(e.to_string()))?.ok_or(DavError::NotFound)?;
         client_for(&row)
     }
@@ -114,7 +114,7 @@ impl Remote {
         }
     }
 
-    fn block_on<T>(&self, source_id: &str, future: impl std::future::Future<Output = Result<T, DavError>>) -> Result<T, DavError> {
+    pub(crate) fn block_on<T>(&self, source_id: &str, future: impl std::future::Future<Output = Result<T, DavError>>) -> Result<T, DavError> {
         let result = tauri::async_runtime::block_on(future);
         self.report(source_id, &result);
         result

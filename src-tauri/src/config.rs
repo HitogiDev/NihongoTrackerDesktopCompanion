@@ -165,6 +165,10 @@ pub struct Settings {
     /// Megabytes the WebDAV cache may hold (offline downloads not included).
     #[serde(default = "d_manga_webdav_cache")]
     pub manga_webdav_cache_mb: u64,
+    /// Share reading progress with Mokuro Reader through the server's
+    /// `mokuro-reader/volume-data.json` (writes to the server: opt-in).
+    #[serde(default)]
+    pub manga_webdav_sync_progress: bool,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -328,6 +332,7 @@ impl Default for Settings {
             manga_confirm_before_log: true,
             manga_idle_log_minutes: d_manga_idle_log(),
             manga_webdav_cache_mb: d_manga_webdav_cache(),
+            manga_webdav_sync_progress: false,
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),

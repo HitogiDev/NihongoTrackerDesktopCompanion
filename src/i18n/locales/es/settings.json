@@ -244,6 +244,8 @@
     "cacheClear": "Vaciar caché",
     "cacheCleared": "Caché de WebDAV vaciada",
     "offlineUsage_one": "{{count}} tomo descargado para leer sin conexión ({{size}}), aparte.",
-    "offlineUsage_other": "{{count}} tomos descargados para leer sin conexión ({{size}}), aparte."
+    "offlineUsage_other": "{{count}} tomos descargados para leer sin conexión ({{size}}), aparte.",
+    "shareProgress": "Compartir el progreso con Mokuro Reader",
+    "shareProgressHint": "En servidores organizados como mokuro-bunko, lee y escribe la página en la que vas en mokuro-reader/volume-data.json, el archivo que sincroniza Mokuro Reader. Solo cambia la página y si el tomo está terminado; el servidor tiene que aceptar escrituras."
   }
 }

@@ -39,6 +39,9 @@ pub struct Runtime {
     pub webdav_last_sync: Mutex<HashMap<String, Instant>>,
     /// Where remote pages, texts and downloads come from. Set once at start.
     pub remote: OnceLock<Arc<webdav::remote::Remote>>,
+    /// The latest progress save of each remote volume, so only the last of a
+    /// burst is written to the server (see `webdav::progress`).
+    pub progress_push: Mutex<HashMap<String, u64>>,
 }
 
 impl Runtime {

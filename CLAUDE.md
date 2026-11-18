@@ -429,6 +429,19 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `remote-archive`, `remote-folder` (`store::is_remote_format`); su
   `source_ref` es la ruta remota, no un archivo. `protocol::page_bytes` y
   `mokuro::volume_text` reciben el `Remote` (`manga::Runtime::remote`).
+- **Progreso con Mokuro Reader** (`progress.rs`, opt-in
+  `manga_webdav_sync_progress`, porque escribe en el servidor): solo con el
+  layout de bunko, en `mokuro-reader/volume-data.json`. Formato verificado en
+  Gnathonic/mokuro-reader (`src/lib/settings/volume-data.ts`): claves =
+  `volume_uuid` del `.mokuro` (recordado en `kv:manga:uuid:<tomo>`) más las
+  secciones reservadas `series` y `tracking`; `progress` es la página desde 1,
+  `lastProgressUpdate` decide quién es más nuevo y `deletedOn` es una lápida.
+  Al abrir la ficha se trae lo más nuevo; al guardar progreso se escribe
+  8 s después del último guardado, cambiando solo `progress`, `completed`
+  (nunca a `false`) y `lastProgressUpdate` y conservando todo lo demás, con
+  `If-Match` del ETag leído (o `If-None-Match: *` si no existía): si otro
+  dispositivo escribió en medio, se relee y se reintenta una vez. Un archivo
+  que no es JSON no se toca.
 - Sin hacer todavía (M4+): OCR, extensiones. El `share_activity`
   (amigos inmersos) aún no incluye el manga.
 

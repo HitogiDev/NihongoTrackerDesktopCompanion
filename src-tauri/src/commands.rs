@@ -1731,11 +1731,41 @@ pub fn manga_reader_volume(state: State<'_, AppState>, volume_id: String) -> Cmd
 /// Where the user is in a volume (0-based). Called with a debounce while
 /// reading and once more when the window closes.
 #[tauri::command]
-pub fn manga_save_progress(state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
-    if state.db.manga_volume_location(&volume_id).map_err(err)?.is_none() {
+pub async fn manga_save_progress(app: AppHandle, state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
+    let Some(location) = state.db.manga_volume_location(&volume_id).map_err(err)? else {
         return Err("Unknown volume".into());
+    };
+    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)?;
+    if crate::manga::store::is_remote_format(&location.format) && state.settings_snapshot().await.manga_webdav_sync_progress {
+        push_progress_later(&app, volume_id);
     }
-    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)
+    Ok(())
+}
+
+/// Writes a remote volume's progress to its server a few seconds after the
+/// last save, so turning pages is one write, not one per page.
+fn push_progress_later(app: &AppHandle, volume_id: String) {
+    let state = app.state::<AppState>();
+    let generation = {
+        let mut pending = state.manga.progress_push.lock().unwrap();
+        let entry = pending.entry(volume_id.clone()).or_insert(0);
+        *entry += 1;
+        *entry
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        let state = app.state::<AppState>();
+        if state.manga.progress_push.lock().unwrap().get(&volume_id) != Some(&generation) {
+            return;
+        }
+        let (Some(remote), db) = (state.manga.remote(), state.db.clone()) else { return };
+        let id = volume_id.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || crate::manga::webdav::progress::push_volume(&remote, &db, &id)).await;
+        if let Ok(Err(error)) = result {
+            log::info!("progress of {volume_id} not shared with the server: {error}");
+        }
+    });
 }
 
 #[tauri::command]
@@ -1889,10 +1919,21 @@ pub fn manga_set_text_layer(app: AppHandle, state: State<'_, AppState>, volume_i
 /// Opening a remote series fetches its volumes' `.mokuro` files into the
 /// cache in the background, so the text is there when a volume opens.
 #[tauri::command]
-pub fn manga_prepare_series(state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+pub async fn manga_prepare_series(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
     let Some(remote) = state.manga.remote() else { return Ok(()) };
     let db = state.db.clone();
+    let share_progress = state.settings_snapshot().await.manga_webdav_sync_progress;
     tauri::async_runtime::spawn_blocking(move || {
+        // Where Mokuro Reader left off, if the user shares progress with it.
+        if share_progress {
+            match crate::manga::webdav::progress::pull_series(&remote, &db, &series_id) {
+                Ok(moved) if moved > 0 => {
+                    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+                }
+                Ok(_) => {}
+                Err(error) => log::info!("progress of {series_id} not read from the server: {error}"),
+            }
+        }
         let Ok(volumes) = db.manga_volumes(&series_id) else { return };
         for volume in volumes.iter().filter(|volume| crate::manga::store::is_remote_format(&volume.format)) {
             if let Ok(Some(location)) = db.manga_volume_location(&volume.id) {

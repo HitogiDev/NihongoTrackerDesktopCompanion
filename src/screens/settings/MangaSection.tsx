@@ -126,6 +126,12 @@ export function MangaSection({ settings }: { settings: Settings }) {
         </Field>
       </div>
       <p className="p-3 text-xs text-base-content/60">{t('manga.clock')}</p>
+      <Toggle
+        label={t('manga.shareProgress')}
+        description={t('manga.shareProgressHint')}
+        checked={settings.manga_webdav_sync_progress}
+        onChange={(v) => void updateSettings({ manga_webdav_sync_progress: v })}
+      />
       <WebdavCache settings={settings} />
     </div>
   );

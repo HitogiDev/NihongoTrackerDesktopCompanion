@@ -81,7 +81,12 @@ manga_idle_log_minutes: number,
 /**
  * Megabytes the WebDAV cache may hold (offline downloads not included).
  */
-manga_webdav_cache_mb: number, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
+manga_webdav_cache_mb: number, 
+/**
+ * Share reading progress with Mokuro Reader through the server's
+ * `mokuro-reader/volume-data.json` (writes to the server: opt-in).
+ */
+manga_webdav_sync_progress: boolean, anki_deck: string, anki_model: string, anki_field_sources: { [key in string]: string }, 
 /**
  * AnkiConnect server address, same as Yomitan's "AnkiConnect server
  * address": users who changed `webBindAddress`/`webBindPort` need it.
