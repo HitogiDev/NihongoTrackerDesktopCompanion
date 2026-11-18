@@ -215,7 +215,8 @@
     "provider": {
       "directml": "the GPU (DirectML)",
       "coreml": "Apple's Neural Engine (CoreML)",
-      "cpu": "the CPU"
+      "cpu": "the CPU",
+      "owocr": "owocr"
     },
     "variant": {
       "int8": "Standard",
@@ -285,11 +286,18 @@
       "not-remote": "This volume is not on a WebDAV server.",
       "exists": "There is already a .mokuro there.",
       "bad-size": "The page's size is not known yet. Wait for it to load and try again.",
-      "too-many": "Too many boxes on one page."
+      "too-many": "Too many boxes on one page.",
+      "owocr-unavailable": "owocr does not answer on this computer. Start it with read_from=websocket, write_to=websocket and output_format=json, and check the port in Settings → Manga reader.",
+      "owocr-paused": "owocr is paused. Unpause it (p in its terminal, or its tray icon) and try again.",
+      "owocr-timeout": "owocr took the page but sent nothing back in time. Its log says why: when its engine fails it sends nothing.",
+      "owocr-no-coordinates": "owocr answered with plain text, without boxes. Start it with output_format=json and an engine that gives coordinates (with Manga OCR, the segmented one: mangaocrs).",
+      "owocr-bad-reply": "Something else answers on that port: it is not owocr.",
+      "bad-box": "That box is too small to read.",
+      "bad-port": "A port is a number from 1 to 65535."
     },
     "volume": {
       "process": "Read text",
-      "processHint": "Read the text of every page without it, in the background. A notification says when it is done.",
+      "processHint": "Read the text of every page without it, in the background, with the OCR chosen in Settings. A notification says when it is done.",
       "installHint": "Download the built-in OCR to read the text of this volume.",
       "cancel": "Stop reading this volume",
       "progress": "Reading the text of {{title}}"

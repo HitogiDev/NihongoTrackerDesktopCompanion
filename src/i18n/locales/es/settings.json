@@ -258,6 +258,29 @@
     "ocrDeleteConfirm": "Eliminar",
     "ocrDeleted": "Modelos de OCR eliminados",
     "ocrAuto": "Leer las páginas sin texto mientras lees",
-    "ocrAutoHint": "Con el OCR instalado, el lector lee la página en pantalla y las siguientes en cuanto ve que no tienen texto."
+    "ocrAutoHint": "Con el OCR listo (owocr elegido, o el integrado instalado), el lector lee la página en pantalla y las siguientes en cuanto ve que no tienen texto.",
+    "ocrEngine": "Motor de OCR",
+    "ocrEngineBuiltinHint": "Quién lee el texto de las páginas sin .mokuro. El OCR integrado funciona dentro de la app.",
+    "ocrEngineOwocrHint": "Quién lee el texto de las páginas sin .mokuro. owocr es un programa aparte que instalas y arrancas tú.",
+    "ocrEngines": {
+      "builtin": "Integrado",
+      "owocr": "owocr"
+    },
+    "owocrIntro": "owocr (AuroraWright/owocr) no forma parte de la app: instálalo con pip, elige su motor y arráncalo antes de leer. La app le manda cada página por un WebSocket y convierte las cajas que devuelve en el texto del lector.",
+    "owocrCommand": "Arráncalo con",
+    "owocrConfig": "o pon esto en la sección [general] de owocr_config.ini:",
+    "owocrJsonNote": "Con output_format=json owocr se salta los motores que no dan coordenadas. Manga OCR a secas es uno de ellos: usa el segmentado (-e mangaocrs) u otro motor como meikiocr, Chrome Screen AI u OneOCR.",
+    "owocrCopy": "Copiar",
+    "owocrCopied": "Copiado",
+    "owocrPort": "Puerto",
+    "owocrTest": "Probar conexión",
+    "owocrTesting": "Probando…",
+    "owocrOk": "owocr responde con coordenadas",
+    "owocrOkDetail": "{{url}} · leyó una imagen de prueba en {{ms}} ms",
+    "owocrNoLineBoxes": "Este motor no da cajas de línea propias: owocr las arma con los caracteres, así que pueden quedar algo desplazadas.",
+    "owocrNoCoordinatesTitle": "owocr está en marcha, pero sin coordenadas",
+    "owocrFailed": "No hay owocr en {{url}}",
+    "owocrLastError": "Último intento: {{error}}",
+    "owocrPrivacy": "La app solo se conecta a 127.0.0.1, nunca a otro ordenador. Un motor en línea elegido en owocr (Google Lens, Bing…) sí manda las páginas a su servicio."
   }
 }

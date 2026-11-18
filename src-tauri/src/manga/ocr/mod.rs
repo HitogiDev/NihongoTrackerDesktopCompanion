@@ -314,11 +314,13 @@ impl Service {
         result
     }
 
-    /// The engine is dropped before the next page: its files changed.
+    /// The engine is dropped before the next page: its files, the variant or
+    /// the engine chosen changed.
     pub fn reload(&self) {
         self.with_queue(|queue| {
             queue.reload = true;
             queue.error = None;
+            queue.provider = None;
         });
     }
 

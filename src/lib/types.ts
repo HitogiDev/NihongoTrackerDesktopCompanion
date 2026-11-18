@@ -31,6 +31,7 @@ import type { OcrComponent } from './bindings/OcrComponent';
 import type { OcrDownload } from './bindings/OcrDownload';
 import type { OcrExport } from './bindings/OcrExport';
 import type { OcrPage } from './bindings/OcrPage';
+import type { OcrEngine } from './bindings/OcrEngine';
 import type { OcrStatus } from './bindings/OcrStatus';
 import type { OcrVariant } from './bindings/OcrVariant';
 import type { OcrVolumeRun } from './bindings/OcrVolumeRun';
@@ -63,6 +64,7 @@ import type { VnApp } from './bindings/VnApp';
 import type { VnSession } from './bindings/VnSession';
 import type { WebdavAuth } from './bindings/WebdavAuth';
 import type { WebdavCacheUsage } from './bindings/WebdavCacheUsage';
+import type { OwocrProbe } from './bindings/OwocrProbe';
 import type { WebdavProbe } from './bindings/WebdavProbe';
 import type { WebdavSyncProgress } from './bindings/WebdavSyncProgress';
 
@@ -95,10 +97,12 @@ export type {
   OcrComponent,
   OcrDownload,
   OcrExport,
+  OcrEngine,
   OcrPage,
   OcrStatus,
   OcrVariant,
   OcrVolumeRun,
+  OwocrProbe,
   ScanSummary,
   MinedSentence,
   MpvSetup,

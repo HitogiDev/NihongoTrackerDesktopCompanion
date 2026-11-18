@@ -215,7 +215,8 @@
     "provider": {
       "directml": "la GPU (DirectML)",
       "coreml": "el Neural Engine de Apple (CoreML)",
-      "cpu": "la CPU"
+      "cpu": "la CPU",
+      "owocr": "owocr"
     },
     "variant": {
       "int8": "Estándar",
@@ -285,11 +286,18 @@
       "not-remote": "Este tomo no está en un servidor WebDAV.",
       "exists": "Ya hay un .mokuro ahí.",
       "bad-size": "Aún no se conoce el tamaño de la página. Espera a que cargue y vuelve a intentarlo.",
-      "too-many": "Demasiadas cajas en una página."
+      "too-many": "Demasiadas cajas en una página.",
+      "owocr-unavailable": "owocr no responde en este ordenador. Arráncalo con read_from=websocket, write_to=websocket y output_format=json, y revisa el puerto en Ajustes → Lector de manga.",
+      "owocr-paused": "owocr está en pausa. Quítala (p en su terminal, o su icono de la bandeja) y vuelve a probar.",
+      "owocr-timeout": "owocr recibió la página pero no devolvió nada a tiempo. Su registro dice por qué: cuando su motor falla no manda nada.",
+      "owocr-no-coordinates": "owocr respondió con texto sin cajas. Arráncalo con output_format=json y un motor que dé coordenadas (con Manga OCR, el segmentado: mangaocrs).",
+      "owocr-bad-reply": "En ese puerto responde otra cosa: no es owocr.",
+      "bad-box": "Esa caja es demasiado pequeña para leerla.",
+      "bad-port": "Un puerto es un número del 1 al 65535."
     },
     "volume": {
       "process": "Leer texto",
-      "processHint": "Lee en segundo plano el texto de todas las páginas que no lo tienen. Una notificación avisa al terminar.",
+      "processHint": "Lee en segundo plano el texto de todas las páginas que no lo tienen, con el OCR elegido en Ajustes. Una notificación avisa al terminar.",
       "installHint": "Descarga el OCR integrado para leer el texto de este tomo.",
       "cancel": "Dejar de leer este tomo",
       "progress": "Leyendo el texto de {{title}}"

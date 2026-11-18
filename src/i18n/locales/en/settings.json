@@ -258,6 +258,29 @@
     "ocrDeleteConfirm": "Delete",
     "ocrDeleted": "OCR models deleted",
     "ocrAuto": "Read pages without text while reading",
-    "ocrAutoHint": "With the OCR installed, the reader reads the page on screen and the next ones as soon as they have no text."
+    "ocrAutoHint": "With the OCR ready (owocr chosen, or the built-in one installed), the reader reads the page on screen and the next ones as soon as they have no text.",
+    "ocrEngine": "OCR engine",
+    "ocrEngineBuiltinHint": "Who reads the text of pages without a .mokuro. The built-in OCR runs inside the app.",
+    "ocrEngineOwocrHint": "Who reads the text of pages without a .mokuro. owocr is a separate program you install and start yourself.",
+    "ocrEngines": {
+      "builtin": "Built-in",
+      "owocr": "owocr"
+    },
+    "owocrIntro": "owocr (AuroraWright/owocr) is not part of the app: install it with pip, choose its engine and start it before reading. The app sends it each page over a WebSocket and turns the boxes it sends back into the reader's text.",
+    "owocrCommand": "Start it with",
+    "owocrConfig": "or set these in the [general] section of owocr_config.ini:",
+    "owocrJsonNote": "With output_format=json owocr skips engines that give no coordinates. Manga OCR on its own is one of them: use the segmented one (-e mangaocrs), or another engine such as meikiocr, Chrome Screen AI or OneOCR.",
+    "owocrCopy": "Copy",
+    "owocrCopied": "Copied",
+    "owocrPort": "Port",
+    "owocrTest": "Test connection",
+    "owocrTesting": "Testing…",
+    "owocrOk": "owocr answers with coordinates",
+    "owocrOkDetail": "{{url}} · read a test image in {{ms}} ms",
+    "owocrNoLineBoxes": "This engine gives no line boxes of its own: owocr builds them from characters, so they can be a little off.",
+    "owocrNoCoordinatesTitle": "owocr is running, but without coordinates",
+    "owocrFailed": "No owocr at {{url}}",
+    "owocrLastError": "Last attempt: {{error}}",
+    "owocrPrivacy": "The app only connects to 127.0.0.1, never to another computer. An online engine chosen in owocr (Google Lens, Bing…) does send the pages to its service."
   }
 }
