@@ -190,6 +190,57 @@ pub fn process_key(process: &sysinfo::Process) -> String {
     process.name().to_string_lossy().to_ascii_lowercase()
 }
 
+// ── built-in OCR (`manga::ocr`) ────────────────────────────────────────
+
+/// Which ONNX Runtime build the manga OCR downloads here (a key of
+/// `manga::ocr::assets::runtime_for`), or `None` where Microsoft publishes
+/// none (Intel Macs, 32-bit systems).
+pub fn ocr_runtime_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => Some("win-x64"),
+        ("windows", "aarch64") => Some("win-arm64"),
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-arm64"),
+        ("macos", "aarch64") => Some("osx-arm64"),
+        _ => None,
+    }
+}
+
+/// The accelerator the OCR asks ONNX Runtime for before the CPU: DirectML on
+/// Windows (any DirectX 12 GPU), CoreML on macOS. Linux has none in the
+/// official CPU build.
+pub fn ocr_accelerator() -> Option<&'static str> {
+    #[cfg(windows)]
+    return Some("directml");
+    #[cfg(target_os = "macos")]
+    return Some("coreml");
+    #[cfg(not(any(windows, target_os = "macos")))]
+    None
+}
+
+/// The execution providers for `ocr_accelerator`. Empty: the CPU only.
+pub fn ocr_execution_providers() -> Vec<ort::ep::ExecutionProviderDispatch> {
+    #[cfg(windows)]
+    return vec![ort::ep::DirectML::default().build()];
+    #[cfg(target_os = "macos")]
+    return vec![ort::ep::CoreML::default().build()];
+    #[cfg(not(any(windows, target_os = "macos")))]
+    Vec::new()
+}
+
+/// Before ONNX Runtime is loaded from `dir`. On Windows its DirectML build
+/// needs `DirectML.dll`, which is loaded first from the same folder: once a
+/// DLL of that name is in the process, Windows does not look for another
+/// (the one in System32 is too old for it).
+pub fn ocr_prepare_runtime(dir: &std::path::Path) {
+    #[cfg(windows)]
+    if let Err(error) = ort::util::preload_dylib(dir.join("DirectML.dll")) {
+        log::warn!("OCR: DirectML.dll did not load ({error}); the OCR will run on the CPU");
+    }
+    #[cfg(not(windows))]
+    let _ = dir;
+}
+
 /// `Z:\games\Novel\Novel.exe` or `/home/u/Novel/Novel.exe` → `novel.exe`.
 #[cfg_attr(windows, allow(dead_code))]
 fn wine_executable(arg: &str) -> Option<String> {

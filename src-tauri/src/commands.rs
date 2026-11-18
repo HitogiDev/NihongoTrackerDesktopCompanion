@@ -1837,6 +1837,62 @@ pub async fn manga_volume_text(state: State<'_, AppState>, volume_id: String) ->
         .map_err(err)?
 }
 
+// ── manga OCR ─────────────────────────────────────────────────────────
+
+fn ocr_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::ocr::Service>> {
+    state.manga.ocr().ok_or_else(|| "error".to_string())
+}
+
+/// The built-in OCR: whether it is installed, where it runs, what it reads.
+#[tauri::command]
+pub async fn manga_ocr_status(state: State<'_, AppState>) -> CmdResult<crate::manga::ocr::OcrStatus> {
+    let variant = state.settings_snapshot().await.manga_ocr_variant;
+    Ok(ocr_of(&state)?.status(variant))
+}
+
+/// The reader has no text for these pages: read `visible` now and `ahead`
+/// after them. `not-installed` without the models.
+#[tauri::command]
+pub async fn manga_ocr_read_pages(app: AppHandle, state: State<'_, AppState>, volume_id: String, visible: Vec<i64>, ahead: Vec<i64>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    ocr.request_pages(&app, &volume_id, &visible, &ahead);
+    Ok(())
+}
+
+/// Reads every page of a volume that has no text, in the background, with a
+/// notification at the end. Returns how many pages were queued.
+#[tauri::command]
+pub async fn manga_ocr_process_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<usize> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    let db = state.db.clone();
+    let remote = state.manga.remote();
+    let id = volume_id.clone();
+    let (title, pages) = tauri::async_runtime::spawn_blocking(move || crate::manga::ocr::pages_without_text(&db, remote.as_deref(), &id))
+        .await
+        .map_err(err)??;
+    if !pages.is_empty() {
+        ocr.process_volume(&app, &volume_id, &title, &pages);
+    }
+    Ok(pages.len())
+}
+
+#[tauri::command]
+pub fn manga_ocr_cancel_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<bool> {
+    Ok(ocr_of(&state)?.cancel_volume(&app, &volume_id))
+}
+
+/// Pages of a volume waiting for the OCR (or being read), for the reader.
+#[tauri::command]
+pub fn manga_ocr_queued_pages(state: State<'_, AppState>, volume_id: String) -> CmdResult<Vec<i64>> {
+    Ok(ocr_of(&state)?.queued_pages(&volume_id))
+}
+
 // ── manga on WebDAV ───────────────────────────────────────────────────
 
 fn remote_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::webdav::remote::Remote>> {

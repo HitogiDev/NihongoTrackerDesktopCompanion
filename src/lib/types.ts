@@ -26,6 +26,10 @@ import type { MangaSource } from './bindings/MangaSource';
 import type { MangaVolume } from './bindings/MangaVolume';
 import type { MokuroBlock } from './bindings/MokuroBlock';
 import type { MokuroPage } from './bindings/MokuroPage';
+import type { OcrPage } from './bindings/OcrPage';
+import type { OcrStatus } from './bindings/OcrStatus';
+import type { OcrVariant } from './bindings/OcrVariant';
+import type { OcrVolumeRun } from './bindings/OcrVolumeRun';
 import type { ScanSummary } from './bindings/ScanSummary';
 import type { MinedSentence } from './bindings/MinedSentence';
 import type { MpvSetup } from './bindings/MpvSetup';
@@ -83,6 +87,10 @@ export type {
   MangaVolume,
   MokuroBlock,
   MokuroPage,
+  OcrPage,
+  OcrStatus,
+  OcrVariant,
+  OcrVolumeRun,
   ScanSummary,
   MinedSentence,
   MpvSetup,

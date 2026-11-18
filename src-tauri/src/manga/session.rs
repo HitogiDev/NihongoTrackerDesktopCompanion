@@ -360,6 +360,27 @@ pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
     credited
 }
 
+/// A page of a volume got new text: the OCR read it, or the user corrected
+/// it. The reader's session counts with it from now on, and a page it already
+/// counted without text (read before the OCR finished) gets its characters
+/// and lines now, once.
+pub fn page_text_changed(app: &AppHandle, volume_id: &str, page: i64, text: Option<MokuroPage>) {
+    let state = app.state::<AppState>();
+    let mut tracking = state.manga.tracking.lock().unwrap();
+    let Tracking { open, session, .. } = &mut *tracking;
+    let Some(open) = open.as_mut().filter(|open| open.volume_id == volume_id) else { return };
+    let Some(slot) = usize::try_from(page).ok().and_then(|page| Arc::make_mut(&mut open.text).get_mut(page)) else { return };
+    *slot = text;
+    let chars = page_chars(open.page_text(page));
+    let Some(session) = session.as_mut().filter(|session| session.volume_id == volume_id) else { return };
+    session.has_text |= open.page_text(page).is_some();
+    if chars > 0 && state.db.fill_manga_page_chars(volume_id, page, chars).unwrap_or(false) {
+        session.chars_read += chars;
+        let content = content_id(open.media_id.as_deref(), &open.series_id);
+        insert_page_lines(&state.db, volume_id, page, open.page_text(page), &content);
+    }
+}
+
 /// Whole minutes for the log, rounded: the site takes `time` in minutes.
 pub fn log_minutes(seconds: u64) -> u64 {
     (seconds + 30) / 60

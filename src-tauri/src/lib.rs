@@ -137,6 +137,8 @@ pub fn run() {
                     Some(app.handle().clone()),
                 );
                 let _ = state.manga.remote.set(Arc::new(remote));
+                // The built-in OCR's runtime and models (see `manga::ocr`).
+                let _ = state.manga.ocr.set(Arc::new(manga::ocr::Service::new(data_dir.join("ocr"))));
             }
 
             // Started minimized, the main window is not built at all until the
@@ -403,6 +405,11 @@ pub fn run() {
             commands::manga_session_pages,
             commands::manga_session_state,
             commands::manga_mine_block,
+            commands::manga_ocr_status,
+            commands::manga_ocr_read_pages,
+            commands::manga_ocr_process_volume,
+            commands::manga_ocr_cancel_volume,
+            commands::manga_ocr_queued_pages,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")
@@ -413,6 +420,9 @@ pub fn run() {
                 // A session still open (the app quit with the reader up) is
                 // logged before it goes.
                 manga::session::reader_closed(app);
+                if let Some(ocr) = app.state::<AppState>().manga.ocr() {
+                    ocr.shutdown();
+                }
                 discord::shutdown(app);
                 app.state::<AppState>().game_hook.shutdown();
             }

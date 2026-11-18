@@ -20,6 +20,7 @@ import type {
   MangaSeriesDetail,
   MangaSource,
   MokuroPage,
+  OcrStatus,
   ReaderPrefs,
   ReaderTarget,
   ReaderVolume,
@@ -291,6 +292,15 @@ export const ipc = {
   /** Mines a text block, with the panel around it as the card's picture. */
   mangaMineBlock: (volumeId: string, page: number, block: number) =>
     invoke<MinedSentence>('manga_mine_block', { volumeId, page, block }),
+  // built-in OCR (`manga::ocr`)
+  mangaOcrStatus: () => invoke<OcrStatus>('manga_ocr_status'),
+  /** Reads pages without text: `visible` first, `ahead` after. Rejects with `not-installed`. */
+  mangaOcrReadPages: (volumeId: string, visible: number[], ahead: number[]) =>
+    invoke<void>('manga_ocr_read_pages', { volumeId, visible, ahead }),
+  /** Queues every page of a volume without text; resolves with how many. */
+  mangaOcrProcessVolume: (volumeId: string) => invoke<number>('manga_ocr_process_volume', { volumeId }),
+  mangaOcrCancelVolume: (volumeId: string) => invoke<boolean>('manga_ocr_cancel_volume', { volumeId }),
+  mangaOcrQueuedPages: (volumeId: string) => invoke<number[]>('manga_ocr_queued_pages', { volumeId }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -340,4 +350,8 @@ export const events = {
   mangaSession: 'manga://session',
   /** A reading session ended (`MangaSessionEnded`). */
   mangaSessionEnded: 'manga://session-ended',
+  /** `OcrStatus`: the built-in OCR's engine or a volume run changed. */
+  mangaOcrStatus: 'manga://ocr-status',
+  /** `OcrPage`: a page got text from the OCR (or could not be read). */
+  mangaOcrPage: 'manga://ocr-page',
 } as const;

@@ -169,6 +169,13 @@ pub struct Settings {
     /// `mokuro-reader/volume-data.json` (writes to the server: opt-in).
     #[serde(default)]
     pub manga_webdav_sync_progress: bool,
+    /// The built-in OCR's recognizer weights (`manga::ocr::assets::Variant`).
+    #[serde(default)]
+    pub manga_ocr_variant: crate::manga::ocr::assets::Variant,
+    /// Read a page without text as soon as the reader shows it, when the OCR
+    /// is installed.
+    #[serde(default = "d_true")]
+    pub manga_ocr_auto: bool,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -333,6 +340,8 @@ impl Default for Settings {
             manga_idle_log_minutes: d_manga_idle_log(),
             manga_webdav_cache_mb: d_manga_webdav_cache(),
             manga_webdav_sync_progress: false,
+            manga_ocr_variant: Default::default(),
+            manga_ocr_auto: true,
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),
