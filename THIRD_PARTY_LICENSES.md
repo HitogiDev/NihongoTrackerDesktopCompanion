@@ -65,6 +65,24 @@ each is checked against the SHA-256 pinned in
   License 2.0); its half-width to full-width table follows
   [jaconv](https://github.com/ikegami-yukino/jaconv) (MIT License).
 
+- **meikiocr** (the optional "fast" built-in engine) —
+  [rtr46/meikiocr](https://github.com/rtr46/meikiocr) 0.3.5, Apache License
+  2.0. None of its code is included: the pipeline in
+  `src-tauri/src/manga/ocr/meiki.rs` (preprocessing, thresholds, the
+  per-line character selection and its list of swapped kanji pairs) was
+  reimplemented in Rust from reading it. Its models are separate downloads,
+  only if the user installs this engine:
+  - [rtr46/meiki.text.detect.v0](https://huggingface.co/rtr46/meiki.text.detect.v0)
+    (commit `a9cffa4f`), **GNU LGPL-3.0**: the unmodified
+    `meiki.text.detect.v0.1.960x544.onnx`;
+  - [rtr46/meiki.txt.recognition.v0](https://huggingface.co/rtr46/meiki.txt.recognition.v0)
+    (commit `a28cf587`), **GNU LGPL-3.0**: the unmodified
+    `meiki.text.rec.v0.960x32.onnx` and `meiki.text.rec.v0.vertical.32x480.onnx`.
+
+  The app does not ship or redistribute them: they are fetched from the
+  author's repositories at those commits, kept as separate files the app
+  only loads into ONNX Runtime, and "Delete models" removes them.
+
 The GPL-3.0 comic-text-detector used by mokuro is not used.
 
 ## Manga extensions server (downloaded on demand)
