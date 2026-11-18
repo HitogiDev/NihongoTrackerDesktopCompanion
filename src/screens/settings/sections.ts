@@ -85,6 +85,8 @@ export const SEARCH_INDEX: { section: SectionId; label: string; hint?: string }[
   { section: 'manga', label: 'settings:manga.idleLog', hint: 'settings:manga.idleLogHint' },
   { section: 'manga', label: 'settings:manga.cache', hint: 'settings:manga.cacheHint' },
   { section: 'manga', label: 'settings:manga.shareProgress', hint: 'settings:manga.shareProgressHint' },
+  { section: 'manga', label: 'settings:manga.ocr', hint: 'settings:manga.ocrHint' },
+  { section: 'manga', label: 'settings:manga.ocrAuto', hint: 'settings:manga.ocrAutoHint' },
 
   { section: 'readingOverlay', label: 'readingOverlay:openSettings', hint: 'readingOverlay:settingsHint' },
 

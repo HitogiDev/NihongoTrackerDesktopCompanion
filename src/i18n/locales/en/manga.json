@@ -50,7 +50,6 @@
     "hasText": "With text",
     "percentRead": "{{percent}}% read",
     "textMokuro": "Text from mokuro",
-    "textOcr": "Text from OCR",
     "noText": "No text",
     "finished": "Read",
     "link": "Link to NihongoTracker",
@@ -201,6 +200,116 @@
       "offlineTitle": "{{name}} is offline",
       "offlineBody": "Downloaded volumes can still be read. The rest come back when the server does.",
       "retry": "Retry"
+    }
+  },
+  "ocr": {
+    "state": {
+      "installed": "Installed",
+      "none": "No text",
+      "mokuro": "mokuro",
+      "done": "Text ready",
+      "partial": "Text on {{count}} of {{total}}",
+      "processing": "Reading {{done}}/{{total}}",
+      "queued": "Waiting"
+    },
+    "provider": {
+      "directml": "the GPU (DirectML)",
+      "coreml": "Apple's Neural Engine (CoreML)",
+      "cpu": "the CPU"
+    },
+    "variant": {
+      "int8": "Standard",
+      "int8Hint": "Recommended. Compact, fast on any computer.",
+      "fp16": "Precise",
+      "fp16Hint": "Larger weights, a little more faithful. Slower on the CPU."
+    },
+    "install": {
+      "title": "Download the OCR",
+      "intro": "The OCR reads the text of pages that have no .mokuro. It runs on this computer: pages are never uploaded anywhere. It needs these files, downloaded once:",
+      "variant": "OCR model",
+      "component": {
+        "runtime": "ONNX Runtime {{version}}",
+        "detector": "Text detector",
+        "recognizer": "Japanese recognizer (manga-ocr)"
+      },
+      "componentHint": {
+        "runtime": "Runs the models · Microsoft",
+        "detector": "Finds bubbles and text · comic-text-and-bubble-detector",
+        "recognizer": "Reads each box · kha-white/manga-ocr"
+      },
+      "present": "Ready",
+      "total": "To download",
+      "free": "Free space",
+      "unknown": "Unknown",
+      "where": "Saved in",
+      "noRoom": "There may not be enough free space for the download.",
+      "privacy": "Every file is checked against its SHA-256 before it is kept. Runs on the CPU.",
+      "privacy_directml": "Every file is checked against its SHA-256 before it is kept. Uses the GPU through DirectML when it can, the CPU otherwise.",
+      "privacy_coreml": "Every file is checked against its SHA-256 before it is kept. Uses CoreML when it can, the CPU otherwise.",
+      "download": "Download {{size}}",
+      "downloading": "Downloading…",
+      "verifying": "Checking the file…",
+      "paused": "Paused",
+      "stopped": "Stopped",
+      "progress": "OCR download",
+      "of": "{{received}} of {{total}}",
+      "background": "You can close this window: the download goes on and Settings shows how it goes.",
+      "resumes": "What already came down is kept: the download picks up where it stopped.",
+      "resume": "Resume",
+      "hide": "Close",
+      "cancelDownload": "Stop",
+      "close": "Done",
+      "doneTitle": "The OCR is ready",
+      "doneBody": "Pages without text can be read now, from the reader or with “Read text” on each volume."
+    },
+    "toast": {
+      "nothingToRead": "Every page of this volume already has text."
+    },
+    "errors": {
+      "error": "The OCR failed: {{message}}",
+      "unsupported": "There is no ONNX Runtime build for this computer, so the built-in OCR cannot run here.",
+      "not-installed": "The OCR is not installed yet.",
+      "downloading": "A download is already running.",
+      "offline": "The download stopped: no connection. Try again later; it resumes where it stopped.",
+      "server": "The server did not send the file. Try again later.",
+      "checksum": "A downloaded file was not the expected one and was deleted. Try again.",
+      "cancelled": "Download stopped.",
+      "disk": "The file could not be saved. Check the free space.",
+      "unreadable": "The page image could not be read.",
+      "not-found": "This page is no longer in the library.",
+      "no-text": "This volume has no text to export yet.",
+      "read-only": "The server does not let this account write there.",
+      "changed": "The file changed on the server meanwhile. Try again.",
+      "unauthorized": "The server refused the credentials.",
+      "not-local": "This volume is not a folder or archive on this computer.",
+      "not-remote": "This volume is not on a WebDAV server.",
+      "exists": "There is already a .mokuro there.",
+      "bad-size": "The page's size is not known yet. Wait for it to load and try again.",
+      "too-many": "Too many boxes on one page."
+    },
+    "volume": {
+      "process": "Read text",
+      "processHint": "Read the text of every page without it, in the background. A notification says when it is done.",
+      "installHint": "Download the built-in OCR to read the text of this volume.",
+      "cancel": "Stop reading this volume",
+      "progress": "Reading the text of {{title}}"
+    },
+    "export": {
+      "title": "Export as .mokuro",
+      "titleRemote": "Upload .mokuro to the server",
+      "body": "Writes the volume's text (mokuro's, the OCR's and your corrections) as a .mokuro file next to the volume, so Mokuro Reader and other readers can use it.",
+      "bodyRemote": "Uploads the volume's text (mokuro's, the OCR's and your corrections) as a .mokuro file next to the volume on the server, so Mokuro Reader and other clients of that server can use it.",
+      "permission": "This writes to the server: your account there needs permission to write. Nothing else on the server is changed.",
+      "besideVolume": "Next to {{title}}",
+      "save": "Export",
+      "upload": "Upload",
+      "replace": "Replace it",
+      "exists": "There is already a .mokuro next to this volume. Replace it with this one?",
+      "existsRemote": "The server already has a .mokuro for this volume. Replace it with this one? It is only replaced if nobody changed it since.",
+      "saved_one": "Saved {{path}} ({{count}} page with text)",
+      "saved_other": "Saved {{path}} ({{count}} pages with text)",
+      "uploaded_one": "Uploaded {{path}} ({{count}} page with text)",
+      "uploaded_other": "Uploaded {{path}} ({{count}} pages with text)"
     }
   }
 }

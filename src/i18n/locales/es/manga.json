@@ -50,7 +50,6 @@
     "hasText": "Con texto",
     "percentRead": "{{percent}} % leído",
     "textMokuro": "Texto de mokuro",
-    "textOcr": "Texto de OCR",
     "noText": "Sin texto",
     "finished": "Leído",
     "link": "Vincular con NihongoTracker",
@@ -201,6 +200,116 @@
       "offlineTitle": "{{name}} no responde",
       "offlineBody": "Los tomos descargados se pueden seguir leyendo. El resto vuelve cuando vuelva el servidor.",
       "retry": "Reintentar"
+    }
+  },
+  "ocr": {
+    "state": {
+      "installed": "Instalado",
+      "none": "Sin texto",
+      "mokuro": "mokuro",
+      "done": "Texto listo",
+      "partial": "Texto en {{count}} de {{total}}",
+      "processing": "Leyendo {{done}}/{{total}}",
+      "queued": "En cola"
+    },
+    "provider": {
+      "directml": "la GPU (DirectML)",
+      "coreml": "el Neural Engine de Apple (CoreML)",
+      "cpu": "la CPU"
+    },
+    "variant": {
+      "int8": "Estándar",
+      "int8Hint": "Recomendado. Compacto y rápido en cualquier ordenador.",
+      "fp16": "Preciso",
+      "fp16Hint": "Pesos más grandes, algo más fiel. Más lento en la CPU."
+    },
+    "install": {
+      "title": "Descargar el OCR",
+      "intro": "El OCR lee el texto de las páginas que no tienen .mokuro. Funciona en este ordenador: las páginas nunca se suben a ningún sitio. Necesita estos archivos, que se descargan una vez:",
+      "variant": "Modelo de OCR",
+      "component": {
+        "runtime": "ONNX Runtime {{version}}",
+        "detector": "Detector de texto",
+        "recognizer": "Reconocedor de japonés (manga-ocr)"
+      },
+      "componentHint": {
+        "runtime": "Ejecuta los modelos · Microsoft",
+        "detector": "Encuentra bocadillos y texto · comic-text-and-bubble-detector",
+        "recognizer": "Lee cada caja · kha-white/manga-ocr"
+      },
+      "present": "Listo",
+      "total": "Por descargar",
+      "free": "Espacio libre",
+      "unknown": "Desconocido",
+      "where": "Se guarda en",
+      "noRoom": "Puede que no haya espacio libre suficiente para la descarga.",
+      "privacy": "Cada archivo se comprueba con su SHA-256 antes de guardarlo. Funciona en la CPU.",
+      "privacy_directml": "Cada archivo se comprueba con su SHA-256 antes de guardarlo. Usa la GPU mediante DirectML cuando puede y, si no, la CPU.",
+      "privacy_coreml": "Cada archivo se comprueba con su SHA-256 antes de guardarlo. Usa CoreML cuando puede y, si no, la CPU.",
+      "download": "Descargar {{size}}",
+      "downloading": "Descargando…",
+      "verifying": "Comprobando el archivo…",
+      "paused": "En pausa",
+      "stopped": "Detenida",
+      "progress": "Descarga del OCR",
+      "of": "{{received}} de {{total}}",
+      "background": "Puedes cerrar esta ventana: la descarga sigue y Ajustes enseña cómo va.",
+      "resumes": "Lo que ya se bajó se conserva: la descarga sigue donde se quedó.",
+      "resume": "Reanudar",
+      "hide": "Cerrar",
+      "cancelDownload": "Detener",
+      "close": "Hecho",
+      "doneTitle": "El OCR está listo",
+      "doneBody": "Ya se pueden leer las páginas sin texto, desde el lector o con «Leer texto» en cada tomo."
+    },
+    "toast": {
+      "nothingToRead": "Todas las páginas de este tomo ya tienen texto."
+    },
+    "errors": {
+      "error": "El OCR falló: {{message}}",
+      "unsupported": "No hay una versión de ONNX Runtime para este ordenador, así que el OCR integrado no puede funcionar aquí.",
+      "not-installed": "El OCR aún no está instalado.",
+      "downloading": "Ya hay una descarga en marcha.",
+      "offline": "La descarga se cortó: sin conexión. Vuelve a intentarlo más tarde; sigue donde se quedó.",
+      "server": "El servidor no envió el archivo. Vuelve a intentarlo más tarde.",
+      "checksum": "Un archivo descargado no era el esperado y se ha borrado. Vuelve a intentarlo.",
+      "cancelled": "Descarga detenida.",
+      "disk": "No se pudo guardar el archivo. Comprueba el espacio libre.",
+      "unreadable": "No se pudo leer la imagen de la página.",
+      "not-found": "Esta página ya no está en la biblioteca.",
+      "no-text": "Este tomo aún no tiene texto que exportar.",
+      "read-only": "El servidor no deja escribir ahí a esta cuenta.",
+      "changed": "El archivo cambió en el servidor entretanto. Vuelve a intentarlo.",
+      "unauthorized": "El servidor rechazó las credenciales.",
+      "not-local": "Este tomo no es una carpeta ni un archivo de este ordenador.",
+      "not-remote": "Este tomo no está en un servidor WebDAV.",
+      "exists": "Ya hay un .mokuro ahí.",
+      "bad-size": "Aún no se conoce el tamaño de la página. Espera a que cargue y vuelve a intentarlo.",
+      "too-many": "Demasiadas cajas en una página."
+    },
+    "volume": {
+      "process": "Leer texto",
+      "processHint": "Lee en segundo plano el texto de todas las páginas que no lo tienen. Una notificación avisa al terminar.",
+      "installHint": "Descarga el OCR integrado para leer el texto de este tomo.",
+      "cancel": "Dejar de leer este tomo",
+      "progress": "Leyendo el texto de {{title}}"
+    },
+    "export": {
+      "title": "Exportar como .mokuro",
+      "titleRemote": "Subir el .mokuro al servidor",
+      "body": "Escribe el texto del tomo (el de mokuro, el del OCR y tus correcciones) en un archivo .mokuro junto al tomo, para que lo usen Mokuro Reader y otros lectores.",
+      "bodyRemote": "Sube el texto del tomo (el de mokuro, el del OCR y tus correcciones) como un archivo .mokuro junto al tomo en el servidor, para que lo usen Mokuro Reader y otros clientes de ese servidor.",
+      "permission": "Esto escribe en el servidor: tu cuenta allí necesita permiso de escritura. No se cambia nada más del servidor.",
+      "besideVolume": "Junto a {{title}}",
+      "save": "Exportar",
+      "upload": "Subir",
+      "replace": "Reemplazarlo",
+      "exists": "Ya hay un .mokuro junto a este tomo. ¿Reemplazarlo por este?",
+      "existsRemote": "El servidor ya tiene un .mokuro de este tomo. ¿Reemplazarlo por este? Solo se reemplaza si nadie lo ha cambiado entretanto.",
+      "saved_one": "Guardado {{path}} ({{count}} página con texto)",
+      "saved_other": "Guardado {{path}} ({{count}} páginas con texto)",
+      "uploaded_one": "Subido {{path}} ({{count}} página con texto)",
+      "uploaded_other": "Subido {{path}} ({{count}} páginas con texto)"
     }
   }
 }

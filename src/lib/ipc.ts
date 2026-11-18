@@ -20,6 +20,9 @@ import type {
   MangaSeriesDetail,
   MangaSource,
   MokuroPage,
+  EditedBlock,
+  OcrExport,
+  OcrStatus,
   ReaderPrefs,
   ReaderTarget,
   ReaderVolume,
@@ -291,6 +294,30 @@ export const ipc = {
   /** Mines a text block, with the panel around it as the card's picture. */
   mangaMineBlock: (volumeId: string, page: number, block: number) =>
     invoke<MinedSentence>('manga_mine_block', { volumeId, page, block }),
+  // built-in OCR (`manga::ocr`)
+  mangaOcrStatus: () => invoke<OcrStatus>('manga_ocr_status'),
+  /** Reads pages without text: `visible` first, `ahead` after. Rejects with `not-installed`. */
+  mangaOcrReadPages: (volumeId: string, visible: number[], ahead: number[]) =>
+    invoke<void>('manga_ocr_read_pages', { volumeId, visible, ahead }),
+  /** Queues every page of a volume without text; resolves with how many. */
+  mangaOcrProcessVolume: (volumeId: string) => invoke<number>('manga_ocr_process_volume', { volumeId }),
+  mangaOcrCancelVolume: (volumeId: string) => invoke<boolean>('manga_ocr_cancel_volume', { volumeId }),
+  mangaOcrQueuedPages: (volumeId: string) => invoke<number[]>('manga_ocr_queued_pages', { volumeId }),
+  /** Downloads the runtime and models, only after the consent dialog. Rejects with `unsupported` or `downloading`. */
+  mangaOcrInstall: () => invoke<void>('manga_ocr_install'),
+  mangaOcrCancelInstall: () => invoke<boolean>('manga_ocr_cancel_install'),
+  mangaOcrDelete: () => invoke<void>('manga_ocr_delete'),
+  /** The text inside a box (image pixels) of a page, read before anything queued. */
+  mangaOcrRegion: (volumeId: string, page: number, bbox: [number, number, number, number]) =>
+    invoke<string>('manga_ocr_region', { volumeId, page, bbox }),
+  /**
+   * Writes a volume's text as a `.mokuro` beside it (on its WebDAV server for a
+   * remote volume). Rejects with `exists` unless `overwrite`, `read-only`, `no-text`…
+   */
+  mangaOcrExport: (volumeId: string, overwrite: boolean) => invoke<OcrExport>('manga_ocr_export', { volumeId, overwrite }),
+  /** Saves a page's blocks as corrected by hand; they win over the `.mokuro`. */
+  mangaSavePageText: (volumeId: string, page: number, imageWidth: number, imageHeight: number, blocks: EditedBlock[]) =>
+    invoke<MokuroPage>('manga_save_page_text', { volumeId, page, imageWidth, imageHeight, blocks }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -340,4 +367,10 @@ export const events = {
   mangaSession: 'manga://session',
   /** A reading session ended (`MangaSessionEnded`). */
   mangaSessionEnded: 'manga://session-ended',
+  /** `OcrStatus`: the built-in OCR's engine or a volume run changed. */
+  mangaOcrStatus: 'manga://ocr-status',
+  /** `OcrPage`: a page got text from the OCR (or could not be read). */
+  mangaOcrPage: 'manga://ocr-page',
+  /** `OcrDownload`: the OCR's runtime and models coming down. */
+  mangaOcrProgress: 'manga://ocr-progress',
 } as const;

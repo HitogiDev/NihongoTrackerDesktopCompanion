@@ -8,6 +8,7 @@ pub mod archive;
 pub mod crop;
 pub mod library;
 pub mod mokuro;
+pub mod ocr;
 pub mod protocol;
 pub mod reader;
 pub mod session;
@@ -42,11 +43,17 @@ pub struct Runtime {
     /// The latest progress save of each remote volume, so only the last of a
     /// burst is written to the server (see `webdav::progress`).
     pub progress_push: Mutex<HashMap<String, u64>>,
+    /// The built-in OCR (see `ocr`). Set once at start.
+    pub ocr: OnceLock<Arc<ocr::Service>>,
 }
 
 impl Runtime {
     pub fn remote(&self) -> Option<Arc<webdav::remote::Remote>> {
         self.remote.get().cloned()
+    }
+
+    pub fn ocr(&self) -> Option<Arc<ocr::Service>> {
+        self.ocr.get().cloned()
     }
 }
 

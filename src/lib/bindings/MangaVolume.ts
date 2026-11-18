@@ -28,4 +28,9 @@ text_layer: string | null,
 /**
  * A remote volume downloaded for offline reading.
  */
-downloaded: boolean, };
+downloaded: boolean, 
+/**
+ * Pages with text of their own (OCR or corrected by hand) instead of, or
+ * besides, a `.mokuro`.
+ */
+ocr_pages: number, };

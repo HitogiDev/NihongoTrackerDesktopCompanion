@@ -76,5 +76,33 @@
     "noPicture": "Mined, without a picture: the page could not be cropped",
     "failed": "Could not mine the block: {{message}}",
     "hoverFirst": "Point at a text block to mine it"
+  },
+  "ocr": {
+    "reading": "Reading text…",
+    "readPage": "Read text",
+    "readPageHint": "Read the text of this page with the OCR",
+    "installHint": "This page has no text. Download the built-in OCR to read it."
+  },
+  "edit": {
+    "toggle": "Correct the text",
+    "title": "Correct the text",
+    "layer": "Boxes of page {{page}}",
+    "block": "Box {{index}}: {{text}}",
+    "blockTitle": "Box {{index}}",
+    "empty": "no text",
+    "count_one": "{{count}} box on screen",
+    "count_other": "{{count}} boxes on screen",
+    "placeholder": "Type the text of this box…",
+    "linesHint": "Each line is a column (or a row, if horizontal).",
+    "vertical": "Vertical text",
+    "recognize": "Read again",
+    "reading": "Reading…",
+    "delete": "Delete box",
+    "hint": "Click a box to change its text, or drag over the page to draw a new one. Delete removes the selected box.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "close": "Close",
+    "saved": "Text saved",
+    "saveFailed": "The text could not be saved: {{message}}"
   }
 }

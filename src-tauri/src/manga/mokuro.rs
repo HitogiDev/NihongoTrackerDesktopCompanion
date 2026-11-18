@@ -149,12 +149,18 @@ pub fn volume_text(
         },
         None => vec![None; location.pages.len()],
     };
-    for (page, json, _engine) in db.manga_page_text(volume_id).map_err(|e| e.to_string())? {
-        if let Some(slot) = usize::try_from(page).ok().and_then(|page| pages.get_mut(page)) {
-            if slot.is_none() {
-                *slot = serde_json::from_str::<MokuroPage>(&json).ok();
-            }
+    for (page, json, engine) in db.manga_page_text(volume_id).map_err(|e| e.to_string())? {
+        let Some(index) = usize::try_from(page).ok().filter(|&page| page < pages.len()) else { continue };
+        // A correction by hand wins over the `.mokuro`; the OCR only fills gaps.
+        if pages[index].is_some() && engine != super::store::ENGINE_MANUAL {
+            continue;
         }
+        let Ok(text) = serde_json::from_str::<MokuroPage>(&json) else { continue };
+        // Text read from another image (the volume changed since) is not this page's.
+        if !text.img_path.is_empty() && normalized(&text.img_path) != normalized(&location.pages[index]) {
+            continue;
+        }
+        pages[index] = Some(text);
     }
     Ok(pages)
 }
@@ -268,6 +274,15 @@ mod tests {
         assert!(text[0].as_ref().unwrap().blocks.is_empty());
         assert_eq!(page_text(text[1].as_ref().unwrap()), ["こんにちは世界"]);
         assert_eq!(page_text(text[2].as_ref().unwrap()), ["三"]);
+
+        // A correction by hand does; text read from another image does not count.
+        let fixed = MokuroPage { img_path: "002.jpg".into(), blocks: vec![MokuroBlock { lines: vec!["直した".into()], ..Default::default() }], ..Default::default() };
+        db.set_manga_page_text("v1", 1, &serde_json::to_string(&fixed).unwrap(), crate::manga::store::ENGINE_MANUAL).unwrap();
+        let stale = MokuroPage { img_path: "other.jpg".into(), ..ocr.clone() };
+        db.set_manga_page_text("v1", 2, &serde_json::to_string(&stale).unwrap(), "builtin").unwrap();
+        let text = volume_text(&db, None, "v1").unwrap();
+        assert_eq!(page_text(text[1].as_ref().unwrap()), ["直した"]);
+        assert!(text[2].is_none());
         assert!(volume_text(&db, None, "nope").is_err());
         drop(db);
         let _ = std::fs::remove_file(path);

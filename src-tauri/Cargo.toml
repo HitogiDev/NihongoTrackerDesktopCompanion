@@ -57,6 +57,13 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # WebDAV manga sources (`manga::webdav`): PROPFIND answers and URL paths.
 quick-xml = "0.41"
 percent-encoding = "2"
+# The built-in manga OCR (`manga::ocr`). ONNX Runtime is never linked: the
+# library is downloaded (with the user's consent) and loaded at run time.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "api-24"] }
+# Checksums of the OCR downloads, and the runtime's library out of its NuGet
+# package (a deflated zip entry).
+sha2 = "0.10"
+flate2 = "1"
 
 [dev-dependencies]
 # `cargo test` writes src/lib/bindings/*.ts from the types the UI receives.
@@ -71,6 +78,8 @@ tauri-plugin-window-state = "~2.4"
 tauri-plugin-updater = "~2.12"
 
 [target.'cfg(windows)'.dependencies]
+# DirectML for the OCR on Windows; the runtime downloaded there has it built in.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["directml"] }
 winreg = "0.55"
 tauri-winrt-notification = "0.7"
 windows = { version = "0.58", features = [
@@ -97,6 +106,8 @@ zbus = "5"
 notify-rust = "4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# CoreML for the OCR on macOS.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["coreml"] }
 core-graphics = "0.25"
 core-foundation = "0.10"
 

@@ -28,6 +28,23 @@ pub fn update_body(lang: &str, version: &str) -> String {
     }
 }
 
+pub fn ocr_done_title(lang: &str) -> &'static str {
+    match lang {
+        "es" => "Texto reconocido",
+        _ => "Text recognized",
+    }
+}
+
+/// A volume the OCR finished: how many of its pages it read, and how many failed.
+pub fn ocr_done_body(lang: &str, title: &str, pages: i64, failed: i64) -> String {
+    match (lang, failed) {
+        ("es", 0) => format!("{title}: {pages} páginas leídas."),
+        ("es", _) => format!("{title}: {pages} páginas leídas, {failed} no se pudieron leer."),
+        (_, 0) => format!("{title}: {pages} pages read."),
+        _ => format!("{title}: {pages} pages read, {failed} could not be read."),
+    }
+}
+
 pub fn tray_open(lang: &str) -> &'static str {
     match lang {
         "es" => "Abrir NihongoTracker Companion",

@@ -76,5 +76,33 @@
     "noPicture": "Minado sin imagen: no se pudo recortar la página",
     "failed": "No se pudo minar el bloque: {{message}}",
     "hoverFirst": "Pon el ratón sobre un bloque de texto para minarlo"
+  },
+  "ocr": {
+    "reading": "Leyendo texto…",
+    "readPage": "Leer texto",
+    "readPageHint": "Leer el texto de esta página con el OCR",
+    "installHint": "Esta página no tiene texto. Descarga el OCR integrado para leerla."
+  },
+  "edit": {
+    "toggle": "Corregir el texto",
+    "title": "Corregir el texto",
+    "layer": "Cajas de la página {{page}}",
+    "block": "Caja {{index}}: {{text}}",
+    "blockTitle": "Caja {{index}}",
+    "empty": "sin texto",
+    "count_one": "{{count}} caja en pantalla",
+    "count_other": "{{count}} cajas en pantalla",
+    "placeholder": "Escribe el texto de esta caja…",
+    "linesHint": "Cada línea es una columna (o una fila, si es horizontal).",
+    "vertical": "Texto vertical",
+    "recognize": "Volver a leer",
+    "reading": "Leyendo…",
+    "delete": "Borrar caja",
+    "hint": "Haz clic en una caja para cambiar su texto, o arrastra sobre la página para dibujar una nueva. Supr borra la caja elegida.",
+    "discard": "Descartar",
+    "save": "Guardar cambios",
+    "close": "Cerrar",
+    "saved": "Texto guardado",
+    "saveFailed": "No se pudo guardar el texto: {{message}}"
   }
 }

@@ -36,9 +36,15 @@ pub fn is_remote_format(format: &str) -> bool {
     format == FORMAT_REMOTE_ARCHIVE || format == FORMAT_REMOTE_FOLDER
 }
 
-// `manga_volumes.ocr_state` is `none` (no text) or `mokuro` (a `.mokuro` file
-// next to the volume), set by `apply_manga_scan`. The OCR states of a later
-// phase (processing, done) join these.
+// `manga_volumes.ocr_state` is `none` (no text), `mokuro` (a `.mokuro` file
+// next to the volume, set by `apply_manga_scan`) or `ocr` (no `.mokuro`, but
+// pages read by the built-in OCR or written by hand: `manga_page_text`).
+
+/// `manga_page_text.engine` of the built-in OCR.
+pub const ENGINE_BUILTIN: &str = "builtin";
+/// `manga_page_text.engine` of a page the user corrected: it wins over the
+/// `.mokuro` too.
+pub const ENGINE_MANUAL: &str = "manual";
 
 /// A library root as the UI lists it. Never with its credentials.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,6 +119,9 @@ pub struct MangaVolume {
     pub text_layer: Option<String>,
     /// A remote volume downloaded for offline reading.
     pub downloaded: bool,
+    /// Pages with text of their own (OCR or corrected by hand) instead of, or
+    /// besides, a `.mokuro`.
+    pub ocr_pages: i64,
 }
 
 /// One cover on the "continue reading" shelf.
@@ -687,7 +696,8 @@ impl Db {
             let mut stmt = c.prepare(
                 "SELECT v.id, v.series_id, v.title, v.format, v.position, v.page_count, v.ocr_state, v.added_at,
                         p.page, COALESCE(p.finished, 0), p.updated_at, v.size, v.layers_json,
-                        EXISTS(SELECT 1 FROM manga_offline o WHERE o.volume_id = v.id)
+                        EXISTS(SELECT 1 FROM manga_offline o WHERE o.volume_id = v.id),
+                        (SELECT COUNT(*) FROM manga_page_text t WHERE t.volume_id = v.id)
                  FROM manga_volumes v LEFT JOIN manga_progress p ON p.volume_id = v.id
                  WHERE v.series_id = ?1 ORDER BY v.position, v.title",
             )?;
@@ -710,6 +720,7 @@ impl Db {
                     text_layers: layers.into_iter().map(|(name, _)| name).collect(),
                     text_layer: None,
                     downloaded: r.get::<_, i64>(13)? != 0,
+                    ocr_pages: r.get(14)?,
                 })
             })?;
             rows.collect::<Result<Vec<_>>>()
@@ -875,6 +886,18 @@ impl Db {
         })
     }
 
+    /// A page counted without text gets its characters, once it has text.
+    /// `true` only for a page that was counted with none.
+    pub fn fill_manga_page_chars(&self, volume_id: &str, page: i64, chars: i64) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "UPDATE manga_page_read SET chars = ?3 WHERE volume_id = ?1 AND page = ?2 AND chars = 0",
+                params![volume_id, page, chars.max(0)],
+            )
+            .map(|changed| changed > 0)
+        })
+    }
+
     /// Pages of a volume already counted, and their characters.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn manga_read_totals(&self, volume_id: &str) -> Result<(i64, i64)> {
@@ -887,15 +910,36 @@ impl Db {
         })
     }
 
-    #[allow(dead_code)]
+    /// Stores a page's text. A volume with no text of any kind becomes an
+    /// `ocr` one.
     pub fn set_manga_page_text(&self, volume_id: &str, page: i64, blocks_json: &str, engine: &str) -> Result<()> {
         self.with(|c| {
             c.execute(
                 "INSERT INTO manga_page_text (volume_id, page, blocks_json, engine) VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(volume_id, page) DO UPDATE SET blocks_json = excluded.blocks_json, engine = excluded.engine",
                 params![volume_id, page, blocks_json, engine],
+            )?;
+            c.execute("UPDATE manga_volumes SET ocr_state = 'ocr' WHERE id = ?1 AND ocr_state = 'none'", params![volume_id])
+                .map(|_| ())
+        })
+    }
+
+    /// A `.mokuro` was written beside a volume: it is the volume's now.
+    pub fn set_manga_volume_mokuro(&self, volume_id: &str, path: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute("UPDATE manga_volumes SET mokuro_path = ?2, ocr_state = 'mokuro' WHERE id = ?1", params![volume_id, path]).map(|_| ())
+        })
+    }
+
+    /// The engine that wrote a page's stored text, if any.
+    pub fn manga_page_text_engine(&self, volume_id: &str, page: i64) -> Result<Option<String>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT engine FROM manga_page_text WHERE volume_id = ?1 AND page = ?2",
+                params![volume_id, page],
+                |r| r.get(0),
             )
-            .map(|_| ())
+            .optional()
         })
     }
 }

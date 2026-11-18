@@ -51,13 +51,20 @@ pub async fn save_settings(
     if !matches!(settings.reading_overlay.font_weight, 400 | 500 | 600 | 700) {
         settings.reading_overlay.font_weight = 400;
     }
-    let previous_overlay = state.settings_snapshot().await.reading_overlay;
+    let previous = state.settings_snapshot().await;
+    let ocr_variant_changed = previous.manga_ocr_variant != settings.manga_ocr_variant;
+    let previous_overlay = previous.reading_overlay;
     let shortcuts_changed = previous_overlay.toggle_shortcut != settings.reading_overlay.toggle_shortcut
         || previous_overlay.interaction_shortcut != settings.reading_overlay.interaction_shortcut;
     let topmost_changed = previous_overlay.always_on_top != settings.reading_overlay.always_on_top;
     state.db.save_settings(&settings).map_err(err)?;
     if let Some(remote) = state.manga.remote() {
         remote.cache.set_limit(settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024));
+    }
+    if ocr_variant_changed {
+        if let Some(ocr) = state.manga.ocr() {
+            ocr.reload();
+        }
     }
     let (reconnect, language_changed, auth_changed, auto_reconnect_enabled, theme_changed) = {
         let mut current = state.settings.write().await;
@@ -1835,6 +1842,140 @@ pub async fn manga_volume_text(state: State<'_, AppState>, volume_id: String) ->
     tauri::async_runtime::spawn_blocking(move || crate::manga::mokuro::volume_text(&db, remote.as_deref(), &volume_id))
         .await
         .map_err(err)?
+}
+
+// ── manga OCR ─────────────────────────────────────────────────────────
+
+fn ocr_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::ocr::Service>> {
+    state.manga.ocr().ok_or_else(|| "error".to_string())
+}
+
+/// The built-in OCR: whether it is installed, where it runs, what it reads.
+#[tauri::command]
+pub async fn manga_ocr_status(state: State<'_, AppState>) -> CmdResult<crate::manga::ocr::OcrStatus> {
+    let variant = state.settings_snapshot().await.manga_ocr_variant;
+    Ok(ocr_of(&state)?.status(variant))
+}
+
+/// The reader has no text for these pages: read `visible` now and `ahead`
+/// after them. `not-installed` without the models.
+#[tauri::command]
+pub async fn manga_ocr_read_pages(app: AppHandle, state: State<'_, AppState>, volume_id: String, visible: Vec<i64>, ahead: Vec<i64>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    ocr.request_pages(&app, &volume_id, &visible, &ahead);
+    Ok(())
+}
+
+/// Reads every page of a volume that has no text, in the background, with a
+/// notification at the end. Returns how many pages were queued.
+#[tauri::command]
+pub async fn manga_ocr_process_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<usize> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    let db = state.db.clone();
+    let remote = state.manga.remote();
+    let id = volume_id.clone();
+    let (title, pages) = tauri::async_runtime::spawn_blocking(move || crate::manga::ocr::pages_without_text(&db, remote.as_deref(), &id))
+        .await
+        .map_err(err)??;
+    if !pages.is_empty() {
+        ocr.process_volume(&app, &volume_id, &title, &pages);
+    }
+    Ok(pages.len())
+}
+
+/// Downloads the runtime and the chosen variant's models (the user has just
+/// agreed to, in the consent dialog). Progress on `manga://ocr-progress`.
+#[tauri::command]
+pub async fn manga_ocr_install(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    let variant = state.settings_snapshot().await.manga_ocr_variant;
+    if crate::manga::ocr::assets::runtime().is_none() {
+        return Err("unsupported".into());
+    }
+    if !ocr.install(&app, variant) {
+        return Err("downloading".into());
+    }
+    Ok(())
+}
+
+/// Stops the download; what came down stays for the next time.
+#[tauri::command]
+pub fn manga_ocr_cancel_install(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(ocr_of(&state)?.cancel_install())
+}
+
+/// Deletes the runtime and every model.
+#[tauri::command]
+pub async fn manga_ocr_delete(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || ocr.delete()).await.map_err(err)??;
+    crate::manga::ocr::emit_status(&app);
+    Ok(())
+}
+
+/// Reads the text inside a box the user drew on a page.
+#[tauri::command]
+pub async fn manga_ocr_region(app: AppHandle, state: State<'_, AppState>, volume_id: String, page: i64, bbox: [f64; 4]) -> CmdResult<String> {
+    let ocr = ocr_of(&state)?;
+    if !ocr.installed(state.settings_snapshot().await.manga_ocr_variant) {
+        return Err("not-installed".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || ocr.recognize_region(&app, &volume_id, page, bbox)).await.map_err(err)?
+}
+
+/// Saves a page's blocks as the user corrected them (text edited, boxes
+/// deleted or drawn). `image` is the page's size in pixels.
+#[tauri::command]
+pub async fn manga_save_page_text(
+    app: AppHandle,
+    volume_id: String,
+    page: i64,
+    image_width: f64,
+    image_height: f64,
+    blocks: Vec<crate::manga::ocr::layout::EditedBlock>,
+) -> CmdResult<crate::manga::mokuro::MokuroPage> {
+    tauri::async_runtime::spawn_blocking(move || crate::manga::ocr::save_edited_page(&app, &volume_id, page, (image_width, image_height), &blocks))
+        .await
+        .map_err(err)?
+}
+
+/// Writes a volume's text as a `.mokuro`: beside it on disk, or (`webdav`,
+/// which the user confirmed) uploaded beside it on its server. Errors are
+/// codes: `no-text`, `exists` (without `overwrite`), `read-only`, `changed`…
+#[tauri::command]
+pub async fn manga_ocr_export(app: AppHandle, state: State<'_, AppState>, volume_id: String, overwrite: bool) -> CmdResult<crate::manga::ocr::export::OcrExport> {
+    let db = state.db.clone();
+    let remote = state.manga.remote();
+    let done = tauri::async_runtime::spawn_blocking(move || {
+        let location = db.manga_volume_location(&volume_id).map_err(err)?.ok_or("not-found")?;
+        if crate::manga::store::is_remote_format(&location.format) {
+            let remote = remote.ok_or("error")?;
+            crate::manga::ocr::export::to_webdav(&db, &remote, &volume_id, overwrite)
+        } else {
+            crate::manga::ocr::export::to_local(&db, &volume_id, overwrite)
+        }
+    })
+    .await
+    .map_err(err)??;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(done)
+}
+
+#[tauri::command]
+pub fn manga_ocr_cancel_volume(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<bool> {
+    Ok(ocr_of(&state)?.cancel_volume(&app, &volume_id))
+}
+
+/// Pages of a volume waiting for the OCR (or being read), for the reader.
+#[tauri::command]
+pub fn manga_ocr_queued_pages(state: State<'_, AppState>, volume_id: String) -> CmdResult<Vec<i64>> {
+    Ok(ocr_of(&state)?.queued_pages(&volume_id))
 }
 
 // ── manga on WebDAV ───────────────────────────────────────────────────

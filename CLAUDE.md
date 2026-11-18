@@ -50,6 +50,8 @@ src-tauri/src/
     webdav/      Fuentes WebDAV: client (HTTP y credenciales), propfind, layout,
                  sync (listado a la biblioteca), cache (LRU), ranged (CBZ por
                  rangos como Read+Seek), remote (de dónde sale cada archivo, descargas)
+    ocr/         OCR integrado (ONNX vía `ort`): assets (archivos y SHA-256),
+                 download, engine, beam, text, layout, worker (cola), export
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -285,7 +287,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2 y M3.
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3 y M4.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -442,7 +444,71 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `If-Match` del ETag leído (o `If-None-Match: *` si no existía): si otro
   dispositivo escribió en medio, se relee y se reintenta una vez. Un archivo
   que no es JSON no se toca.
-- Sin hacer todavía (M4+): OCR, extensiones. El `share_activity`
+- **OCR integrado** (`manga/ocr/`, M4): detector
+  `ogkalu/comic-text-and-bubble-detector` (int8, Apache-2.0; **nunca**
+  comic-text-detector, que es GPL-3.0) → recorte por caja → manga-ocr
+  (`onnx-community/manga-ocr-base-ONNX` + el `vocab.txt` de
+  `kha-white/manga-ocr-base`). Lo corre ONNX Runtime a través de `ort`
+  (`=2.0.0-rc.15`, `load-dynamic`, `api-24`): **el runtime nunca se enlaza**;
+  se carga de `app_data_dir/ocr/` tras volver a comprobar su SHA-256.
+  Variantes: `int8` (por defecto) y `fp16` = encoder fp16 + decoder fp32,
+  porque el decoder fp16 de la conversión no carga.
+- El preprocesado y la decodificación copian a manga-ocr: gris→RGB, 224×224
+  bilineal, `(x/255 − 0,5)/0,5`; beam search con su `generation_config`
+  (4 haces, sin repetir trigramas, `length_penalty` 2, `early_stopping`) en
+  `beam.rs` (puro, con tests); `text.rs` hace su `post_process` (`…`→`...`,
+  `jaconv.h2z` de ASCII, dígitos y kana). El detector (export de RT-DETR)
+  recibe la página a 640×640 en `[0,1]` y `orig_target_sizes` y devuelve ya
+  cajas en píxeles. `layout.rs` (puro): clases 1 y 2 con `score ≥ 0,4`,
+  duplicados fuera, vertical si la caja es más alta que ancha, orden RTL
+  (filas que comparten ≥25 % de altura, de derecha a izquierda) y el texto
+  repartido en columnas/líneas según la caja.
+- El resultado es una página `.mokuro` en `manga_page_text` con engine
+  `builtin`; `mokuro::volume_text` solo la usa donde el `.mokuro` no tiene
+  página, y descarta texto cuyo `img_path` ya no es el de esa página. Una
+  corrección a mano es `manual` y **gana** también al `.mokuro`; el OCR no la
+  rehace nunca. `ocr_state` pasa a `ocr` cuando un tomo sin texto recibe la
+  primera página; `MangaVolume.ocr_pages` cuenta las páginas guardadas.
+- **Hilo propio** (`worker.rs`): cola con prioridad caja dibujada > páginas
+  en pantalla > las siguientes > "Leer texto" del tomo, sin duplicados. El
+  motor se carga con el primer trabajo y se suelta tras 5 min sin nada.
+  Nunca en el tick ni en un worker de tokio. Execution providers en
+  `platform` (`ocr_execution_providers`: DirectML en Windows, CoreML en
+  macOS, nada en Linux): si el acelerador no arranca o falla una página,
+  todo se reconstruye en CPU y se reintenta. En Windows `DirectML.dll` se
+  precarga desde `ocr/` (`ocr_prepare_runtime`): la de System32 es vieja.
+- Una página contada sin texto (el OCR llegó después) recibe sus caracteres
+  y líneas una vez (`session::page_text_changed`, `fill_manga_page_chars`).
+- **Descarga solo con consentimiento** (`download.rs`): el diálogo
+  (`OcrInstallModal`) enseña qué se baja, licencias, tamaño, espacio libre
+  (`sysinfo::Disks`) y carpeta. Cada archivo va a `.part`, se reanuda con
+  `Range` y solo toma su nombre si tamaño y SHA-256 (fijados en `assets.rs`)
+  coinciden; si no, se borra. ONNX Runtime 1.24.4 sale de los paquetes
+  oficiales de Microsoft en nuget.org (`Microsoft.ML.OnnxRuntime`,
+  `…DirectML` + `DirectML.dll` de `Microsoft.AI.DirectML` 1.15.4): se lee
+  solo la entrada de este SO por rangos (cabecera local del zip + datos
+  deflate). Sin build para Mac Intel (`supported = false`). "Eliminar
+  modelos" borra todo; lo que siga cargado (Windows) se borra al arrancar
+  (`.delete-pending`). Los modelos no van en la copia de seguridad.
+- **UX**: cada tomo dice su texto (mokuro, listo, n de N, sin texto) y
+  "Leer texto" lo procesa con "Leyendo x/y", cancelable, y notificación al
+  acabar (`i18n::ocr_done_*`). El lector pide al vuelo las páginas en
+  pantalla sin texto y las siguientes (`manga_ocr_auto`). Corrección a mano
+  con E (`EditLayer`, `BlockEditor`): editar texto y dirección, volver a
+  leer, borrar, y arrastrar para dibujar una caja, que el OCR lee al momento
+  (`manga_ocr_region`). Se guarda por página (`manga_save_page_text`).
+- **Exportar** (`export.rs`): `.mokuro` con todas las páginas (mokuro + OCR
+  + correcciones; vacías con su tamaño si es local), junto al tomo local
+  (`Vol.cbz`/`Vol/` → `Vol.mokuro`, pasa a ser su `.mokuro`) o subido junto
+  al tomo WebDAV tras confirmar, con `If-None-Match: *` o `If-Match`; sin
+  permiso de escritura el error es `read-only`. Conserva título y uuids de un
+  `.mokuro` previo y recuerda el `volume_uuid` para el progreso de Mokuro
+  Reader. Reemplazar exige una segunda confirmación.
+- Probar el OCR de verdad: los tests `#[ignore]`
+  `ocr::download::…downloads_the_real_files` (`NTDC_OCR_FETCH_DIR`) y
+  `ocr::engine::…reads_a_real_page` (`NTDC_OCR_DIR`, `NTDC_OCR_PAGE`,
+  `NTDC_OCR_EXPECT`). Nunca guardes modelos ni runtime en el repo.
+- Sin hacer todavía (M5+): owocr, extensiones. El `share_activity`
   (amigos inmersos) aún no incluye el manga.
 
 ### Copia de seguridad
@@ -463,7 +529,8 @@ capturas no van dentro.
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
 `discord://status`, `updater://available`, `updater://progress`,
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
-`manga://session-ended`, `manga://webdav-sync`, `manga://download`. Están
+`manga://session-ended`, `manga://webdav-sync`, `manga://download`,
+`manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve
