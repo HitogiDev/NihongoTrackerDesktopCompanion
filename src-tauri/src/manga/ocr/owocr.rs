@@ -190,6 +190,138 @@ fn parse_reply(text: &str) -> Reply {
     }
 }
 
+// ── from owocr's boxes to `.mokuro` blocks ────────────────────────────
+
+/// A paragraph per block, at most as many as a page corrected by hand.
+const MAX_BLOCKS: usize = 400;
+
+fn finite(b: &BoundingBox) -> bool {
+    [b.center_x, b.center_y, b.width, b.height, b.rotation_z.unwrap_or(0.0)].iter().all(|v| v.is_finite()) && b.width >= 0.0 && b.height >= 0.0
+}
+
+/// The four corners of a box in image pixels, clockwise from the top left
+/// before rotating (the order `.mokuro` gives a line's corners). owocr makes
+/// a rotated box from a quadrilateral in pixels (`quad_to_bounding_box`: the
+/// sides' length over the image's width and height, the angle of the top
+/// side), so it is rotated back in pixels too.
+pub fn corners(b: &BoundingBox, image: (f64, f64)) -> [[f64; 2]; 4] {
+    let (w, h) = image;
+    let (cx, cy) = (b.center_x * w, b.center_y * h);
+    let (hw, hh) = (b.width * w / 2.0, b.height * h / 2.0);
+    let angle = b.rotation_z.unwrap_or(0.0);
+    let (sin, cos) = angle.sin_cos();
+    [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(|[x, y]| [cx + x * cos - y * sin, cy + x * sin + y * cos])
+}
+
+/// The upright box around some points, inside the image.
+fn hull(points: impl IntoIterator<Item = [f64; 2]>, image: (f64, f64)) -> Option<[f64; 4]> {
+    let mut out: Option<[f64; 4]> = None;
+    for [x, y] in points {
+        let b = out.get_or_insert([x, y, x, y]);
+        *b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
+    }
+    out.map(|b| [b[0].clamp(0.0, image.0), b[1].clamp(0.0, image.1), b[2].clamp(0.0, image.0), b[3].clamp(0.0, image.1)])
+}
+
+/// `TOP_TO_BOTTOM` is vertical; any other direction given is not.
+fn vertical_from(direction: Option<&str>) -> Option<bool> {
+    direction.filter(|d| !d.is_empty()).map(|d| d.eq_ignore_ascii_case("TOP_TO_BOTTOM"))
+}
+
+fn has_japanese(text: &str) -> bool {
+    text.chars().any(|c| matches!(c, '\u{3040}'..='\u{30ff}' | '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}' | '\u{ff00}'..='\u{ffef}' | '\u{3000}'..='\u{303f}'))
+}
+
+/// A line's text the way manga-ocr leaves it (what owocr's own text output
+/// does to Japanese lines); other lines only lose extra spaces.
+fn clean(text: &str) -> String {
+    if has_japanese(text) {
+        super::text::post_process(text)
+    } else {
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+}
+
+struct PlacedLine {
+    text: String,
+    corners: [[f64; 2]; 4],
+    /// Upright box around it.
+    hull: [f64; 4],
+    /// Its thickness in pixels: the shorter side of its own box.
+    thickness: f64,
+    vertical: Option<bool>,
+}
+
+fn block(paragraph: &Paragraph, image: (f64, f64)) -> Option<super::super::mokuro::MokuroBlock> {
+    let mut lines: Vec<PlacedLine> = paragraph
+        .lines
+        .iter()
+        .filter(|line| finite(&line.bounding_box))
+        .filter_map(|line| {
+            let text = clean(&line.joined_text());
+            if text.is_empty() {
+                return None;
+            }
+            let corners = corners(&line.bounding_box, image);
+            let hull = hull(corners, image)?;
+            let b = &line.bounding_box;
+            let thickness = (b.width * image.0).min(b.height * image.1);
+            Some(PlacedLine { text, corners, hull, thickness, vertical: vertical_from(line.writing_direction.as_deref()) })
+        })
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let own = finite(&paragraph.bounding_box).then(|| corners(&paragraph.bounding_box, image));
+    let bbox = hull(own.into_iter().flatten().chain(lines.iter().flat_map(|line| line.corners)), image)?;
+    if bbox[2] - bbox[0] < 1.0 || bbox[3] - bbox[1] < 1.0 {
+        return None;
+    }
+    // Which way it is written: as the paragraph says, or its lines, or, if
+    // nobody says, the shape of its lines (as the built-in OCR guesses).
+    let said: Vec<bool> = lines.iter().filter_map(|line| line.vertical).collect();
+    let vertical = vertical_from(paragraph.writing_direction.as_deref())
+        .or_else(|| (!said.is_empty()).then(|| said.iter().filter(|v| **v).count() * 2 > said.len()))
+        .unwrap_or_else(|| {
+            let tall = lines.iter().filter(|line| super::layout::is_vertical(&line.hull)).count();
+            if lines.len() == 1 { super::layout::is_vertical(&bbox) || tall == 1 } else { tall * 2 > lines.len() }
+        });
+    // Columns from the right; rows from the top.
+    if vertical {
+        lines.sort_by(|a, b| (b.hull[0] + b.hull[2]).total_cmp(&(a.hull[0] + a.hull[2])));
+    } else {
+        lines.sort_by(|a, b| (a.hull[1] + a.hull[3]).total_cmp(&(b.hull[1] + b.hull[3])).then((a.hull[0]).total_cmp(&b.hull[0])));
+    }
+    let mut sizes: Vec<f64> = lines.iter().map(|line| line.thickness).filter(|v| *v > 0.0).collect();
+    sizes.sort_by(f64::total_cmp);
+    let font_size = sizes.get(sizes.len() / 2).copied().unwrap_or(16.0).round().max(1.0);
+    Some(super::super::mokuro::MokuroBlock {
+        bbox,
+        vertical,
+        font_size,
+        lines_coords: lines.iter().map(|line| line.corners.to_vec()).collect(),
+        lines: lines.into_iter().map(|line| line.text).collect(),
+    })
+}
+
+/// owocr's result for a page as a `.mokuro` page: a block per paragraph,
+/// its lines (columns, when vertical) with their own corners, in the order
+/// a manga is read (the built-in OCR's `layout::reading_order`).
+pub fn to_page(result: &OcrResult, img_path: &str) -> super::super::mokuro::MokuroPage {
+    let image = (f64::from(result.image_properties.width), f64::from(result.image_properties.height));
+    let blocks: Vec<_> = result.paragraphs.iter().filter_map(|paragraph| block(paragraph, image)).take(MAX_BLOCKS).collect();
+    let boxes: Vec<[f64; 4]> = blocks.iter().map(|block| block.bbox).collect();
+    let mut slots: Vec<Option<_>> = blocks.into_iter().map(Some).collect();
+    let blocks = super::layout::reading_order(&boxes).into_iter().filter_map(|index| slots[index].take()).collect();
+    super::super::mokuro::MokuroPage { img_path: img_path.to_string(), img_width: image.0, img_height: image.1, blocks }
+}
+
+/// The text inside a box the user drew (sent cropped): every line, in
+/// reading order, as one string, like the built-in OCR gives it.
+pub fn to_text(result: &OcrResult) -> String {
+    to_page(result, "").blocks.iter().flat_map(|block| block.lines.iter()).map(String::as_str).collect()
+}
+
 // ── the client ────────────────────────────────────────────────────────
 
 type Socket = WebSocket<TcpStream>;
@@ -623,5 +755,125 @@ pub(crate) mod tests {
         let word = |text: &str, separator: Option<&str>| Word { text: text.into(), bounding_box: bbox, separator: separator.map(str::to_string) };
         let line = Line { bounding_box: bbox, words: vec![word("今日", Some("")), word("は", None), word("晴れ", None)], text: None, writing_direction: None };
         assert_eq!(line.joined_text(), "今日は 晴れ");
+    }
+
+    // ── conversion ────────────────────────────────────────────────────
+
+    fn bbox(cx: f64, cy: f64, w: f64, h: f64, rotation: Option<f64>) -> BoundingBox {
+        BoundingBox { center_x: cx, center_y: cy, width: w, height: h, rotation_z: rotation }
+    }
+
+    /// Written by hand with the shape owocr 1.26 sends (`asdict(OcrResult)`):
+    /// a 1000×1500 page with a vertical bubble on the right (two columns,
+    /// given left to right, words without the line's text), a caption at
+    /// the bottom, slightly rotated, and a bubble on the left with no
+    /// direction at all.
+    const PAGE: &str = r#"{
+      "image_properties": {"width": 1000, "height": 1500, "x": null, "y": null, "window_handle": null, "window_x": null, "window_y": null},
+      "engine_capabilities": {"symbols": false, "symbol_bounding_boxes": false, "words": true, "word_bounding_boxes": true, "lines": true, "line_bounding_boxes": true, "paragraphs": true, "paragraph_bounding_boxes": true},
+      "paragraphs": [
+        {"bounding_box": {"center_x": 0.2, "center_y": 0.2, "width": 0.06, "height": 0.2, "rotation_z": null},
+         "lines": [{"bounding_box": {"center_x": 0.2, "center_y": 0.2, "width": 0.05, "height": 0.2, "rotation_z": null}, "words": [], "text": "左の吹き出し", "writing_direction": null}],
+         "writing_direction": null},
+        {"bounding_box": {"center_x": 0.5, "center_y": 0.9, "width": 0.4, "height": 0.04, "rotation_z": 0.1},
+         "lines": [{"bounding_box": {"center_x": 0.5, "center_y": 0.9, "width": 0.4, "height": 0.04, "rotation_z": 0.1},
+                    "words": [{"text": "東京駅", "bounding_box": {"center_x": 0.4, "center_y": 0.9, "width": 0.15, "height": 0.04, "rotation_z": 0.1}, "separator": "", "symbols": null},
+                              {"text": "で...", "bounding_box": {"center_x": 0.6, "center_y": 0.9, "width": 0.15, "height": 0.04, "rotation_z": 0.1}, "separator": null, "symbols": null}],
+                    "text": null, "writing_direction": "LEFT_TO_RIGHT"}],
+         "writing_direction": "LEFT_TO_RIGHT"},
+        {"bounding_box": {"center_x": 0.8, "center_y": 0.2, "width": 0.1, "height": 0.2, "rotation_z": null},
+         "lines": [
+           {"bounding_box": {"center_x": 0.775, "center_y": 0.2, "width": 0.04, "height": 0.18, "rotation_z": null}, "words": [{"text": "散歩", "bounding_box": {"center_x": 0.775, "center_y": 0.15, "width": 0.04, "height": 0.05, "rotation_z": null}, "separator": null, "symbols": null}, {"text": "しよう", "bounding_box": {"center_x": 0.775, "center_y": 0.23, "width": 0.04, "height": 0.1, "rotation_z": null}, "separator": "", "symbols": null}], "text": null, "writing_direction": "TOP_TO_BOTTOM"},
+           {"bounding_box": {"center_x": 0.825, "center_y": 0.2, "width": 0.04, "height": 0.2, "rotation_z": null}, "words": [], "text": "そうだね", "writing_direction": "TOP_TO_BOTTOM"},
+           {"bounding_box": {"center_x": 0.7, "center_y": 0.2, "width": 0.04, "height": 0.2, "rotation_z": null}, "words": [], "text": "   ", "writing_direction": "TOP_TO_BOTTOM"}
+         ],
+         "writing_direction": "TOP_TO_BOTTOM"}
+      ]
+    }"#;
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn a_page_from_owocr_becomes_mokuro_blocks_in_reading_order() {
+        let Reply::Result(result) = parse_reply(PAGE) else { panic!("not a result") };
+        let page = to_page(&result, "007.jpg");
+        assert_eq!(page.img_path, "007.jpg");
+        assert_eq!((page.img_width, page.img_height), (1000.0, 1500.0));
+        // Right bubble, left bubble (same row, right to left), then the caption.
+        let texts: Vec<Vec<String>> = page.blocks.iter().map(|block| block.lines.clone()).collect();
+        assert_eq!(texts, [vec!["そうだね".to_string(), "散歩しよう".to_string()], vec!["左の吹き出し".to_string()], vec!["東京駅で．．．".to_string()]]);
+
+        let right = &page.blocks[0];
+        assert!(right.vertical);
+        // The paragraph's own box: 0.75–0.85 × 0.1–0.3 of the page.
+        assert!(close(right.bbox[0], 750.0) && close(right.bbox[1], 150.0) && close(right.bbox[2], 850.0) && close(right.bbox[3], 450.0), "{:?}", right.bbox);
+        // Columns from the right, each with its own corners.
+        assert!(right.lines_coords[0][0][0] > right.lines_coords[1][0][0]);
+        assert_eq!(right.lines_coords[0], vec![[805.0, 150.0], [845.0, 150.0], [845.0, 450.0], [805.0, 450.0]]);
+        assert_eq!(right.font_size, 40.0);
+
+        // No direction given: a tall line reads as a column.
+        assert!(page.blocks[1].vertical);
+    }
+
+    #[test]
+    fn rotated_boxes_keep_their_corners() {
+        let Reply::Result(result) = parse_reply(PAGE) else { panic!("not a result") };
+        let caption = to_page(&result, "007.jpg").blocks.pop().unwrap();
+        assert!(!caption.vertical);
+        // 400 × 60 px around (500, 1350), turned 0.1 rad clockwise on screen.
+        let corners = &caption.lines_coords[0];
+        let (sin, cos) = 0.1f64.sin_cos();
+        assert!(close(corners[0][0], 500.0 - 200.0 * cos + 30.0 * sin) && close(corners[0][1], 1350.0 - 200.0 * sin - 30.0 * cos), "{corners:?}");
+        assert!(close(corners[2][0], 500.0 + 200.0 * cos - 30.0 * sin) && close(corners[2][1], 1350.0 + 200.0 * sin + 30.0 * cos));
+        // The block is the upright box around them: taller than the line.
+        assert!(caption.bbox[3] - caption.bbox[1] > 60.0 + 30.0);
+        assert!(close(caption.bbox[0], corners[3][0].min(corners[0][0])));
+        assert_eq!(caption.font_size, 60.0);
+    }
+
+    #[test]
+    fn a_horizontal_paragraph_reads_its_lines_top_down() {
+        let line = |cy: f64, text: &str| Line { bounding_box: bbox(0.5, cy, 0.6, 0.02, None), words: vec![], text: Some(text.into()), writing_direction: None };
+        let result = OcrResult {
+            image_properties: ImageProperties { width: 800, height: 1000 },
+            engine_capabilities: None,
+            paragraphs: vec![Paragraph {
+                bounding_box: bbox(0.5, 0.5, 0.6, 0.1, None),
+                lines: vec![line(0.53, "二行目"), line(0.47, "一行目")],
+                writing_direction: Some("LEFT_TO_RIGHT".into()),
+            }],
+        };
+        let page = to_page(&result, "p.png");
+        assert_eq!(page.blocks[0].lines, ["一行目", "二行目"]);
+        assert!(!page.blocks[0].vertical);
+        assert_eq!(to_text(&result), "一行目二行目");
+    }
+
+    #[test]
+    fn broken_or_empty_boxes_are_left_out() {
+        let result = OcrResult {
+            image_properties: ImageProperties { width: 100, height: 100 },
+            engine_capabilities: None,
+            paragraphs: vec![
+                Paragraph { bounding_box: bbox(0.5, 0.5, 0.2, 0.2, None), lines: vec![], writing_direction: None },
+                Paragraph {
+                    bounding_box: bbox(f64::NAN, 0.5, 0.2, 0.2, None),
+                    lines: vec![
+                        Line { bounding_box: bbox(0.5, 0.5, f64::INFINITY, 0.2, None), words: vec![], text: Some("あ".into()), writing_direction: None },
+                        // Past the edge: kept, inside the image.
+                        Line { bounding_box: bbox(0.95, 0.5, 0.2, 0.3, None), words: vec![], text: Some("ｶﾀｶﾅ".into()), writing_direction: Some("TOP_TO_BOTTOM".into()) },
+                    ],
+                    writing_direction: None,
+                },
+            ],
+        };
+        let page = to_page(&result, "p.png");
+        assert_eq!(page.blocks.len(), 1);
+        assert_eq!(page.blocks[0].lines, ["カタカナ"]);
+        assert!(page.blocks[0].vertical);
+        assert_eq!(page.blocks[0].bbox[2], 100.0);
     }
 }
