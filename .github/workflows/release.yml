@@ -94,15 +94,6 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ninja -y --no-progress
 
-      # The Windows image can carry two MSVC toolsets; CMake then pairs one
-      # version's cl.exe with the other's link.exe and every configure fails.
-      # Load a single developer environment before anything compiles C++.
-      - name: MSVC developer environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
       - uses: actions/setup-node@v5
         with:
           node-version: 22
