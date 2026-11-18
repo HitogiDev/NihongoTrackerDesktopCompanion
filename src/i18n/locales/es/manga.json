@@ -123,7 +123,8 @@
       "unauthorized": "El servidor rechazó las credenciales",
       "failed": "La última sincronización falló",
       "synced": "Sincronizado {{when}}",
-      "never": "Aún sin sincronizar"
+      "never": "Aún sin sincronizar",
+      "syncingShort": "Listando {{done}} / {{total}}"
     },
     "form": {
       "title": "Conectar un servidor WebDAV",

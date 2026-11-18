@@ -10,7 +10,7 @@ import { ShortcutsSheet } from './manga/ShortcutsSheet';
 import { isSheetKey, isTyping, libraryShortcuts } from './manga/shortcuts';
 import { FoldersModal } from './manga/FoldersModal';
 import { ServerFormModal } from './manga/ServerFormModal';
-import { ServersModal, ServerStrip } from './manga/Servers';
+import { ServersModal, ServerStrip, SyncRing, useWebdavSyncSummary } from './manga/Servers';
 import { ExtensionsPanel } from './manga/ext/ExtensionsPanel';
 import { useWebdavSyncEvents } from './manga/useWebdav';
 import { ContinueShelf, SeriesGrid, SeriesGridSkeleton, ShelfSkeleton } from './manga/SeriesGrid';
@@ -78,6 +78,8 @@ export default function MangaScreen() {
   const hasSeries = (data?.series.length ?? 0) > 0;
   const servers = useMemo(() => (data?.sources ?? []).filter((source) => source.kind === 'webdav'), [data]);
   const filtering = search.trim() !== '' || origin !== 'all';
+  // A sync is background work: a ring on the WebDAV tab, whatever tab is open.
+  const syncing = useWebdavSyncSummary(servers);
 
   return (
     <Page
@@ -137,6 +139,7 @@ export default function MangaScreen() {
                   onClick={() => setOrigin(id)}
                 >
                   {t(`tabs.${id}`)}
+                  {id === 'webdav' && syncing ? <SyncRing done={syncing.done} total={syncing.total} /> : null}
                 </button>
               ))}
             </div>

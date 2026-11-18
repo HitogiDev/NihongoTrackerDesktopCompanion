@@ -18,9 +18,8 @@ import { Cover, MANGA } from './Cover';
 import { backToLibrary, COVER_TRANSITION } from './coverTransition';
 import { inViewTransition } from '../../lib/viewTransition';
 import { openVolume, useMangaLibraryEvents, useMangaSeries } from './useMangaLibrary';
-import { ServerStatus } from './Servers';
 import { extErrorText } from './ext/useExtensions';
-import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore, useWebdavSyncEvents } from './useWebdav';
+import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore } from './useWebdav';
 
 /** A chapter of a series from an extension (its pages come from the Suwayomi server). */
 const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
@@ -353,7 +352,6 @@ export default function SeriesDetailScreen() {
   const { t, i18n } = useTranslation(['manga', 'common']);
   const { seriesId = '' } = useParams();
   useMangaLibraryEvents();
-  useWebdavSyncEvents();
   useDownloadEvents();
   const detail = useMangaSeries(seriesId);
   const ocr = useOcrStatus().data;
@@ -409,7 +407,6 @@ export default function SeriesDetailScreen() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{series.source === 'suwayomi' ? t('ext.manga.chapters') : t('detail.volumes')}</h2>
                 <span className="flex items-center gap-3 text-xs text-base-content/50">
-                  {source && !offline && source.kind !== 'suwayomi' ? <ServerStatus source={source} /> : null}
                   {formatCount(volumes.length, i18n.language)}
                   {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
