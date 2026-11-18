@@ -1577,7 +1577,12 @@ pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
         remote.remove_offline(&volumes);
     }
     if let Ok(cache_dir) = app.path().app_cache_dir() {
-        crate::manga::thumbs::purge(&cache_dir, &volumes);
+        let db = state.db.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            crate::manga::thumbs::purge(&cache_dir, &volumes);
+            crate::manga::thumbs::sweep_library_covers(&db, &cache_dir);
+        })
+        .await;
     }
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(())

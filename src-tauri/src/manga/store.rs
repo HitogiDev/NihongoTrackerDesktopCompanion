@@ -692,6 +692,15 @@ impl Db {
         })
     }
 
+    /// The id of every series in the library.
+    pub fn manga_series_ids(&self) -> Result<HashSet<String>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT id FROM manga_series")?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            rows.collect()
+        })
+    }
+
     /// Every series, in natural title order.
     pub fn manga_series_list(&self) -> Result<Vec<MangaSeries>> {
         let mut list = self.query_manga_series(None)?;
