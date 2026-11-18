@@ -20,13 +20,15 @@ export function inViewTransition(doc: Document = document): boolean {
 }
 
 /** Resolves once `ready()` holds (the new screen drew what morphs), or after
- *  `timeout` ms: a screen still loading just cross-fades. */
+ *  `timeout` ms: a screen still loading just cross-fades. Polled with timers:
+ *  rendering, and so requestAnimationFrame, is paused while the transition
+ *  waits for its update. */
 export function waitFor(ready: () => boolean, timeout: number): Promise<void> {
   return new Promise((resolve) => {
     const start = performance.now();
     const check = () => {
       if (ready() || performance.now() - start >= timeout) resolve();
-      else requestAnimationFrame(check);
+      else window.setTimeout(check, 16);
     };
     check();
   });
