@@ -14,6 +14,7 @@ import { useWebdavSyncEvents } from './manga/useWebdav';
 import { ContinueShelf, SeriesGrid, SeriesGridSkeleton, ShelfSkeleton } from './manga/SeriesGrid';
 import { useAddFolder, useRescan } from './manga/useAddFolder';
 import { useMangaLibrary, useMangaLibraryEvents } from './manga/useMangaLibrary';
+import { formatCount } from '../lib/manga';
 import type { MangaSource } from '../lib/types';
 
 type Origin = 'all' | 'local' | 'webdav' | 'extensions';
@@ -21,7 +22,7 @@ const ORIGINS: Origin[] = ['all', 'local', 'webdav', 'extensions'];
 const ORIGIN_SOURCE: Record<Origin, string | null> = { all: null, local: 'local', webdav: 'webdav', extensions: 'suwayomi' };
 
 export default function MangaScreen() {
-  const { t } = useTranslation(['manga', 'common']);
+  const { t, i18n } = useTranslation(['manga', 'common']);
   useMangaLibraryEvents();
   useWebdavSyncEvents();
   const library = useMangaLibrary();
@@ -128,7 +129,7 @@ export default function MangaScreen() {
           ) : null}
 
           {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
-            <SectionTitle aside={<span className="text-xs text-base-content/50">{filtered.length}</span>}>{t('grid.title')}</SectionTitle>
+            <SectionTitle aside={<span className="text-xs tabular-nums text-base-content/50">{formatCount(filtered.length, i18n.language)}</span>}>{t('grid.title')}</SectionTitle>
             {filtered.length > 0 ? (
               <SeriesGrid series={filtered} />
             ) : origin === 'webdav' && servers.length === 0 ? (

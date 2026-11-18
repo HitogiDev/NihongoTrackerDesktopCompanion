@@ -6,7 +6,7 @@ import { ArrowLeft, BookOpen, Check, LibraryBig, Play, Plus, RefreshCw, ShieldAl
 import { Button } from '../../../components/ui/Button';
 import { EmptyState, ErrorState, Skeleton } from '../../../components/ui/Empty';
 import { ipc } from '../../../lib/ipc';
-import { mangaUrl } from '../../../lib/manga';
+import { formatCount, mangaUrl } from '../../../lib/manga';
 import type { ExtChapter, ExtMangaDetail } from '../../../lib/types';
 import { toast } from '../../../store/useToastStore';
 import { Cover, MANGA } from '../Cover';
@@ -112,7 +112,7 @@ function Hero({ detail, onAdd, adding }: { detail: ExtMangaDetail; onAdd: () => 
 
 /** A series of a source: what it is, its chapters, and "add to library". */
 export default function ExtMangaScreen() {
-  const { t } = useTranslation(['manga', 'common']);
+  const { t, i18n } = useTranslation(['manga', 'common']);
   const { mangaId = '' } = useParams();
   const id = Number(mangaId);
   const navigate = useNavigate();
@@ -194,7 +194,7 @@ export default function ExtMangaScreen() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{t('ext.manga.chapters')}</h2>
                 <span className="flex items-center gap-2 text-xs text-base-content/50">
-                  {chapters.length}
+                  {formatCount(chapters.length, i18n.language)}
                   <Button appearance="ghost" size="xs" shape="square" loading={refreshing} aria-label={t('ext.manga.refresh')} title={t('ext.manga.refresh')} onClick={() => void refresh()}>
                     {refreshing ? null : <RefreshCw className="h-3.5 w-3.5" />}
                   </Button>

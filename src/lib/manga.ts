@@ -35,6 +35,11 @@ export function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, '').replace(/\/$/, '') || url;
 }
 
+/** A count with the language's thousands separator: `1,204`, `12.040`. */
+export function formatCount(value: number | bigint, locale?: string): string {
+  return new Intl.NumberFormat(locale).format(value);
+}
+
 /** `1.2 GB`, `350 MB`: a size as people read it. */
 export function formatBytes(bytes: number, locale?: string): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
