@@ -64,7 +64,7 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
           <div
             key={index}
             data-text-block
-            data-page={pageIndex}
+            data-block-page={pageIndex}
             data-block={index}
             role="group"
             tabIndex={0}

@@ -183,7 +183,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const focusedBlock = useCallback((): HoveredBlock | null => {
     const element = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-text-block]');
     if (!element) return null;
-    const pageIndex = Number(element.dataset.page);
+    const pageIndex = Number(element.dataset.blockPage);
     const blockIndex = Number(element.dataset.block);
     const block = text[pageIndex]?.blocks[blockIndex];
     return block ? { text: blockText(block), element, page: pageIndex, block: blockIndex } : null;
@@ -517,7 +517,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         if (step !== 0) {
           const blocks = orderBlocks(Array.from(document.querySelectorAll<HTMLElement>('[data-text-block]'), (node) => ({
             node,
-            page: Number(node.dataset.page),
+            page: Number(node.dataset.blockPage),
             block: Number(node.dataset.block),
           })));
           const at = blocks.findIndex((entry) => entry.node === focused.element);
