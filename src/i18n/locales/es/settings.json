@@ -246,6 +246,18 @@
     "offlineUsage_one": "{{count}} tomo descargado para leer sin conexión ({{size}}), aparte.",
     "offlineUsage_other": "{{count}} tomos descargados para leer sin conexión ({{size}}), aparte.",
     "shareProgress": "Compartir el progreso con Mokuro Reader",
-    "shareProgressHint": "En servidores organizados como mokuro-bunko, lee y escribe la página en la que vas en mokuro-reader/volume-data.json, el archivo que sincroniza Mokuro Reader. Solo cambia la página y si el tomo está terminado; el servidor tiene que aceptar escrituras."
+    "shareProgressHint": "En servidores organizados como mokuro-bunko, lee y escribe la página en la que vas en mokuro-reader/volume-data.json, el archivo que sincroniza Mokuro Reader. Solo cambia la página y si el tomo está terminado; el servidor tiene que aceptar escrituras.",
+    "ocr": "OCR integrado",
+    "ocrHint": "Lee en este ordenador el texto de las páginas sin .mokuro, para que cuenten caracteres, tengan diccionario y se puedan minar. Los modelos y ONNX Runtime solo se descargan cuando lo pides.",
+    "ocrInstalled": "{{size}} · funciona en {{where}}",
+    "ocrMissing": "Sin instalar · {{size}} por descargar",
+    "ocrVariant": "Modelo de OCR",
+    "ocrDownload": "Descargar…",
+    "ocrShow": "Ver la descarga",
+    "ocrDelete": "Eliminar modelos",
+    "ocrDeleteConfirm": "Eliminar",
+    "ocrDeleted": "Modelos de OCR eliminados",
+    "ocrAuto": "Leer las páginas sin texto mientras lees",
+    "ocrAutoHint": "Con el OCR instalado, el lector lee la página en pantalla y las siguientes en cuanto ve que no tienen texto."
   }
 }

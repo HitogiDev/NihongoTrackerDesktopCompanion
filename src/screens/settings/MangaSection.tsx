@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
 import { Field, Toggle } from '../../components/ui/Field';
@@ -9,7 +9,9 @@ import { ipc } from '../../lib/ipc';
 import { formatBytes } from '../../lib/manga';
 import { toast } from '../../store/useToastStore';
 import { useAppStore } from '../../store/useAppStore';
-import type { Settings } from '../../lib/types';
+import type { OcrVariant, Settings } from '../../lib/types';
+import { OcrInstallModal } from '../manga/ocr/OcrInstallModal';
+import { isDownloading, OCR_QUERY, ocrErrorText, useOcrInstallStore, useOcrStatus } from '../manga/ocr/useOcr';
 
 const CACHE_SIZES_MB = [512, 1024, 2048, 5120, 10240, 20480];
 
@@ -78,6 +80,100 @@ function WebdavCache({ settings }: { settings: Settings }) {
   );
 }
 
+/** The built-in OCR: installed or not, where it runs, its variant, delete. */
+function OcrSettings({ settings }: { settings: Settings }) {
+  const { t, i18n } = useTranslation(['settings', 'manga']);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const queryClient = useQueryClient();
+  const status = useOcrStatus().data;
+  const showInstall = useOcrInstallStore((s) => s.show);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  if (!status) return null;
+  const downloading = isDownloading(status);
+  const download = status.download;
+  const percent = download && Number(download.total) > 0 ? Math.min(100, Math.round((Number(download.received) / Number(download.total)) * 100)) : 0;
+  const where = status.provider ?? status.accelerator;
+
+  const remove = async () => {
+    setDeleting(true);
+    try {
+      await ipc.mangaOcrDelete();
+      await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
+      toast.success(t('manga.ocrDeleted'));
+    } catch (error) {
+      toast.error(ocrErrorText(error));
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="p-3">
+      <Field label={t('manga.ocr')} hint={t('manga.ocrHint')}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-48 flex-1">
+            {downloading ? (
+              <>
+                <div className="flex justify-between text-xs tabular-nums text-base-content/60">
+                  <span>{t('manga:ocr.install.downloading')}</span>
+                  <span>{percent}%</span>
+                </div>
+                <progress className="progress progress-primary mt-1 h-1.5 w-full" value={percent} max={100} aria-label={t('manga:ocr.install.progress')} />
+              </>
+            ) : status.installed ? (
+              <p className="text-sm">
+                <span className="badge badge-success badge-soft badge-sm mr-2">{t('manga:ocr.state.installed')}</span>
+                <span className="text-base-content/65">
+                  {t('manga.ocrInstalled', { size: formatBytes(Number(status.installed_bytes), i18n.language), where: t(`manga:ocr.provider.${where ?? 'cpu'}`) })}
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-base-content/65">
+                {status.supported
+                  ? t('manga.ocrMissing', { size: formatBytes(Number(status.download_bytes), i18n.language) })
+                  : t('manga:ocr.errors.unsupported')}
+              </p>
+            )}
+            {status.error && !downloading ? <p className="mt-1 text-xs text-error">{ocrErrorText(status.error)}</p> : null}
+          </div>
+          <DropdownSelect
+            className="select select-sm w-40"
+            aria-label={t('manga.ocrVariant')}
+            value={settings.manga_ocr_variant}
+            disabled={downloading}
+            onChange={async (event) => {
+              await updateSettings({ manga_ocr_variant: event.target.value as OcrVariant });
+              await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
+            }}
+          >
+            <option value="int8">{t('manga:ocr.variant.int8')}</option>
+            <option value="fp16">{t('manga:ocr.variant.fp16')}</option>
+          </DropdownSelect>
+          {downloading || !status.installed ? (
+            <Button variant="primary" size="sm" disabled={!status.supported} onClick={() => showInstall()}>
+              <Download className="h-4 w-4" />
+              {downloading ? t('manga.ocrShow') : t('manga.ocrDownload')}
+            </Button>
+          ) : null}
+          {Number(status.installed_bytes) > 0 && !downloading ? (
+            confirming ? (
+              <span className="flex items-center gap-1">
+                <Button variant="error" size="sm" loading={deleting} onClick={() => void remove()}>{deleting ? null : <Trash2 className="h-4 w-4" />}{t('manga.ocrDeleteConfirm')}</Button>
+                <Button appearance="ghost" size="sm" onClick={() => setConfirming(false)}>{t('common:cancel')}</Button>
+              </span>
+            ) : (
+              <Button appearance="outline" size="sm" onClick={() => setConfirming(true)}><Trash2 className="h-4 w-4" />{t('manga.ocrDelete')}</Button>
+            )
+          ) : null}
+        </div>
+      </Field>
+      <OcrInstallModal />
+    </div>
+  );
+}
+
 /** How the manga reader counts what is read. */
 export function MangaSection({ settings }: { settings: Settings }) {
   const { t } = useTranslation(['settings', 'common']);
@@ -133,6 +229,13 @@ export function MangaSection({ settings }: { settings: Settings }) {
         onChange={(v) => void updateSettings({ manga_webdav_sync_progress: v })}
       />
       <WebdavCache settings={settings} />
+      <OcrSettings settings={settings} />
+      <Toggle
+        label={t('manga.ocrAuto')}
+        description={t('manga.ocrAutoHint')}
+        checked={settings.manga_ocr_auto}
+        onChange={(v) => void updateSettings({ manga_ocr_auto: v })}
+      />
     </div>
   );
 }

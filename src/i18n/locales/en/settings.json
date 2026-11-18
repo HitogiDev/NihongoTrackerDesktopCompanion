@@ -246,6 +246,18 @@
     "offlineUsage_one": "{{count}} volume downloaded for offline reading ({{size}}), kept apart.",
     "offlineUsage_other": "{{count}} volumes downloaded for offline reading ({{size}}), kept apart.",
     "shareProgress": "Share progress with Mokuro Reader",
-    "shareProgressHint": "On servers laid out like mokuro-bunko, read and write the page you are on in mokuro-reader/volume-data.json, the file Mokuro Reader syncs. Only that volume's page and finished state are changed; the server must accept writes."
+    "shareProgressHint": "On servers laid out like mokuro-bunko, read and write the page you are on in mokuro-reader/volume-data.json, the file Mokuro Reader syncs. Only that volume's page and finished state are changed; the server must accept writes.",
+    "ocr": "Built-in OCR",
+    "ocrHint": "Reads the text of pages without a .mokuro on this computer, so they count characters, show the dictionary and can be mined. The models and ONNX Runtime are downloaded only when you ask.",
+    "ocrInstalled": "{{size}} · runs on {{where}}",
+    "ocrMissing": "Not installed · {{size}} to download",
+    "ocrVariant": "OCR model",
+    "ocrDownload": "Download…",
+    "ocrShow": "Show download",
+    "ocrDelete": "Delete models",
+    "ocrDeleteConfirm": "Delete",
+    "ocrDeleted": "OCR models deleted",
+    "ocrAuto": "Read pages without text while reading",
+    "ocrAutoHint": "With the OCR installed, the reader reads the page on screen and the next ones as soon as they have no text."
   }
 }

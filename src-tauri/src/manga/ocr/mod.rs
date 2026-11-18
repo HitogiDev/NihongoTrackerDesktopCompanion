@@ -12,6 +12,7 @@
 
 pub mod assets;
 pub mod beam;
+pub mod download;
 pub mod engine;
 pub mod layout;
 pub mod text;
@@ -31,6 +32,8 @@ use super::store::ENGINE_BUILTIN;
 use crate::state::AppState;
 
 pub const STATUS_EVENT: &str = "manga://ocr-status";
+/// `OcrDownload`: the runtime and models coming down.
+pub const PROGRESS_EVENT: &str = "manga://ocr-progress";
 pub const PAGE_EVENT: &str = "manga://ocr-page";
 
 /// The OCR as the UI shows it.
@@ -52,6 +55,32 @@ pub struct OcrStatus {
     pub error: Option<String>,
     /// Volumes being processed whole.
     pub runs: Vec<OcrVolumeRun>,
+    /// For the consent dialog: what would be downloaded, and where.
+    pub components: Vec<OcrComponent>,
+    /// Bytes still to download for the chosen variant.
+    pub download_bytes: u64,
+    /// Bytes the OCR's files take on disk now.
+    pub installed_bytes: u64,
+    /// Free space on the disk they go to.
+    pub free_bytes: Option<u64>,
+    pub dir: String,
+    pub runtime_version: String,
+    /// A download in progress (or how the last one ended).
+    pub download: Option<download::Progress>,
+}
+
+/// One part of the OCR, as the consent dialog lists it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct OcrComponent {
+    /// `runtime`, `detector` or `recognizer`.
+    pub kind: String,
+    /// Over the network.
+    pub bytes: u64,
+    /// On disk.
+    pub size: u64,
+    pub present: bool,
+    pub license: String,
 }
 
 /// A page that just got text.
@@ -68,11 +97,147 @@ pub struct Service {
     pub dir: PathBuf,
     shared: Shared,
     started: AtomicBool,
+    download: Mutex<Option<download::Progress>>,
+    downloading: AtomicBool,
+    cancel_download: Arc<AtomicBool>,
 }
+
+/// Left in `ocr/` when "delete" could not remove a file that was in use (a
+/// loaded library on Windows): the next start finishes the job.
+const DELETE_PENDING: &str = ".delete-pending";
 
 impl Service {
     pub fn new(dir: PathBuf) -> Self {
-        Service { dir, shared: Arc::new((Mutex::new(Queue::default()), Condvar::new())), started: AtomicBool::new(false) }
+        if dir.join(DELETE_PENDING).exists() && download::delete_all(&dir).is_empty() {
+            let _ = std::fs::remove_file(dir.join(DELETE_PENDING));
+        }
+        Service {
+            dir,
+            shared: Arc::new((Mutex::new(Queue::default()), Condvar::new())),
+            started: AtomicBool::new(false),
+            download: Mutex::new(None),
+            downloading: AtomicBool::new(false),
+            cancel_download: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn components(&self, variant: Variant) -> Vec<OcrComponent> {
+        let group = |kind: &str, assets: &[assets::Asset], license: &str| OcrComponent {
+            kind: kind.to_string(),
+            bytes: assets.iter().filter(|asset| !asset.present(&self.dir)).map(|asset| asset.transfer_size()).sum(),
+            size: assets.iter().map(|asset| asset.size).sum(),
+            present: assets.iter().all(|asset| asset.present(&self.dir)),
+            license: license.to_string(),
+        };
+        let mut list = Vec::new();
+        if let Some(runtime) = assets::runtime() {
+            list.push(group("runtime", runtime, "MIT"));
+        }
+        list.push(group("detector", &[assets::DETECTOR], "Apache-2.0"));
+        let [encoder, decoder] = assets::recognizer(variant);
+        list.push(group("recognizer", &[encoder, decoder, assets::VOCAB], "Apache-2.0"));
+        list
+    }
+
+    fn installed_bytes(&self) -> u64 {
+        assets::known_files().iter().filter_map(|file| std::fs::metadata(self.dir.join(file)).ok()).map(|meta| meta.len()).sum()
+    }
+
+    /// Downloads what the variant still needs, on a thread of its own, with
+    /// progress on `manga://ocr-progress`. The UI asks first: this is only
+    /// called once the user has agreed. `false` if one is already running.
+    pub fn install(&self, app: &AppHandle, variant: Variant) -> bool {
+        let Some(assets) = assets::all(variant) else { return false };
+        if self.downloading.swap(true, Ordering::SeqCst) {
+            return false;
+        }
+        self.cancel_download.store(false, Ordering::SeqCst);
+        let missing: Vec<assets::Asset> = assets.into_iter().filter(|asset| !asset.present(&self.dir)).collect();
+        let total: u64 = missing.iter().map(|asset| asset.transfer_size()).sum();
+        let app = app.clone();
+        let dir = self.dir.clone();
+        let cancel = self.cancel_download.clone();
+        std::thread::spawn(move || {
+            let state = app.state::<AppState>();
+            let Some(service) = state.manga.ocr() else { return };
+            let client = download::client();
+            let mut done = 0u64;
+            let mut last_emit = std::time::Instant::now() - std::time::Duration::from_secs(1);
+            let mut outcome: Result<(), download::FetchError> = Ok(());
+            for asset in &missing {
+                let mut report = |received: u64, phase: &str, force: bool| {
+                    let progress = download::Progress {
+                        phase: phase.to_string(),
+                        file: asset.file.to_string(),
+                        received: (done + received).min(total),
+                        total,
+                        error: None,
+                    };
+                    *service.download.lock().unwrap() = Some(progress.clone());
+                    if force || last_emit.elapsed() >= std::time::Duration::from_millis(200) {
+                        last_emit = std::time::Instant::now();
+                        let _ = app.emit(PROGRESS_EVENT, progress);
+                    }
+                };
+                report(0, "downloading", true);
+                let result = download::fetch(&client, asset, &dir, &cancel, &mut |received| {
+                    let phase = if received >= asset.transfer_size() { "verifying" } else { "downloading" };
+                    report(received, phase, phase == "verifying");
+                });
+                if let Err(error) = result {
+                    log::warn!("OCR download of {} failed: {error}", asset.file);
+                    outcome = Err(error);
+                    break;
+                }
+                done += asset.transfer_size();
+            }
+            let progress = download::Progress {
+                phase: match &outcome {
+                    Ok(()) => "done",
+                    Err(download::FetchError::Cancelled) => "cancelled",
+                    Err(_) => "failed",
+                }
+                .to_string(),
+                file: String::new(),
+                received: done,
+                total,
+                error: outcome.as_ref().err().map(|error| error.code().to_string()),
+            };
+            *service.download.lock().unwrap() = Some(progress.clone());
+            service.downloading.store(false, Ordering::SeqCst);
+            if outcome.is_ok() {
+                service.reload();
+            }
+            let _ = app.emit(PROGRESS_EVENT, progress);
+            emit_status(&app);
+        });
+        true
+    }
+
+    pub fn cancel_install(&self) -> bool {
+        let running = self.downloading.load(Ordering::SeqCst);
+        self.cancel_download.store(true, Ordering::SeqCst);
+        running
+    }
+
+    /// Deletes the runtime and every model (and unfinished downloads). The
+    /// engine goes first; what is still in use goes at the next start.
+    pub fn delete(&self) -> Result<(), String> {
+        if self.downloading.load(Ordering::SeqCst) {
+            return Err("downloading".into());
+        }
+        self.with_queue(|queue| {
+            queue.reload = true;
+            queue.runs.clear();
+        });
+        let left = download::delete_all(&self.dir);
+        *self.download.lock().unwrap() = None;
+        if !left.is_empty() {
+            log::info!("OCR files in use, deleted at the next start: {left:?}");
+            std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
+            std::fs::write(self.dir.join(DELETE_PENDING), left.join("\n")).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     /// Everything the chosen variant needs is here.
@@ -94,6 +259,15 @@ impl Service {
             busy: queue.current.is_some(),
             error: queue.error.clone(),
             runs,
+            components: self.components(variant),
+            download_bytes: assets::all(variant)
+                .map(|assets| assets.iter().filter(|asset| !asset.present(&self.dir)).map(|asset| asset.transfer_size()).sum())
+                .unwrap_or(0),
+            installed_bytes: self.installed_bytes(),
+            free_bytes: download::free_space(&self.dir),
+            dir: self.dir.to_string_lossy().into_owned(),
+            runtime_version: assets::RUNTIME_VERSION.to_string(),
+            download: self.download.lock().unwrap().clone(),
         }
     }
 

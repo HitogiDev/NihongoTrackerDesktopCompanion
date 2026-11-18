@@ -301,6 +301,10 @@ export const ipc = {
   mangaOcrProcessVolume: (volumeId: string) => invoke<number>('manga_ocr_process_volume', { volumeId }),
   mangaOcrCancelVolume: (volumeId: string) => invoke<boolean>('manga_ocr_cancel_volume', { volumeId }),
   mangaOcrQueuedPages: (volumeId: string) => invoke<number[]>('manga_ocr_queued_pages', { volumeId }),
+  /** Downloads the runtime and models, only after the consent dialog. Rejects with `unsupported` or `downloading`. */
+  mangaOcrInstall: () => invoke<void>('manga_ocr_install'),
+  mangaOcrCancelInstall: () => invoke<boolean>('manga_ocr_cancel_install'),
+  mangaOcrDelete: () => invoke<void>('manga_ocr_delete'),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -354,4 +358,6 @@ export const events = {
   mangaOcrStatus: 'manga://ocr-status',
   /** `OcrPage`: a page got text from the OCR (or could not be read). */
   mangaOcrPage: 'manga://ocr-page',
+  /** `OcrDownload`: the OCR's runtime and models coming down. */
+  mangaOcrProgress: 'manga://ocr-progress',
 } as const;

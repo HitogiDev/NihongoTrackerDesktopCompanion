@@ -26,6 +26,8 @@ import type { MangaSource } from './bindings/MangaSource';
 import type { MangaVolume } from './bindings/MangaVolume';
 import type { MokuroBlock } from './bindings/MokuroBlock';
 import type { MokuroPage } from './bindings/MokuroPage';
+import type { OcrComponent } from './bindings/OcrComponent';
+import type { OcrDownload } from './bindings/OcrDownload';
 import type { OcrPage } from './bindings/OcrPage';
 import type { OcrStatus } from './bindings/OcrStatus';
 import type { OcrVariant } from './bindings/OcrVariant';
@@ -87,6 +89,8 @@ export type {
   MangaVolume,
   MokuroBlock,
   MokuroPage,
+  OcrComponent,
+  OcrDownload,
   OcrPage,
   OcrStatus,
   OcrVariant,

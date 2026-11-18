@@ -30,3 +30,36 @@ and split-context selection behavior were checked against Fushi's
 `native/galgame_hook/include/luna_bridge.h`, `luna_text_selector.h`, and
 `native/galgame_hook/injector/injector_main.cpp`. Fushi's complete native engine
 adapters, audio capture, and overlay are not included.
+
+## Built-in manga OCR (downloaded on demand)
+
+None of these files ship with the app. They are downloaded into the app's
+data folder (`ocr/`) only after the user agrees to it in the OCR dialog, and
+each is checked against the SHA-256 pinned in
+`src-tauri/src/manga/ocr/assets.rs`. "Delete models" removes them.
+
+- **ONNX Runtime 1.24.4** — Copyright (c) Microsoft Corporation, MIT License.
+  The unmodified native library from Microsoft's official NuGet packages
+  [`Microsoft.ML.OnnxRuntime`](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/1.24.4)
+  (Linux, macOS) and
+  [`Microsoft.ML.OnnxRuntime.DirectML`](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.DirectML/1.24.4)
+  (Windows), built from [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)
+  `v1.24.4`. On Windows also `DirectML.dll` from
+  [`Microsoft.AI.DirectML` 1.15.4](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4),
+  under the license included in that package. The app talks to ONNX Runtime
+  through the [`ort`](https://github.com/pykeio/ort) crate (MIT OR
+  Apache-2.0), which loads the library at run time instead of linking it.
+- **comic-text-and-bubble-detector** —
+  [ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector),
+  Apache License 2.0. The unmodified `detector_int8.onnx` (RT-DETR-v2).
+- **manga-ocr** — [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base)
+  (Apache License 2.0, Copyright Maciej Budyś), as converted to ONNX in
+  [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
+  (Apache License 2.0): the unmodified encoder and decoder files and the
+  original `vocab.txt`. The preprocessing, beam-search settings and text
+  post-processing reproduced in `src-tauri/src/manga/ocr/` follow
+  [kha-white/manga-ocr](https://github.com/kha-white/manga-ocr) (Apache
+  License 2.0); its half-width to full-width table follows
+  [jaconv](https://github.com/ikegami-yukino/jaconv) (MIT License).
+
+The GPL-3.0 comic-text-detector used by mokuro is not used.

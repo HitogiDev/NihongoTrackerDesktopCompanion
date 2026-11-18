@@ -51,13 +51,20 @@ pub async fn save_settings(
     if !matches!(settings.reading_overlay.font_weight, 400 | 500 | 600 | 700) {
         settings.reading_overlay.font_weight = 400;
     }
-    let previous_overlay = state.settings_snapshot().await.reading_overlay;
+    let previous = state.settings_snapshot().await;
+    let ocr_variant_changed = previous.manga_ocr_variant != settings.manga_ocr_variant;
+    let previous_overlay = previous.reading_overlay;
     let shortcuts_changed = previous_overlay.toggle_shortcut != settings.reading_overlay.toggle_shortcut
         || previous_overlay.interaction_shortcut != settings.reading_overlay.interaction_shortcut;
     let topmost_changed = previous_overlay.always_on_top != settings.reading_overlay.always_on_top;
     state.db.save_settings(&settings).map_err(err)?;
     if let Some(remote) = state.manga.remote() {
         remote.cache.set_limit(settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024));
+    }
+    if ocr_variant_changed {
+        if let Some(ocr) = state.manga.ocr() {
+            ocr.reload();
+        }
     }
     let (reconnect, language_changed, auth_changed, auto_reconnect_enabled, theme_changed) = {
         let mut current = state.settings.write().await;
@@ -1880,6 +1887,36 @@ pub async fn manga_ocr_process_volume(app: AppHandle, state: State<'_, AppState>
         ocr.process_volume(&app, &volume_id, &title, &pages);
     }
     Ok(pages.len())
+}
+
+/// Downloads the runtime and the chosen variant's models (the user has just
+/// agreed to, in the consent dialog). Progress on `manga://ocr-progress`.
+#[tauri::command]
+pub async fn manga_ocr_install(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    let variant = state.settings_snapshot().await.manga_ocr_variant;
+    if crate::manga::ocr::assets::runtime().is_none() {
+        return Err("unsupported".into());
+    }
+    if !ocr.install(&app, variant) {
+        return Err("downloading".into());
+    }
+    Ok(())
+}
+
+/// Stops the download; what came down stays for the next time.
+#[tauri::command]
+pub fn manga_ocr_cancel_install(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(ocr_of(&state)?.cancel_install())
+}
+
+/// Deletes the runtime and every model.
+#[tauri::command]
+pub async fn manga_ocr_delete(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let ocr = ocr_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || ocr.delete()).await.map_err(err)??;
+    crate::manga::ocr::emit_status(&app);
+    Ok(())
 }
 
 #[tauri::command]
