@@ -52,6 +52,10 @@ pub fn capabilities() -> Capabilities {
 
 pub fn shield_ctrl(_armed: bool, _blocking: bool) {}
 
+/// A child process with no window of its own. Nothing to do here: only
+/// Windows opens a console for a console program.
+pub fn hide_child_window(_command: &mut std::process::Command) {}
+
 /// Shows the system prompt the first time; afterwards macOS only changes its
 /// answer from System Settings, and only after the app restarts.
 pub fn request_screen_recording() -> bool {

@@ -63,3 +63,29 @@ each is checked against the SHA-256 pinned in
   [jaconv](https://github.com/ikegami-yukino/jaconv) (MIT License).
 
 The GPL-3.0 comic-text-detector used by mokuro is not used.
+
+## Manga extensions server (downloaded on demand)
+
+Neither file ships with the app. In the managed mode they are downloaded into
+the app's data folder (`suwayomi/`) only after the user agrees to it in the
+install dialog, each checked against the SHA-256 pinned in
+`src-tauri/src/manga/suwayomi/assets.rs`, and run as a separate process.
+"Remove server" in settings deletes them.
+
+- **Suwayomi-Server v2.4.2366** — Copyright the Suwayomi Project
+  contributors, [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/).
+  The unmodified release jar from
+  [Suwayomi/Suwayomi-Server releases](https://github.com/Suwayomi/Suwayomi-Server/releases/tag/v2.4.2366);
+  its source code is at
+  [github.com/Suwayomi/Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server/tree/v2.4.2366).
+  The app only talks to it over HTTP (its GraphQL API) on 127.0.0.1; no
+  code of it is copied into the app.
+- **Eclipse Temurin 21 JRE** (21.0.13+9; 21.0.12.1+1 on Windows on Arm) —
+  the Adoptium Working Group, GNU General Public License version 2 with the
+  Classpath Exception. The unmodified binaries from
+  [adoptium/temurin21-binaries](https://github.com/adoptium/temurin21-binaries/releases),
+  built from [OpenJDK](https://openjdk.org/); used only to run Suwayomi-Server.
+
+Extensions installed in that server (for example from the
+[Keiyoushi](https://keiyoushi.github.io) store) are third-party code under
+their own licenses; the app neither ships nor modifies them.

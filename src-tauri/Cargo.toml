@@ -67,6 +67,9 @@ ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dy
 # package (a deflated zip entry).
 sha2 = "0.10"
 flate2 = "1"
+# The Java runtime of the managed extensions server (`manga::suwayomi`) comes
+# as a .tar.gz on Linux and macOS.
+tar = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 # `cargo test` writes src/lib/bindings/*.ts from the types the UI receives.

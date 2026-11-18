@@ -145,6 +145,14 @@ pub fn shield_ctrl(armed: bool, blocking: bool) {
     ctrl_shield::shield(armed, blocking);
 }
 
+/// A child process with no window of its own: `java.exe` is a console
+/// program, and without `CREATE_NO_WINDOW` Windows opens a console for it.
+pub fn hide_child_window(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
 pub fn game_window_center(pid: u32) -> Option<(f64, f64)> {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic};

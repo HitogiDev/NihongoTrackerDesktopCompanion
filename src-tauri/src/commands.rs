@@ -56,6 +56,7 @@ pub async fn save_settings(
         settings.manga_owocr_port = crate::manga::ocr::owocr::DEFAULT_PORT;
     }
     let ocr_variant_changed = previous.manga_ocr_variant != settings.manga_ocr_variant;
+    let ext_mode_changed = previous.manga_ext_mode != settings.manga_ext_mode;
     let ocr_engine_changed = previous.manga_ocr_engine != settings.manga_ocr_engine || previous.manga_owocr_port != settings.manga_owocr_port;
     let previous_overlay = previous.reading_overlay;
     let shortcuts_changed = previous_overlay.toggle_shortcut != settings.reading_overlay.toggle_shortcut
@@ -68,6 +69,12 @@ pub async fn save_settings(
     if ocr_variant_changed || ocr_engine_changed {
         if let Some(ocr) = state.manga.ocr() {
             ocr.reload();
+        }
+    }
+    if ext_mode_changed {
+        // The other server: the managed one stops if it was running.
+        if let Some(suwayomi) = state.manga.suwayomi() {
+            tauri::async_runtime::spawn_blocking(move || suwayomi.stop_blocking());
         }
     }
     let (reconnect, language_changed, auth_changed, auto_reconnect_enabled, theme_changed) = {
@@ -2113,4 +2120,108 @@ pub async fn manga_prepare_series(app: AppHandle, state: State<'_, AppState>, se
         }
     });
     Ok(())
+}
+
+// ── manga from extensions (Suwayomi) ──────────────────────────────────
+
+fn ext_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::suwayomi::Service>> {
+    state.manga.suwayomi().ok_or_else(|| "not-configured".to_string())
+}
+
+fn ext_err(error: crate::manga::suwayomi::graphql::SwError) -> String {
+    error.code().to_string()
+}
+
+/// The server of the chosen mode, started if it is the managed one, and
+/// whether adult content may be shown.
+async fn ext_server(
+    state: &AppState,
+) -> CmdResult<(std::sync::Arc<crate::manga::suwayomi::Service>, crate::manga::suwayomi::graphql::Server, crate::manga::suwayomi::ExtMode, bool)> {
+    let service = ext_of(state)?;
+    let settings = state.settings_snapshot().await;
+    let server = service.connect(settings.manga_ext_mode).await.map_err(ext_err)?;
+    Ok((service, server, settings.manga_ext_mode, settings.manga_ext_show_adult))
+}
+
+#[tauri::command]
+pub async fn manga_ext_status(state: State<'_, AppState>) -> CmdResult<crate::manga::suwayomi::ExtStatus> {
+    let service = ext_of(&state)?;
+    let mode = state.settings_snapshot().await.manga_ext_mode;
+    tauri::async_runtime::spawn_blocking(move || service.status(mode)).await.map_err(err)
+}
+
+/// Downloads the managed server and its Java runtime. The UI calls it only
+/// once the user agreed in the dialog that says what, how much and where.
+#[tauri::command]
+pub fn manga_ext_install(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(ext_of(&state)?.install())
+}
+
+#[tauri::command]
+pub fn manga_ext_cancel_install(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(ext_of(&state)?.cancel_install())
+}
+
+/// Stops the managed server and deletes it, its runtime and its data.
+#[tauri::command]
+pub async fn manga_ext_uninstall(state: State<'_, AppState>) -> CmdResult<()> {
+    let service = ext_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || service.uninstall()).await.map_err(err)?.map_err(ext_err)
+}
+
+/// Starts (or connects to) the server of the chosen mode.
+#[tauri::command]
+pub async fn manga_ext_start(state: State<'_, AppState>) -> CmdResult<crate::manga::suwayomi::ExtStatus> {
+    let (service, _, mode, _) = ext_server(&state).await?;
+    Ok(service.status(mode))
+}
+
+#[tauri::command]
+pub async fn manga_ext_stop(state: State<'_, AppState>) -> CmdResult<()> {
+    let service = ext_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || service.stop_blocking()).await.map_err(err)
+}
+
+/// The URL and credentials of a custom-server form, or the saved
+/// credentials when the form sends none (it never sees them).
+fn ext_custom_server(state: &AppState, url: &str, auth: Option<crate::manga::webdav::client::Auth>) -> CmdResult<(reqwest::Url, crate::manga::webdav::client::Auth)> {
+    webdav_client_for(state, url, auth, Some(crate::manga::suwayomi::CUSTOM_SOURCE))
+}
+
+/// "Test connection" of a custom server: its version. Errors are codes.
+#[tauri::command]
+pub async fn manga_ext_test_custom(state: State<'_, AppState>, url: String, auth: Option<crate::manga::webdav::client::Auth>) -> CmdResult<String> {
+    let (url, auth) = ext_custom_server(&state, &url, auth)?;
+    crate::manga::suwayomi::graphql::Server::new(url, auth, false).version().await.map_err(ext_err)
+}
+
+/// Saves the custom server after checking that it answers.
+#[tauri::command]
+pub async fn manga_ext_save_custom(app: AppHandle, state: State<'_, AppState>, url: String, auth: Option<crate::manga::webdav::client::Auth>) -> CmdResult<String> {
+    use crate::manga::suwayomi::{CUSTOM_SOURCE, SOURCE_KIND};
+    let (url, auth) = ext_custom_server(&state, &url, auth)?;
+    let version = crate::manga::suwayomi::graphql::Server::new(url.clone(), auth.clone(), false).version().await.map_err(ext_err)?;
+    let name = url.host_str().unwrap_or("Suwayomi").to_string();
+    if state.db.manga_source_row(CUSTOM_SOURCE).map_err(err)?.is_some() {
+        state.db.update_manga_source(CUSTOM_SOURCE, &name, url.as_str()).map_err(err)?;
+    } else {
+        state.db.add_manga_source(CUSTOM_SOURCE, SOURCE_KIND, &name, url.as_str()).map_err(err)?;
+    }
+    state.db.set_manga_source_auth(CUSTOM_SOURCE, auth.to_json().as_deref()).map_err(err)?;
+    // The next request connects again, with these.
+    let service = ext_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || service.stop_blocking()).await.map_err(err)?;
+    crate::manga::suwayomi::emit_status(&app);
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(version)
+}
+
+/// Adds the Keiyoushi store to the server (the managed one gets it on its
+/// first start; a custom one only when the user asks).
+#[tauri::command]
+pub async fn manga_ext_add_store(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let (service, server, _, _) = ext_server(&state).await?;
+    let result = service.add_store(&server).await.map_err(ext_err);
+    crate::manga::suwayomi::emit_status(&app);
+    result
 }
