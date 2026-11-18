@@ -292,7 +292,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3, M4, M5 y M6.
+`docs/plan-lector-manga.md`; están hechas todas las fases, de M0 a M7.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -318,7 +318,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   y al abrir la pantalla como mucho uno por minuto; emite
   `manga://library-changed`. Las miniaturas viven en
   `app_cache_dir/manga/thumbs/<volumen>/` y se borran cuando cambia la firma
-  del tomo.
+  del tomo. Una portada propia (`cover.*` o la remota) va en
+  `cover-<serie>-<versión>/`: cachear una versión nueva borra las viejas
+  (`thumbs::drop_other_covers`) y el reescaneo, la sincronización WebDAV y
+  quitar una fuente barren las de series que ya no están
+  (`sweep_library_covers`).
 - `.mokuro` (`mokuro.rs`) se lee con serde tolerante: campos de más se ignoran,
   de menos toman su valor por defecto. Las páginas se casan por final de ruta,
   luego por nombre sin extensión y, si no casa nada pero el número coincide,
@@ -339,7 +343,43 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `fitSpread`, en píxeles exactos, para que la capa de texto case con la imagen.
 - La lógica pura del lector está en `reader/layout.ts` y `reader/textLayer.ts`
   con sus tests: navegación por teclado según la dirección (en RTL la flecha
-  izquierda avanza), zonas de clic, precarga de ±2 dobles páginas.
+  izquierda avanza), zonas de clic, precarga de ±2 dobles páginas. Las páginas
+  de una doble página van en el DOM en orden de lectura y una RTL se pinta con
+  `flex-row-reverse`: así Tab y los lectores de pantalla llegan antes a la
+  primera.
+- **Atajos**: `?` abre la hoja (`ShortcutsSheet.tsx`) en el lector y en la
+  pantalla Manga (donde `/` lleva a la búsqueda). Lo que lista sale de
+  `screens/manga/shortcuts.ts`, que tiene que decir lo mismo que los
+  manejadores (`keyAction`, el `onKey` de `MangaReader.tsx`, `Sidebar`): si
+  cambias una tecla, cámbiala en los dos sitios.
+- **Teclado y foco**: cada bloque de la capa de texto es un `role="group"`
+  enfocable ("texto n de N, página p", `data-block-page` + `data-block`; `[data-page]`
+  es solo la página). Tab y las flechas (`blockStep`, `orderBlocks`: por página
+  y luego por el orden de mokuro) recorren los bloques en pantalla; pasado el
+  último, la flecha pasa la página. Enfocado, Intro busca en el diccionario
+  (`openDictionaryForElement`), Ctrl+C y Ctrl+M actúan sobre él y Esc vuelve a
+  la página. Un Tab que entra en una barra oculta la saca (solo con
+  `:focus-visible`, no con un clic).
+- **Rendimiento**: la tira vertical solo monta las páginas a una pantalla por
+  encima y dos por debajo (`reader/stripWindow.ts`, como `lineWindow.ts` del
+  texthooker), cada una en su offset dentro de un contenedor tan alto como el
+  tomo. WebKit no tiene scroll anchoring (y el de Chromium se apaga con
+  `overflow-anchor: none` para que los dos se porten igual): la tira recuerda
+  qué página está arriba y a qué distancia, y la devuelve ahí cuando cambia la
+  altura de las de encima. Pasar página mantiene la doble página anterior hasta
+  que la nueva está decodificada (`decode()`, 250 ms como mucho) y
+  `PageImage` solo enseña imágenes decodificadas. La tira de miniaturas usa
+  `manga://thumb` y `content-visibility`; la rejilla de la biblioteca monta las
+  series de 120 en 120 (`GRID_BATCH`).
+- **Transiciones**: de una portada de la rejilla a su ficha y de vuelta, con
+  View Transitions donde existen (`lib/viewTransition.ts` mira
+  `document.startViewTransition`; nunca con `prefers-reduced-motion`) y un
+  único `view-transition-name` (`manga-cover`) que `coverTransition.ts` pone a
+  mano en la tarjeta justo antes. La espera por la portada nueva va con
+  temporizadores: durante la transición no hay `requestAnimationFrame`. Sin
+  la API, la ficha entra con `.manga-fade-in`; la ventana del lector funde su
+  primera página (`.manga-reader-in`) y otro tomo abierto en ella cruza con
+  una transición si la hay.
 - **Capa de texto**: cajas escaladas desde `img_width`, `vertical-rl` si el
   bloque es vertical, fuente ajustada a la caja (`blockFontSize`). Estilos en
   `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
@@ -617,8 +657,15 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`#[ignore]`; `NTDC_SWY_DIR`, `NTDC_SWY_JAR`, `NTDC_SWY_JRE`,
   `NTDC_SWY_EXT`, `NTDC_SWY_QUERY`). Nunca guardes el jar, el JRE ni sus
   datos en el repo.
-- Sin hacer todavía: el `share_activity` (amigos inmersos) aún no incluye
-  el manga.
+- **Amigos inmersos** (`share_activity`, `sync::immersion_presence`, pura y
+  con tests): el manga va tras la VN y antes del vídeo, con la misma política
+  que Discord (`discord::manga_privacy`): lista negra = nada, adulta o sin
+  vincular = solo "Inmersión en japonés". La lista negra se aplica aunque
+  Discord esté apagado.
+- Un servidor que rechaza las credenciales (`last_error = 'unauthorized'`)
+  cuenta como uno caído en la ficha (`unreachableReason`): "Leer" solo ofrece
+  lo descargado y el aviso dice por qué. Los contadores pasan por
+  `formatCount` o `{{count, number}}`, con el separador de miles del idioma.
 
 ### Copia de seguridad
 
