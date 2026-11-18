@@ -13,6 +13,7 @@ pub mod reader;
 pub mod session;
 pub mod store;
 pub mod thumbs;
+pub mod webdav;
 
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;

@@ -34,7 +34,7 @@ const MAX_DEPTH: usize = 8;
 const AUTO_RESCAN_EVERY: Duration = Duration::from_secs(60);
 
 /// Folders that are never volumes nor series.
-fn skipped_dir(name: &str) -> bool {
+pub(crate) fn skipped_dir(name: &str) -> bool {
     name.starts_with('.')
         || name.eq_ignore_ascii_case("__MACOSX")
         || name.eq_ignore_ascii_case("_ocr")
@@ -42,16 +42,16 @@ fn skipped_dir(name: &str) -> bool {
         || name.eq_ignore_ascii_case("System Volume Information")
 }
 
-fn is_archive_name(name: &str) -> bool {
+pub(crate) fn is_archive_name(name: &str) -> bool {
     name.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("cbz") || ext.eq_ignore_ascii_case("zip"))
 }
 
-fn stem(name: &str) -> &str {
+pub(crate) fn stem(name: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(stem, _)| stem)
 }
 
 /// `cover.jpg`, `folder.png`, `poster.webp`: what media managers call a cover.
-fn is_cover_name(name: &str) -> bool {
+pub(crate) fn is_cover_name(name: &str) -> bool {
     is_image_name(name) && ["cover", "folder", "poster"].iter().any(|known| stem(name).eq_ignore_ascii_case(known))
 }
 
