@@ -2225,3 +2225,44 @@ pub async fn manga_ext_add_store(app: AppHandle, state: State<'_, AppState>) -> 
     crate::manga::suwayomi::emit_status(&app);
     result
 }
+
+/// The store: every extension the user may see (adult ones only with the
+/// setting). `refresh` asks the stores again.
+#[tauri::command]
+pub async fn manga_ext_extensions(state: State<'_, AppState>) -> CmdResult<Vec<crate::manga::suwayomi::catalog::ExtExtension>> {
+    let (service, server, mode, show_adult) = ext_server(&state).await?;
+    let list = server.fetch_extensions().await.map_err(ext_err)?;
+    let mut icon = |path: &str| service.image_token(mode.source_id(), path);
+    Ok(crate::manga::suwayomi::catalog::extensions(list, show_adult, &mut icon))
+}
+
+/// Installs, updates or uninstalls an extension.
+#[tauri::command]
+pub async fn manga_ext_update_extension(
+    state: State<'_, AppState>,
+    pkg_name: String,
+    action: crate::manga::suwayomi::graphql::ExtensionAction,
+) -> CmdResult<Option<crate::manga::suwayomi::catalog::ExtExtension>> {
+    use crate::manga::suwayomi::graphql::ExtensionAction;
+    let (service, server, mode, show_adult) = ext_server(&state).await?;
+    if action != ExtensionAction::Uninstall {
+        // Not by name from the page: an adult extension only with the setting.
+        let known = server.fetch_extensions().await.map_err(ext_err)?;
+        let extension = known.iter().find(|extension| extension.pkg_name == pkg_name).ok_or("not-found")?;
+        if !crate::manga::suwayomi::catalog::visible(extension.content_warning, show_adult) {
+            return Err("adult-hidden".into());
+        }
+    }
+    let updated = server.update_extension(&pkg_name, action).await.map_err(ext_err)?;
+    let mut icon = |path: &str| service.image_token(mode.source_id(), path);
+    Ok(updated.and_then(|extension| crate::manga::suwayomi::catalog::extensions(vec![extension], true, &mut icon).into_iter().next()))
+}
+
+/// The sources of the installed extensions the user may see.
+#[tauri::command]
+pub async fn manga_ext_sources(state: State<'_, AppState>) -> CmdResult<Vec<crate::manga::suwayomi::catalog::ExtSource>> {
+    let (service, server, mode, show_adult) = ext_server(&state).await?;
+    let list = server.sources().await.map_err(ext_err)?;
+    let mut icon = |path: &str| service.image_token(mode.source_id(), path);
+    Ok(crate::manga::suwayomi::catalog::sources(list, show_adult, &mut icon))
+}

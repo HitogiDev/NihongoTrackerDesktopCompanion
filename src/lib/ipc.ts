@@ -25,6 +25,9 @@ import type {
   OcrStatus,
   OwocrProbe,
   ReaderPrefs,
+  ExtAction,
+  ExtExtension,
+  ExtSource,
   ExtStatus,
   ReaderTarget,
   ReaderVolume,
@@ -335,6 +338,10 @@ export const ipc = {
   mangaExtTestCustom: (url: string, auth: WebdavAuth | null) => invoke<string>('manga_ext_test_custom', { url, auth }),
   mangaExtSaveCustom: (url: string, auth: WebdavAuth | null) => invoke<string>('manga_ext_save_custom', { url, auth }),
   mangaExtAddStore: () => invoke<void>('manga_ext_add_store'),
+  mangaExtExtensions: () => invoke<ExtExtension[]>('manga_ext_extensions'),
+  mangaExtUpdateExtension: (pkgName: string, action: ExtAction) =>
+    invoke<ExtExtension | null>('manga_ext_update_extension', { pkgName, action }),
+  mangaExtSources: () => invoke<ExtSource[]>('manga_ext_sources'),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),

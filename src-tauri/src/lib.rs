@@ -432,6 +432,9 @@ pub fn run() {
             commands::manga_ext_test_custom,
             commands::manga_ext_save_custom,
             commands::manga_ext_add_store,
+            commands::manga_ext_extensions,
+            commands::manga_ext_update_extension,
+            commands::manga_ext_sources,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")

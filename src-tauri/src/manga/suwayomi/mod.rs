@@ -19,6 +19,7 @@
 //! installation changes.
 
 pub mod assets;
+pub mod catalog;
 pub mod graphql;
 pub mod install;
 pub mod process;

@@ -15,8 +15,10 @@ import type { DiscordReason } from './bindings/DiscordReason';
 import type { ExtAction } from './bindings/ExtAction';
 import type { ExtBrowseKind } from './bindings/ExtBrowseKind';
 import type { ExtComponent } from './bindings/ExtComponent';
+import type { ExtExtension } from './bindings/ExtExtension';
 import type { ExtInstall } from './bindings/ExtInstall';
 import type { ExtMode } from './bindings/ExtMode';
+import type { ExtSource } from './bindings/ExtSource';
 import type { ExtStatus } from './bindings/ExtStatus';
 import type { FilterPreview } from './bindings/FilterPreview';
 import type { HookerState } from './bindings/HookerState';
@@ -79,8 +81,10 @@ export type {
   ExtAction,
   ExtBrowseKind,
   ExtComponent,
+  ExtExtension,
   ExtInstall,
   ExtMode,
+  ExtSource,
   ExtStatus,
   BlacklistEntry,
   Capabilities,
