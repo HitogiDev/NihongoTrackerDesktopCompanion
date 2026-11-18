@@ -5,10 +5,28 @@
  */
 export type MangaSource = { id: string, 
 /**
- * `local` today; `webdav` and `suwayomi` later.
+ * `local` or `webdav` (`suwayomi` later).
  */
 kind: string, name: string, 
 /**
- * A folder for `local`, a URL for the others.
+ * A folder for `local`, a URL (never with credentials) for the others.
  */
-url: string, created_at: string, series_count: number, };
+url: string, created_at: string, series_count: number, 
+/**
+ * `none`, `basic` or `bearer`: what kind of credentials it has, never
+ * the credentials.
+ */
+auth: string, 
+/**
+ * The last time its server was listed in full.
+ */
+last_sync_at: string | null, 
+/**
+ * Why the last request to its server failed (`offline`, `unauthorized`…),
+ * until one succeeds.
+ */
+last_error: string | null, 
+/**
+ * A sync is running now (filled in by the command, not stored).
+ */
+syncing: boolean, };

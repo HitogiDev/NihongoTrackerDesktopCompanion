@@ -123,12 +123,24 @@ pub fn match_pages(volume: &MokuroVolume, page_names: &[String]) -> Vec<Option<M
 /// The text of each page of a volume, for the reader: its `.mokuro` when it
 /// has one, matched to its pages, and the stored OCR text for the pages that
 /// file does not cover. `None` for a page with no text at all.
-pub fn volume_text(db: &crate::db::Db, volume_id: &str) -> Result<Vec<Option<MokuroPage>>, String> {
+pub fn volume_text(
+    db: &crate::db::Db,
+    remote: Option<&super::webdav::remote::Remote>,
+    volume_id: &str,
+) -> Result<Vec<Option<MokuroPage>>, String> {
     let Some(location) = db.manga_volume_location(volume_id).map_err(|e| e.to_string())? else {
         return Err("Unknown volume".into());
     };
-    let mut pages = match location.mokuro_path.as_deref() {
-        Some(path) => match load(Path::new(path)) {
+    // A remote volume's text is fetched (once) into the cache, from its main
+    // `.mokuro` or the layer the user chose.
+    let file = if super::store::is_remote_format(&location.format) {
+        let layer = db.manga_text_layer(volume_id).filter(|layer| location.layers.iter().any(|(name, _)| name == layer));
+        remote.and_then(|remote| remote.text_path(&location, layer.as_deref()).or_else(|| remote.text_path(&location, None)))
+    } else {
+        location.mokuro_path.as_deref().map(std::path::PathBuf::from)
+    };
+    let mut pages = match file.as_deref() {
+        Some(path) => match load(path) {
             Ok(volume) => match_pages(&volume, &location.pages),
             Err(error) => {
                 log::warn!("unreadable .mokuro for {volume_id}: {error}");
@@ -252,11 +264,11 @@ mod tests {
         // The OCR cache never replaces mokuro's text.
         db.set_manga_page_text("v1", 1, &serde_json::to_string(&ocr).unwrap(), "builtin").unwrap();
 
-        let text = volume_text(&db, "v1").unwrap();
+        let text = volume_text(&db, None, "v1").unwrap();
         assert!(text[0].as_ref().unwrap().blocks.is_empty());
         assert_eq!(page_text(text[1].as_ref().unwrap()), ["こんにちは世界"]);
         assert_eq!(page_text(text[2].as_ref().unwrap()), ["三"]);
-        assert!(volume_text(&db, "nope").is_err());
+        assert!(volume_text(&db, None, "nope").is_err());
         drop(db);
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(mokuro);

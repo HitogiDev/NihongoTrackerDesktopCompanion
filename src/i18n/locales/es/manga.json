@@ -15,7 +15,7 @@
   "actions": {
     "addFolder": "Añadir carpeta",
     "folders": "Carpetas",
-    "rescan": "Volver a escanear",
+    "rescan": "Volver a escanear la biblioteca",
     "readVolume": "Leer {{volume}}",
     "continueAt": "Seguir con {{volume}} · p. {{page}}"
   },
@@ -69,7 +69,7 @@
   },
   "empty": {
     "title": "Tu estantería de manga está vacía",
-    "body": "Añade manga de tu ordenador para leerlo con consultas al pasar el ratón. Tu progreso se queda en este ordenador.",
+    "body": "Añade manga desde tu ordenador o un servidor WebDAV para leerlo con consultas al pasar el ratón. Tu progreso se queda en este equipo.",
     "local": {
       "title": "Una carpeta de este ordenador",
       "body": "Carpetas de imágenes, tomos en CBZ o ZIP y los archivos .mokuro que les dan texto."
@@ -102,5 +102,105 @@
     "linked": "{{title}} vinculada con NihongoTracker",
     "linkFailed": "No se pudo vincular: {{message}}",
     "openFailed": "No se pudo abrir el lector: {{message}}"
+  },
+  "webdav": {
+    "actions": {
+      "servers": "Servidores",
+      "add": "Conectar un servidor",
+      "sync": "Buscar cambios en {{name}}",
+      "syncAll": "Volver a listar todo {{name}}",
+      "edit": "Editar {{name}}",
+      "remove": "Quitar {{name}} de la biblioteca"
+    },
+    "servers": {
+      "title": "Servidores WebDAV",
+      "body": "Las series de estos servidores aparecen en tu biblioteca y se leen bajo demanda: no se descarga nada hasta que abres un tomo.",
+      "none": "Todavía no hay servidores.",
+      "removeHint": "Quitar un servidor solo lo olvida aquí, junto con sus descargas: en el servidor no cambia nada."
+    },
+    "status": {
+      "syncing": "Listando…",
+      "syncingCount": "Listando series: {{done}} de {{total}}",
+      "offline": "Sin conexión: se muestra lo último que se vio",
+      "unauthorized": "El servidor rechazó las credenciales",
+      "failed": "La última sincronización falló",
+      "synced": "Sincronizado {{when}}",
+      "never": "Aún sin sincronizar"
+    },
+    "form": {
+      "title": "Conectar un servidor WebDAV",
+      "editTitle": "Editar servidor",
+      "body": "Sirve cualquier servidor WebDAV con tus tomos, también un servidor mokuro-bunko. Si tiene carpeta mokuro-reader, las series se listan desde ella.",
+      "url": "Dirección del servidor",
+      "urlHint": "La carpeta con tus series, o la raíz del servidor. http:// o https://.",
+      "name": "Nombre",
+      "optional": "Opcional",
+      "namePlaceholder": "Mi servidor de manga",
+      "auth": "Acceso",
+      "authKind": {
+        "none": "Anónimo",
+        "basic": "Usuario y contraseña",
+        "bearer": "Token"
+      },
+      "username": "Usuario",
+      "password": "Contraseña",
+      "token": "Token de acceso",
+      "unchanged": "Sin cambios",
+      "keepHint": "Déjalos vacíos para conservar las credenciales ya guardadas.",
+      "test": "Probar conexión",
+      "add": "Añadir servidor",
+      "save": "Guardar",
+      "found_one": "Conectado: {{count}} serie",
+      "found_other": "Conectado: {{count}} series",
+      "foundBunko": "En {{path}}, como lo sirve mokuro-bunko.",
+      "foundAt": "En {{path}}.",
+      "privacy": "Las credenciales se quedan en este equipo: solo se envían a este servidor y no se vuelven a mostrar."
+    },
+    "empty": {
+      "title": "Todavía no hay servidores",
+      "body": "Conecta un servidor WebDAV para leer sus tomos y su texto .mokuro sin descargarlos antes.",
+      "noSeries": "Aún no hay series en tus servidores",
+      "noSeriesBody": "Cada carpeta del servidor es una serie. Aparecen aquí en cuanto se termina de listar."
+    },
+    "errors": {
+      "offline": "No se pudo contactar con el servidor. Revisa la dirección y tu conexión.",
+      "unauthorized": "El servidor rechazó el usuario, la contraseña o el token.",
+      "not-found": "Esa carpeta no existe en el servidor.",
+      "not-webdav": "Esa dirección no responde como un servidor WebDAV.",
+      "needs-download": "Este servidor no envía partes de archivos: hay que descargar el tomo para leerlo.",
+      "too-large": "El servidor envió más de lo esperado.",
+      "changed": "El archivo cambió en el servidor. Sincroniza y vuelve a intentarlo.",
+      "cancelled": "Descarga cancelada.",
+      "invalid-url": "Escribe una dirección completa con http:// o https://.",
+      "error": "El servidor respondió con un error."
+    },
+    "toast": {
+      "added": "Servidor añadido: listando sus series",
+      "updated": "Servidor actualizado",
+      "syncFailed": "No se pudo sincronizar: {{message}}",
+      "downloaded": "{{title}} ya se puede leer sin conexión",
+      "downloadFailed": "No se pudo descargar: {{message}}",
+      "downloadingToRead": "Este servidor no envía partes de archivos: descargando el tomo para leerlo…"
+    },
+    "download": {
+      "action": "Descargar {{title}} para leer sin conexión",
+      "downloading": "Descargando",
+      "preparing": "Preparándolo",
+      "progress": "Descargando {{title}}",
+      "cancel": "Cancelar la descarga",
+      "downloaded": "Descargado",
+      "downloadedHint": "Descargado: se puede leer sin el servidor",
+      "remove": "Quitar la descarga de {{title}}",
+      "offline": "El servidor no responde y este tomo no está descargado"
+    },
+    "detail": {
+      "pagesOnOpen": "Las páginas se leen al abrirlo",
+      "layer": "Texto de {{title}}",
+      "layerHint": "Textos alternativos del servidor (capas .mokuro)",
+      "layerMain": "Texto principal",
+      "offlineTitle": "{{name}} no responde",
+      "offlineBody": "Los tomos descargados se pueden seguir leyendo. El resto vuelve cuando vuelva el servidor.",
+      "retry": "Reintentar"
+    }
   }
 }

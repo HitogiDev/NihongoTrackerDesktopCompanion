@@ -27,8 +27,8 @@ function Way({ icon: Icon, title, body, action, soon = false }: {
   );
 }
 
-/** No library yet: the three ways manga will get here, one of them ready. */
-export function EmptyLibrary({ onAdd, adding }: { onAdd: () => void; adding: boolean }) {
+/** No library yet: the three ways manga gets here, two of them ready. */
+export function EmptyLibrary({ onAdd, adding, onAddServer }: { onAdd: () => void; adding: boolean; onAddServer: () => void }) {
   const { t } = useTranslation('manga');
   return (
     <section className="mx-auto max-w-4xl py-8 text-center">
@@ -49,7 +49,17 @@ export function EmptyLibrary({ onAdd, adding }: { onAdd: () => void; adding: boo
             </Button>
           }
         />
-        <Way icon={Server} title={t('empty.webdav.title')} body={t('empty.webdav.body')} soon />
+        <Way
+          icon={Server}
+          title={t('empty.webdav.title')}
+          body={t('empty.webdav.body')}
+          action={
+            <Button appearance="outline" size="sm" onClick={onAddServer}>
+              <Server className="h-4 w-4" />
+              {t('webdav.actions.add')}
+            </Button>
+          }
+        />
         <Way icon={Puzzle} title={t('empty.extensions.title')} body={t('empty.extensions.body')} soon />
       </ul>
       <p className="mx-auto mt-6 max-w-xl text-xs text-base-content/50">{t('empty.tip')}</p>

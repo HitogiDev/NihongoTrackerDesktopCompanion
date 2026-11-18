@@ -21,6 +21,9 @@ fn d_manga_dwell() -> u64 {
 fn d_manga_idle_log() -> u64 {
     10
 }
+fn d_manga_webdav_cache() -> u64 {
+    crate::manga::webdav::cache::DEFAULT_LIMIT_MB
+}
 /// What mpv's own sample `mpv.conf` suggests, and what most people already have.
 /// On Windows `playback::normalize_ipc_path` maps it to the real named pipe.
 fn d_mpv_ipc() -> String {
@@ -159,6 +162,13 @@ pub struct Settings {
     /// keeps it open until the reader closes.
     #[serde(default = "d_manga_idle_log")]
     pub manga_idle_log_minutes: u64,
+    /// Megabytes the WebDAV cache may hold (offline downloads not included).
+    #[serde(default = "d_manga_webdav_cache")]
+    pub manga_webdav_cache_mb: u64,
+    /// Share reading progress with Mokuro Reader through the server's
+    /// `mokuro-reader/volume-data.json` (writes to the server: opt-in).
+    #[serde(default)]
+    pub manga_webdav_sync_progress: bool,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -321,6 +331,8 @@ impl Default for Settings {
             manga_page_dwell_secs: d_manga_dwell(),
             manga_confirm_before_log: true,
             manga_idle_log_minutes: d_manga_idle_log(),
+            manga_webdav_cache_mb: d_manga_webdav_cache(),
+            manga_webdav_sync_progress: false,
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),

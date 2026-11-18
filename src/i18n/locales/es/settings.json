@@ -236,6 +236,16 @@
     "confirmHint": "Al cerrar el lector, el log va a Pendientes. Las series sin vincular a NihongoTracker van siempre allí, para vincularlas antes.",
     "idleLog": "Terminar la sesión tras (minutos sin leer)",
     "idleLogHint": "La sesión se registra y al volver empieza otra. Con 0 sigue abierta hasta cerrar el lector.",
-    "clock": "El tiempo solo cuenta con la ventana del lector en primer plano y se pausa tras la inactividad configurada en Novelas visuales."
+    "clock": "El tiempo solo cuenta con la ventana del lector en primer plano y se pausa tras la inactividad configurada en Novelas visuales.",
+    "cache": "Caché de WebDAV",
+    "cacheHint": "Lo que se lee de los servidores se guarda aquí para que las páginas vuelvan a abrirse sin pedirlas. Si se llena, sale lo más antiguo. Los tomos descargados para leer sin conexión no cuentan.",
+    "cacheLimit": "Límite de la caché",
+    "cacheUsed": "{{used}} en uso",
+    "cacheClear": "Vaciar caché",
+    "cacheCleared": "Caché de WebDAV vaciada",
+    "offlineUsage_one": "{{count}} tomo descargado para leer sin conexión ({{size}}), aparte.",
+    "offlineUsage_other": "{{count}} tomos descargados para leer sin conexión ({{size}}), aparte.",
+    "shareProgress": "Compartir el progreso con Mokuro Reader",
+    "shareProgressHint": "En servidores organizados como mokuro-bunko, lee y escribe la página en la que vas en mokuro-reader/volume-data.json, el archivo que sincroniza Mokuro Reader. Solo cambia la página y si el tomo está terminado; el servidor tiene que aceptar escrituras."
   }
 }

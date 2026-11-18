@@ -13,10 +13,12 @@ pub mod reader;
 pub mod session;
 pub mod store;
 pub mod thumbs;
+pub mod webdav;
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 /// What the manga reader keeps in memory, in `AppState`.
@@ -32,6 +34,20 @@ pub struct Runtime {
     pub tracking: Mutex<session::Tracking>,
     /// The reader window has the focus (from its window events).
     pub reader_focused: AtomicBool,
+    /// WebDAV sources being synced now, and when each last was.
+    pub webdav_syncing: Mutex<HashSet<String>>,
+    pub webdav_last_sync: Mutex<HashMap<String, Instant>>,
+    /// Where remote pages, texts and downloads come from. Set once at start.
+    pub remote: OnceLock<Arc<webdav::remote::Remote>>,
+    /// The latest progress save of each remote volume, so only the last of a
+    /// burst is written to the server (see `webdav::progress`).
+    pub progress_push: Mutex<HashMap<String, u64>>,
+}
+
+impl Runtime {
+    pub fn remote(&self) -> Option<Arc<webdav::remote::Remote>> {
+        self.remote.get().cloned()
+    }
 }
 
 /// Extensions the webview can show as a page.

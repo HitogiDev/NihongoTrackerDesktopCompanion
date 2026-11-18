@@ -156,7 +156,12 @@ pub struct ReaderVolume {
 pub fn volume(db: &Db, volume_id: &str) -> crate::db::Result<Option<ReaderVolume>> {
     let Some(volume) = db.manga_volume(volume_id)? else { return Ok(None) };
     let Some(series) = db.manga_series(&volume.series_id)? else { return Ok(None) };
-    let siblings: Vec<MangaVolume> = db.manga_volumes(&series.id)?.into_iter().filter(|v| v.page_count > 0).collect();
+    let siblings: Vec<MangaVolume> = db
+        .manga_volumes(&series.id)?
+        .into_iter()
+        // A remote archive has no page list until it is first opened.
+        .filter(|v| v.page_count > 0 || super::store::is_remote_format(&v.format))
+        .collect();
     let index = siblings.iter().position(|v| v.id == volume.id);
     let previous = index.and_then(|i| i.checked_sub(1)).and_then(|i| siblings.get(i).cloned());
     let next = index.and_then(|i| siblings.get(i + 1).cloned());
@@ -167,8 +172,19 @@ pub fn volume(db: &Db, volume_id: &str) -> crate::db::Result<Option<ReaderVolume
 /// needed. An open window is told by event; a new one asks once it loads.
 pub async fn open(app: &AppHandle, volume_id: &str, page: Option<i64>) -> Result<(), String> {
     let state = app.state::<AppState>();
-    if state.db.manga_volume(volume_id).map_err(|e| e.to_string())?.is_none() {
+    let Some(location) = state.db.manga_volume_location(volume_id).map_err(|e| e.to_string())? else {
         return Err("Unknown volume".into());
+    };
+    // A remote archive opened for the first time: its central directory
+    // first (a few requests). A server without ranges answers
+    // `needs-download`, and the UI downloads it with progress.
+    if super::store::is_remote_format(&location.format) && location.pages.is_empty() {
+        let remote = state.manga.remote().ok_or("error")?;
+        tauri::async_runtime::spawn_blocking(move || remote.ensure_index(&location))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.code().to_string())?;
+        let _ = app.emit(super::library::LIBRARY_CHANGED, ());
     }
     let target = ReaderTarget { volume_id: volume_id.to_string(), page };
     *state.manga.reader.lock().unwrap() = Some(target.clone());

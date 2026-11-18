@@ -22,6 +22,7 @@ import { useAutoHide } from './useAutoHide';
 import { useMangaSession } from '../useMangaSession';
 import { SessionIndicator } from './SessionIndicator';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
+import { openVolume } from '../useMangaLibrary';
 
 /** Progress is saved this long after the last page turn, and when closing. */
 const SAVE_DELAY_MS = 600;
@@ -305,7 +306,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     setPage(spreads[Math.max(0, index)]?.[0] ?? 0);
   }, [spreads]);
   const openNext = useCallback(() => {
-    if (nextVolume) void ipc.mangaOpenReader(nextVolume.id, 0);
+    if (nextVolume) void openVolume(nextVolume.id, 0);
   }, [nextVolume]);
   const goNext = useCallback(() => {
     if (atEnd) openNext();

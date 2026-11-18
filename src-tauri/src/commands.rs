@@ -56,6 +56,9 @@ pub async fn save_settings(
         || previous_overlay.interaction_shortcut != settings.reading_overlay.interaction_shortcut;
     let topmost_changed = previous_overlay.always_on_top != settings.reading_overlay.always_on_top;
     state.db.save_settings(&settings).map_err(err)?;
+    if let Some(remote) = state.manga.remote() {
+        remote.cache.set_limit(settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024));
+    }
     let (reconnect, language_changed, auth_changed, auto_reconnect_enabled, theme_changed) = {
         let mut current = state.settings.write().await;
         let reconnect = current.texthooker_ws_url != settings.texthooker_ws_url
@@ -1547,6 +1550,9 @@ pub async fn manga_add_local_root(app: AppHandle, path: String) -> CmdResult<cra
 pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
     let state = app.state::<AppState>();
     let volumes = state.db.delete_manga_source(&id).map_err(err)?;
+    if let Some(remote) = state.manga.remote() {
+        remote.remove_offline(&volumes);
+    }
     if let Ok(cache_dir) = app.path().app_cache_dir() {
         crate::manga::thumbs::purge(&cache_dir, &volumes);
     }
@@ -1558,14 +1564,111 @@ pub async fn manga_remove_source(app: AppHandle, id: String) -> CmdResult<()> {
 /// passes `false` and is skipped if a scan ran a moment ago.
 #[tauri::command]
 pub async fn manga_rescan(app: AppHandle, force: Option<bool>) -> CmdResult<crate::manga::library::ScanSummary> {
-    crate::manga::library::rescan(&app, force.unwrap_or(false)).await
+    let force = force.unwrap_or(false);
+    // Servers sync in the background: a slow one does not hold the folders up.
+    crate::manga::webdav::sync::sync_all_later(&app, false, !force);
+    crate::manga::library::rescan(&app, force).await
+}
+
+/// Marks the sources being synced right now.
+fn with_sync_state(state: &AppState, mut sources: Vec<crate::manga::store::MangaSource>) -> Vec<crate::manga::store::MangaSource> {
+    let syncing = state.manga.webdav_syncing.lock().unwrap();
+    for source in &mut sources {
+        source.syncing = syncing.contains(&source.id);
+    }
+    sources
+}
+
+/// The credentials a WebDAV form sends: new ones, or `None` to keep what the
+/// source has (the form never sees them, so it cannot send them back).
+fn webdav_client_for(
+    state: &AppState,
+    url: &str,
+    auth: Option<crate::manga::webdav::client::Auth>,
+    source_id: Option<&str>,
+) -> Result<(reqwest::Url, crate::manga::webdav::client::Auth), String> {
+    use crate::manga::webdav::client::{parse_base_url, Auth};
+    let (url, from_url) = parse_base_url(url).map_err(|e| e.code().to_string())?;
+    let auth = match auth {
+        Some(auth) => auth,
+        None => from_url
+            .or_else(|| {
+                let id = source_id?;
+                let row = state.db.manga_source_row(id).ok()??;
+                Some(Auth::from_json(row.auth_json.as_deref()))
+            })
+            .unwrap_or_default(),
+    };
+    Ok((url, auth))
+}
+
+/// "Test connection": lists the server and counts the series it would add.
+/// Errors are codes (`offline`, `unauthorized`, `not-webdav`, `invalid-url`…).
+#[tauri::command]
+pub async fn manga_webdav_test(
+    state: State<'_, AppState>,
+    url: String,
+    auth: Option<crate::manga::webdav::client::Auth>,
+    source_id: Option<String>,
+) -> CmdResult<crate::manga::webdav::sync::WebdavProbe> {
+    let (url, auth) = webdav_client_for(&state, &url, auth, source_id.as_deref())?;
+    let client = crate::manga::webdav::client::Client::new(url, auth);
+    crate::manga::webdav::sync::probe(&client).await.map_err(|e| e.code().to_string())
+}
+
+/// Adds a WebDAV source, or edits one (`source_id`), after checking that the
+/// server answers; then syncs it in the background. Returns its id.
+#[tauri::command]
+pub async fn manga_webdav_save(
+    app: AppHandle,
+    source_id: Option<String>,
+    name: String,
+    url: String,
+    auth: Option<crate::manga::webdav::client::Auth>,
+) -> CmdResult<String> {
+    use crate::manga::store::SOURCE_WEBDAV;
+    let state = app.state::<AppState>();
+    let (url, auth) = webdav_client_for(&state, &url, auth, source_id.as_deref())?;
+    let client = crate::manga::webdav::client::Client::new(url.clone(), auth.clone());
+    crate::manga::webdav::sync::probe(&client).await.map_err(|e| e.code().to_string())?;
+    let name = Some(name.trim().to_string()).filter(|name| !name.is_empty()).unwrap_or_else(|| url.host_str().unwrap_or("WebDAV").to_string());
+    let id = match source_id {
+        Some(id) => {
+            let row = state.db.manga_source_row(&id).map_err(err)?.filter(|row| row.kind == SOURCE_WEBDAV).ok_or("not-found")?;
+            if !state.db.update_manga_source(&row.id, &name, url.as_str()).map_err(err)? {
+                return Err("not-found".into());
+            }
+            row.id
+        }
+        None => {
+            let id = uuid::Uuid::new_v4().to_string();
+            state.db.add_manga_source(&id, SOURCE_WEBDAV, &name, url.as_str()).map_err(err)?;
+            id
+        }
+    };
+    state.db.set_manga_source_auth(&id, auth.to_json().as_deref()).map_err(err)?;
+    let _ = state.db.set_manga_source_status(&id, None, false);
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    let background = app.clone();
+    let sync_id = id.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = crate::manga::webdav::sync::sync_source(&background, &sync_id, true, false).await;
+    });
+    Ok(id)
+}
+
+/// Lists a WebDAV source again. `force` lists every series, not only the
+/// folders that changed. Errors are codes, like `manga_webdav_test`.
+#[tauri::command]
+pub async fn manga_webdav_sync(app: AppHandle, source_id: String, force: Option<bool>) -> CmdResult<()> {
+    crate::manga::webdav::sync::sync_source(&app, &source_id, force.unwrap_or(false), false).await
 }
 
 /// The Manga screen: roots, series and the "continue reading" shelf.
 #[tauri::command]
 pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::store::MangaLibrary> {
     Ok(crate::manga::store::MangaLibrary {
-        sources: state.db.manga_sources().map_err(err)?,
+        sources: with_sync_state(&state, state.db.manga_sources().map_err(err)?),
         series: state.db.manga_series_list().map_err(err)?,
         continue_reading: state.db.manga_continue_reading(12).map_err(err)?,
     })
@@ -1575,7 +1678,13 @@ pub fn manga_library(state: State<'_, AppState>) -> CmdResult<crate::manga::stor
 pub fn manga_series_detail(state: State<'_, AppState>, series_id: String) -> CmdResult<Option<crate::manga::store::MangaSeriesDetail>> {
     let Some(series) = state.db.manga_series(&series_id).map_err(err)? else { return Ok(None) };
     let volumes = state.db.manga_volumes(&series_id).map_err(err)?;
-    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes }))
+    let source = state
+        .db
+        .manga_series_source(&series_id)
+        .map_err(err)?
+        .and_then(|source_id| with_sync_state(&state, state.db.manga_sources().ok()?).into_iter().find(|s| s.id == source_id))
+        .filter(|source| source.kind != crate::manga::store::SOURCE_LOCAL);
+    Ok(Some(crate::manga::store::MangaSeriesDetail { series, volumes, source }))
 }
 
 /// Links a series to its NihongoTracker media (or unlinks it with `None`).
@@ -1622,11 +1731,41 @@ pub fn manga_reader_volume(state: State<'_, AppState>, volume_id: String) -> Cmd
 /// Where the user is in a volume (0-based). Called with a debounce while
 /// reading and once more when the window closes.
 #[tauri::command]
-pub fn manga_save_progress(state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
-    if state.db.manga_volume_location(&volume_id).map_err(err)?.is_none() {
+pub async fn manga_save_progress(app: AppHandle, state: State<'_, AppState>, volume_id: String, page: i64, finished: bool) -> CmdResult<()> {
+    let Some(location) = state.db.manga_volume_location(&volume_id).map_err(err)? else {
         return Err("Unknown volume".into());
+    };
+    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)?;
+    if crate::manga::store::is_remote_format(&location.format) && state.settings_snapshot().await.manga_webdav_sync_progress {
+        push_progress_later(&app, volume_id);
     }
-    state.db.set_manga_progress(&volume_id, page, finished).map_err(err)
+    Ok(())
+}
+
+/// Writes a remote volume's progress to its server a few seconds after the
+/// last save, so turning pages is one write, not one per page.
+fn push_progress_later(app: &AppHandle, volume_id: String) {
+    let state = app.state::<AppState>();
+    let generation = {
+        let mut pending = state.manga.progress_push.lock().unwrap();
+        let entry = pending.entry(volume_id.clone()).or_insert(0);
+        *entry += 1;
+        *entry
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        let state = app.state::<AppState>();
+        if state.manga.progress_push.lock().unwrap().get(&volume_id) != Some(&generation) {
+            return;
+        }
+        let (Some(remote), db) = (state.manga.remote(), state.db.clone()) else { return };
+        let id = volume_id.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || crate::manga::webdav::progress::push_volume(&remote, &db, &id)).await;
+        if let Ok(Err(error)) = result {
+            log::info!("progress of {volume_id} not shared with the server: {error}");
+        }
+    });
 }
 
 #[tauri::command]
@@ -1644,12 +1783,13 @@ pub fn manga_save_reader_prefs(
 #[tauri::command]
 pub async fn manga_session_open(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
     let db = state.db.clone();
+    let remote = state.manga.remote();
     let id = volume_id.clone();
     let loaded = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
         let Some(volume) = crate::manga::reader::volume(&db, &id).map_err(|e| e.to_string())? else {
             return Err("Unknown volume".into());
         };
-        let text = crate::manga::mokuro::volume_text(&db, &id).unwrap_or_default();
+        let text = crate::manga::mokuro::volume_text(&db, remote.as_deref(), &id).unwrap_or_default();
         Ok(crate::manga::session::OpenVolume::new(&volume, text))
     })
     .await
@@ -1691,7 +1831,118 @@ pub fn manga_session_pages(state: State<'_, AppState>, volume_id: String, pages:
 #[tauri::command]
 pub async fn manga_volume_text(state: State<'_, AppState>, volume_id: String) -> CmdResult<Vec<Option<crate::manga::mokuro::MokuroPage>>> {
     let db = state.db.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::manga::mokuro::volume_text(&db, &volume_id))
+    let remote = state.manga.remote();
+    tauri::async_runtime::spawn_blocking(move || crate::manga::mokuro::volume_text(&db, remote.as_deref(), &volume_id))
         .await
         .map_err(err)?
+}
+
+// ── manga on WebDAV ───────────────────────────────────────────────────
+
+fn remote_of(state: &AppState) -> CmdResult<std::sync::Arc<crate::manga::webdav::remote::Remote>> {
+    state.manga.remote().ok_or_else(|| "error".to_string())
+}
+
+fn remote_location(state: &AppState, volume_id: &str) -> CmdResult<crate::manga::store::VolumeLocation> {
+    state
+        .db
+        .manga_volume_location(volume_id)
+        .map_err(err)?
+        .filter(|location| crate::manga::store::is_remote_format(&location.format))
+        .ok_or_else(|| "not-found".to_string())
+}
+
+/// Downloads a remote volume whole, with progress on `manga://download`:
+/// `offline` keeps it for reading without the server; otherwise it goes to
+/// the cache (for a server that cannot send parts of files). Resolves when it
+/// is done; errors are codes.
+#[tauri::command]
+pub async fn manga_download_volume(app: AppHandle, volume_id: String, offline: bool) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let remote = remote_of(&state)?;
+    let location = remote_location(&state, &volume_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || remote.download(&location, offline).map_err(|e| e.code().to_string()))
+        .await
+        .map_err(err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    result
+}
+
+#[tauri::command]
+pub fn manga_cancel_download(state: State<'_, AppState>, volume_id: String) -> CmdResult<bool> {
+    Ok(remote_of(&state)?.cancel_download(&volume_id))
+}
+
+/// Downloads in progress, for a screen that opens while they run.
+#[tauri::command]
+pub fn manga_downloads(state: State<'_, AppState>) -> Vec<crate::manga::webdav::remote::DownloadProgress> {
+    state.manga.remote().map(|remote| remote.downloads()).unwrap_or_default()
+}
+
+/// Forgets the offline copy of a volume (it can still be read from its server).
+#[tauri::command]
+pub fn manga_remove_download(app: AppHandle, state: State<'_, AppState>, volume_id: String) -> CmdResult<()> {
+    remote_of(&state)?.remove_offline(std::slice::from_ref(&volume_id));
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn manga_webdav_cache_usage(state: State<'_, AppState>) -> CmdResult<crate::manga::webdav::remote::WebdavCacheUsage> {
+    let remote = remote_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || remote.usage()).await.map_err(err)
+}
+
+/// Empties the WebDAV cache. Offline downloads stay.
+#[tauri::command]
+pub async fn manga_webdav_clear_cache(state: State<'_, AppState>) -> CmdResult<crate::manga::webdav::remote::WebdavCacheUsage> {
+    let remote = remote_of(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        remote.cache.clear();
+        remote.usage()
+    })
+    .await
+    .map_err(err)
+}
+
+/// Which text a volume shows: one of its `<Vol>.<layer>.mokuro`, or the main
+/// one with `None`.
+#[tauri::command]
+pub fn manga_set_text_layer(app: AppHandle, state: State<'_, AppState>, volume_id: String, layer: Option<String>) -> CmdResult<()> {
+    let location = state.db.manga_volume_location(&volume_id).map_err(err)?.ok_or("not-found")?;
+    let layer = layer.filter(|layer| location.layers.iter().any(|(name, _)| name == layer));
+    state.db.set_manga_text_layer(&volume_id, layer.as_deref()).map_err(err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+/// Opening a remote series fetches its volumes' `.mokuro` files into the
+/// cache in the background, so the text is there when a volume opens.
+#[tauri::command]
+pub async fn manga_prepare_series(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+    let Some(remote) = state.manga.remote() else { return Ok(()) };
+    let db = state.db.clone();
+    let share_progress = state.settings_snapshot().await.manga_webdav_sync_progress;
+    tauri::async_runtime::spawn_blocking(move || {
+        // Where Mokuro Reader left off, if the user shares progress with it.
+        if share_progress {
+            match crate::manga::webdav::progress::pull_series(&remote, &db, &series_id) {
+                Ok(moved) if moved > 0 => {
+                    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+                }
+                Ok(_) => {}
+                Err(error) => log::info!("progress of {series_id} not read from the server: {error}"),
+            }
+        }
+        let Ok(volumes) = db.manga_volumes(&series_id) else { return };
+        for volume in volumes.iter().filter(|volume| crate::manga::store::is_remote_format(&volume.format)) {
+            if let Ok(Some(location)) = db.manga_volume_location(&volume.id) {
+                if location.mokuro_path.is_some() && remote.text_path(&location, None).is_none() {
+                    // The server is not answering: no point asking for the rest.
+                    break;
+                }
+            }
+        }
+    });
+    Ok(())
 }

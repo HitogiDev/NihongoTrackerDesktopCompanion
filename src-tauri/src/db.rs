@@ -301,6 +301,13 @@ CREATE TABLE IF NOT EXISTS manga_page_text (
     engine TEXT NOT NULL,
     PRIMARY KEY (volume_id, page)
 );
+-- Remote volumes downloaded for offline reading (`manga::webdav::remote`),
+-- in `app_data_dir/manga/offline/<volume_id>/`.
+CREATE TABLE IF NOT EXISTS manga_offline (
+    volume_id TEXT PRIMARY KEY,
+    bytes INTEGER NOT NULL DEFAULT 0,
+    downloaded_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manga_page_read (
     volume_id TEXT NOT NULL,
     page INTEGER NOT NULL,
@@ -323,6 +330,13 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE text_history ADD COLUMN intelligence TEXT",
     "ALTER TABLE mined_sentences ADD COLUMN screenshot_path TEXT",
     "ALTER TABLE vn_apps ADD COLUMN filter_chinese INTEGER",
+    // WebDAV manga sources (see `manga::webdav`).
+    "ALTER TABLE manga_sources ADD COLUMN last_sync_at TEXT",
+    "ALTER TABLE manga_sources ADD COLUMN last_error TEXT",
+    "ALTER TABLE manga_series ADD COLUMN signature TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN cover TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN layers_json TEXT",
+    "ALTER TABLE manga_volumes ADD COLUMN size INTEGER",
 ];
 
 #[derive(Debug, thiserror::Error)]
