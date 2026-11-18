@@ -24,6 +24,9 @@ fn d_manga_idle_log() -> u64 {
 fn d_owocr_port() -> u16 {
     crate::manga::ocr::owocr::DEFAULT_PORT
 }
+fn d_manga_ext_idle() -> u64 {
+    10
+}
 fn d_manga_webdav_cache() -> u64 {
     crate::manga::webdav::cache::DEFAULT_LIMIT_MB
 }
@@ -186,6 +189,18 @@ pub struct Settings {
     /// owocr's `websocket_port`. Always on 127.0.0.1.
     #[serde(default = "d_owocr_port")]
     pub manga_owocr_port: u16,
+    /// Where extensions run: the Suwayomi-Server the app manages, or the
+    /// user's own (`manga::suwayomi`). Its URL and credentials are not here:
+    /// they live with its source, in Rust only.
+    #[serde(default)]
+    pub manga_ext_mode: crate::manga::suwayomi::ExtMode,
+    /// Show extensions and sources marked NSFW or MIXED. Off by default.
+    #[serde(default)]
+    pub manga_ext_show_adult: bool,
+    /// Stop the managed server after this many minutes without use. 0 keeps
+    /// it running until the app closes.
+    #[serde(default = "d_manga_ext_idle")]
+    pub manga_ext_idle_minutes: u64,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -354,6 +369,9 @@ impl Default for Settings {
             manga_ocr_auto: true,
             manga_ocr_engine: Default::default(),
             manga_owocr_port: d_owocr_port(),
+            manga_ext_mode: Default::default(),
+            manga_ext_show_adult: false,
+            manga_ext_idle_minutes: d_manga_ext_idle(),
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),

@@ -25,6 +25,13 @@ import type {
   OcrStatus,
   OwocrProbe,
   ReaderPrefs,
+  ExtAction,
+  ExtBrowse,
+  ExtBrowseKind,
+  ExtExtension,
+  ExtMangaDetail,
+  ExtSource,
+  ExtStatus,
   ReaderTarget,
   ReaderVolume,
   ScanSummary,
@@ -321,6 +328,31 @@ export const ipc = {
   /** Saves a page's blocks as corrected by hand; they win over the `.mokuro`. */
   mangaSavePageText: (volumeId: string, page: number, imageWidth: number, imageHeight: number, blocks: EditedBlock[]) =>
     invoke<MokuroPage>('manga_save_page_text', { volumeId, page, imageWidth, imageHeight, blocks }),
+  // extensions (`manga::suwayomi`): Suwayomi-Server, managed or the user's own
+  mangaExtStatus: () => invoke<ExtStatus>('manga_ext_status'),
+  /** Only after the user agreed in the install dialog. `false` if one is running. */
+  mangaExtInstall: () => invoke<boolean>('manga_ext_install'),
+  mangaExtCancelInstall: () => invoke<boolean>('manga_ext_cancel_install'),
+  mangaExtUninstall: () => invoke<void>('manga_ext_uninstall'),
+  /** Starts (or connects to) the server; errors are codes (`not-installed`, `offline`…). */
+  mangaExtStart: () => invoke<ExtStatus>('manga_ext_start'),
+  mangaExtStop: () => invoke<void>('manga_ext_stop'),
+  /** `auth: null` keeps the saved credentials. Resolves with the server's version. */
+  mangaExtTestCustom: (url: string, auth: WebdavAuth | null) => invoke<string>('manga_ext_test_custom', { url, auth }),
+  mangaExtSaveCustom: (url: string, auth: WebdavAuth | null) => invoke<string>('manga_ext_save_custom', { url, auth }),
+  mangaExtAddStore: () => invoke<void>('manga_ext_add_store'),
+  mangaExtExtensions: () => invoke<ExtExtension[]>('manga_ext_extensions'),
+  mangaExtUpdateExtension: (pkgName: string, action: ExtAction) =>
+    invoke<ExtExtension | null>('manga_ext_update_extension', { pkgName, action }),
+  mangaExtSources: () => invoke<ExtSource[]>('manga_ext_sources'),
+  mangaExtBrowse: (sourceId: string, kind: ExtBrowseKind, page: number, query?: string) =>
+    invoke<ExtBrowse>('manga_ext_browse', { sourceId, kind, page, query }),
+  mangaExtManga: (mangaId: number, refresh = false) => invoke<ExtMangaDetail>('manga_ext_manga', { mangaId, refresh }),
+  /** Resolves with the series' id in the library. */
+  mangaExtAddSeries: (mangaId: number) => invoke<string>('manga_ext_add_series', { mangaId }),
+  /** Adds the series if needed and opens the reader on the chapter. */
+  mangaExtRead: (mangaId: number, chapterId: number) => invoke<string>('manga_ext_read', { mangaId, chapterId }),
+  mangaExtRefreshSeries: (seriesId: string) => invoke<void>('manga_ext_refresh_series', { seriesId }),
 
   // offline Yomitan dictionaries
   dictionaryList: () => invoke<DictionarySummary[]>('dictionary_list'),
@@ -376,4 +408,6 @@ export const events = {
   mangaOcrPage: 'manga://ocr-page',
   /** `OcrDownload`: the OCR's runtime and models coming down. */
   mangaOcrProgress: 'manga://ocr-progress',
+  /** `ExtStatus`: the extensions server or its installation changed. */
+  mangaExtStatus: 'manga://ext-status',
 } as const;

@@ -136,7 +136,14 @@ pub fn run() {
                     settings.manga_webdav_cache_mb.saturating_mul(1024 * 1024),
                     Some(app.handle().clone()),
                 );
-                let _ = state.manga.remote.set(Arc::new(remote));
+                let remote = Arc::new(remote);
+                let _ = state.manga.remote.set(remote.clone());
+                // The extensions server (see `manga::suwayomi`): nothing is
+                // downloaded or started here, only when extensions are used.
+                let suwayomi = Arc::new(manga::suwayomi::Service::new(data_dir.join("suwayomi"), state.db.clone(), Some(app.handle().clone())));
+                let _ = remote.suwayomi.set(suwayomi.clone());
+                let _ = state.manga.suwayomi.set(suwayomi);
+                manga::suwayomi::start_idle_watch(app.handle());
                 // The built-in OCR's runtime and models (see `manga::ocr`).
                 let _ = state.manga.ocr.set(Arc::new(manga::ocr::Service::new(data_dir.join("ocr"))));
             }
@@ -417,6 +424,23 @@ pub fn run() {
             commands::manga_ocr_region,
             commands::manga_save_page_text,
             commands::manga_ocr_export,
+            commands::manga_ext_status,
+            commands::manga_ext_install,
+            commands::manga_ext_cancel_install,
+            commands::manga_ext_uninstall,
+            commands::manga_ext_start,
+            commands::manga_ext_stop,
+            commands::manga_ext_test_custom,
+            commands::manga_ext_save_custom,
+            commands::manga_ext_add_store,
+            commands::manga_ext_extensions,
+            commands::manga_ext_update_extension,
+            commands::manga_ext_sources,
+            commands::manga_ext_browse,
+            commands::manga_ext_manga,
+            commands::manga_ext_add_series,
+            commands::manga_ext_read,
+            commands::manga_ext_refresh_series,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NihongoTracker Companion")
@@ -429,6 +453,10 @@ pub fn run() {
                 manga::session::reader_closed(app);
                 if let Some(ocr) = app.state::<AppState>().manga.ocr() {
                     ocr.shutdown();
+                }
+                // The managed extensions server goes with the app.
+                if let Some(suwayomi) = app.state::<AppState>().manga.suwayomi() {
+                    suwayomi.stop_blocking();
                 }
                 discord::shutdown(app);
                 app.state::<AppState>().game_hook.shutdown();

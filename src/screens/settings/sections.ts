@@ -88,6 +88,9 @@ export const SEARCH_INDEX: { section: SectionId; label: string; hint?: string }[
   { section: 'manga', label: 'settings:manga.ocrEngine', hint: 'settings:manga.ocrEngineOwocrHint' },
   { section: 'manga', label: 'settings:manga.ocr', hint: 'settings:manga.ocrHint' },
   { section: 'manga', label: 'settings:manga.ocrAuto', hint: 'settings:manga.ocrAutoHint' },
+  { section: 'manga', label: 'settings:manga.ext', hint: 'settings:manga.extManagedHint' },
+  { section: 'manga', label: 'settings:manga.extAdult', hint: 'settings:manga.extAdultHint' },
+  { section: 'manga', label: 'settings:manga.extIdle', hint: 'settings:manga.extIdleHint' },
 
   { section: 'readingOverlay', label: 'readingOverlay:openSettings', hint: 'readingOverlay:settingsHint' },
 

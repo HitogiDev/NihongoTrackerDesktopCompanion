@@ -13,6 +13,7 @@ pub mod protocol;
 pub mod reader;
 pub mod session;
 pub mod store;
+pub mod suwayomi;
 pub mod thumbs;
 pub mod webdav;
 
@@ -45,6 +46,8 @@ pub struct Runtime {
     pub progress_push: Mutex<HashMap<String, u64>>,
     /// The built-in OCR (see `ocr`). Set once at start.
     pub ocr: OnceLock<Arc<ocr::Service>>,
+    /// The extensions server (see `suwayomi`). Set once at start.
+    pub suwayomi: OnceLock<Arc<suwayomi::Service>>,
 }
 
 impl Runtime {
@@ -54,6 +57,10 @@ impl Runtime {
 
     pub fn ocr(&self) -> Option<Arc<ocr::Service>> {
         self.ocr.get().cloned()
+    }
+
+    pub fn suwayomi(&self) -> Option<Arc<suwayomi::Service>> {
+        self.suwayomi.get().cloned()
     }
 }
 

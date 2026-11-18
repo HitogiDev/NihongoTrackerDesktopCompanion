@@ -16,6 +16,8 @@ const Queue = lazy(() => import('./screens/Queue'));
 const LibraryScreen = lazy(() => import('./screens/Library'));
 const MangaScreen = lazy(() => import('./screens/Manga'));
 const MangaSeriesScreen = lazy(() => import('./screens/manga/SeriesDetail'));
+const ExtBrowseScreen = lazy(() => import('./screens/manga/ext/ExtBrowse'));
+const ExtMangaScreen = lazy(() => import('./screens/manga/ext/ExtMangaScreen'));
 const MangaReader = lazy(() => import('./screens/manga/reader/MangaReader'));
 const MiningScreen = lazy(() => import('./screens/Mining'));
 const TexthookerScreen = lazy(() => import('./screens/Texthooker'));
@@ -150,6 +152,8 @@ export default function App() {
               <Route path="/queue" element={<Queue />} />
               <Route path="/library" element={<LibraryScreen />} />
               <Route path="/manga" element={<MangaScreen />} />
+              <Route path="/manga/ext/source/:sourceId" element={<ExtBrowseScreen />} />
+              <Route path="/manga/ext/manga/:mangaId" element={<ExtMangaScreen />} />
               <Route path="/manga/:seriesId" element={<MangaSeriesScreen />} />
               <Route path="/mining" element={<MiningScreen />} />
               <Route path="/ranking" element={<RankingScreen />} />

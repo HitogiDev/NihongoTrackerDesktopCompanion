@@ -10,6 +10,8 @@ export const mangaUrl = {
   page: (volumeId: string, page: number) => convertFileSrc(`page/${volumeId}/${page}`, SCHEME),
   thumb: (volumeId: string, page: number) => convertFileSrc(`thumb/${volumeId}/${page}`, SCHEME),
   cover: (seriesId: string) => convertFileSrc(`cover/${seriesId}`, SCHEME),
+  /** An image of the extensions server, by the token Rust gave for it. */
+  ext: (token: string) => convertFileSrc(`ext/${token}`, SCHEME),
 };
 
 /** The i18n key for an error code Rust sends back, if it is one of ours. */
@@ -18,8 +20,12 @@ export function mangaErrorKey(error: unknown): string | null {
   if (code === 'not-a-folder') return 'errors.notAFolder';
   if (code === 'already-added') return 'errors.alreadyAdded';
   if (WEBDAV_ERRORS.has(code)) return `webdav.errors.${code}`;
+  if (EXTENSION_ERRORS.has(code)) return `ext.errors.${code}`;
   return null;
 }
+
+/** Codes only the extensions server sends (`manga::suwayomi::graphql::SwError`). */
+const EXTENSION_ERRORS = new Set(['not-installed', 'not-configured', 'start-failed', 'server', 'bad-reply', 'adult-hidden', 'unsupported', 'busy', 'other-server']);
 
 /** The codes `manga::webdav::client::DavError::code` sends. */
 const WEBDAV_ERRORS = new Set(['offline', 'unauthorized', 'not-found', 'not-webdav', 'needs-download', 'too-large', 'changed', 'cancelled', 'invalid-url', 'error']);

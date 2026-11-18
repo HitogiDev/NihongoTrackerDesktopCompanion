@@ -746,7 +746,7 @@ pub fn pages_without_text(
 ) -> Result<(String, Vec<i64>), String> {
     // A remote archive opened for the first time: its pages first.
     if let (Some(remote), Some(location)) = (remote, db.manga_volume_location(volume_id).map_err(|e| e.to_string())?) {
-        if super::store::is_remote_format(&location.format) && location.pages.is_empty() {
+        if super::store::is_served_format(&location.format) && location.pages.is_empty() {
             remote.ensure_index(&location).map_err(|e| e.code().to_string())?;
         }
     }

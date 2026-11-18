@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, BookOpen, Check, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Puzzle, Check, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
@@ -17,9 +17,12 @@ import { toast } from '../../store/useToastStore';
 import { Cover, MANGA } from './Cover';
 import { openVolume, useMangaLibraryEvents, useMangaSeries } from './useMangaLibrary';
 import { ServerStatus } from './Servers';
+import { extErrorText } from './ext/useExtensions';
 import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore, useWebdavSyncEvents } from './useWebdav';
 
-const isRemote = (volume: MangaVolume) => volume.format === 'remote-archive' || volume.format === 'remote-folder';
+/** A chapter of a series from an extension (its pages come from the Suwayomi server). */
+const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
+const isRemote = (volume: MangaVolume) => volume.format === 'remote-archive' || volume.format === 'remote-folder' || isChapter(volume);
 /** Something can be opened: pages, or a remote archive whose pages are read on opening. */
 const isReadable = (volume: MangaVolume) => volume.page_count > 0 || isRemote(volume);
 
@@ -68,7 +71,12 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
           <div>
             <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${MANGA.color}`}>{t('common:logType.manga')}</p>
             <h2 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl">{series.title}</h2>
-            {source ? (
+            {source?.kind === 'suwayomi' ? (
+              <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-base-content/55">
+                <Puzzle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{t('ext.detail.from', { server: source.id === 'suwayomi-managed' ? t('ext.server.managed') : displayUrl(source.url) })}</span>
+              </p>
+            ) : source ? (
               <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-base-content/55" title={`${source.url} ${series.location}`}>
                 <Server className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span className="truncate">{source.name}</span>
@@ -80,7 +88,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="badge badge-ghost gap-1"><BookOpen className="h-3 w-3" />{t('grid.volumes', { count: Number(series.volume_count) })}</span>
+            <span className="badge badge-ghost gap-1"><BookOpen className="h-3 w-3" />{series.source === 'suwayomi' ? t('ext.detail.chapters', { count: Number(series.volume_count) }) : t('grid.volumes', { count: Number(series.volume_count) })}</span>
             <span className="badge badge-ghost">{t('detail.pages', { count: Number(series.page_count) })}</span>
             {series.has_text ? <span className={`badge gap-1 border ${MANGA.bgColor} ${MANGA.borderColor} ${MANGA.color}`}><ScanText className="h-3 w-3" />{t('detail.hasText')}</span> : null}
             {percent > 0 ? <span className="badge badge-ghost">{t('detail.percentRead', { percent })}</span> : null}
@@ -184,7 +192,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
   const progress = useDownloadStore((s) => s.running[volume.id]);
   const percent = readPercent(volume.page, Number(volume.page_count), volume.finished);
   const remote = isRemote(volume);
-  const Format = volume.format === 'archive' || volume.format === 'remote-archive' ? FileArchive : Folder;
+  const Format = isChapter(volume) ? Puzzle : volume.format === 'archive' || volume.format === 'remote-archive' ? FileArchive : Folder;
   // Offline, only what is on this computer can be opened.
   const unreachable = remote && offline && !volume.downloaded;
   const disabled = !isReadable(volume) || unreachable || Boolean(progress && !progress.offline);
@@ -197,14 +205,21 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
         onClick={() => void openVolume(volume.id)}
         className="group flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 text-left motion-safe:transition-colors enabled:hover:bg-base-200/70 focus-visible:-outline-offset-2 disabled:cursor-not-allowed"
       >
-        <div className="aspect-[2/3] w-12 shrink-0 overflow-hidden rounded-field shadow-sm ring-1 ring-base-content/5">
-          <Cover src={mangaUrl.thumb(volume.id, 0)} />
-        </div>
+        {isChapter(volume) ? (
+          // A chapter has no image of its own until its pages are fetched.
+          <span className={`grid aspect-[2/3] w-12 shrink-0 place-items-center rounded-field font-mono text-xs font-semibold tabular-nums ring-1 ring-base-content/5 ${MANGA.bgColor} ${MANGA.color}`}>
+            {Number(volume.position)}
+          </span>
+        ) : (
+          <div className="aspect-[2/3] w-12 shrink-0 overflow-hidden rounded-field shadow-sm ring-1 ring-base-content/5">
+            <Cover src={mangaUrl.thumb(volume.id, 0)} />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{volume.title}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-base-content/55">
             <Format className="h-3 w-3" aria-hidden="true" />
-            {volume.page_count > 0 ? t('detail.pages', { count: Number(volume.page_count) }) : remote ? t('webdav.detail.pagesOnOpen') : t('detail.pages', { count: 0 })}
+            {volume.page_count > 0 ? t('detail.pages', { count: Number(volume.page_count) }) : isChapter(volume) ? t('ext.detail.pagesOnOpen') : remote ? t('webdav.detail.pagesOnOpen') : t('detail.pages', { count: 0 })}
             {remote && volume.size ? <><span aria-hidden="true">·</span>{formatBytes(Number(volume.size), i18n.language)}</> : null}
             <span aria-hidden="true">·</span>
             <OcrVolumeLabel volume={volume} />
@@ -238,7 +253,7 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
         </DropdownSelect>
       ) : null}
       <OcrVolumeState volume={volume} status={ocr} disabled={unreachable || !isReadable(volume)} />
-      {Number(volume.ocr_pages) > 0 ? (
+      {Number(volume.ocr_pages) > 0 && !isChapter(volume) ? (
         <>
           <Button
             appearance="ghost"
@@ -256,6 +271,28 @@ function VolumeRow({ volume, offline, ocr, source }: { volume: MangaVolume; offl
       ) : null}
       {remote ? <DownloadControl volume={volume} progress={progress} offline={offline} /> : null}
     </li>
+  );
+}
+
+/** Asks the extension's source again for the series' chapters. */
+function RefreshChapters({ seriesId }: { seriesId: string }) {
+  const { t } = useTranslation('manga');
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await ipc.mangaExtRefreshSeries(seriesId);
+      toast.success(t('ext.detail.refreshed'));
+    } catch (error) {
+      toast.error(extErrorText(error));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  return (
+    <Button appearance="ghost" size="xs" shape="square" loading={refreshing} aria-label={t('ext.manga.refresh')} title={t('ext.manga.refresh')} onClick={() => void refresh()}>
+      {refreshing ? null : <RefreshCw className="h-3.5 w-3.5" />}
+    </Button>
   );
 }
 
@@ -343,10 +380,11 @@ export default function SeriesDetailScreen() {
             <Hero series={series} volumes={volumes} source={source} onLink={() => setLinking(true)} />
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{t('detail.volumes')}</h2>
+                <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{series.source === 'suwayomi' ? t('ext.manga.chapters') : t('detail.volumes')}</h2>
                 <span className="flex items-center gap-3 text-xs text-base-content/50">
-                  {source && !offline ? <ServerStatus source={source} /> : null}
+                  {source && !offline && source.kind !== 'suwayomi' ? <ServerStatus source={source} /> : null}
                   {volumes.length}
+                  {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
               </div>
               <ul className="surface divide-y divide-base-300/60 overflow-hidden">

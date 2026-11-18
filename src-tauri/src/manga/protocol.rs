@@ -7,6 +7,8 @@
 //! manga://localhost/page/<volume id>/<n>    a page, as stored
 //! manga://localhost/thumb/<volume id>/<n>   a small JPEG of it (cached)
 //! manga://localhost/cover/<series id>       the series' cover (cached)
+//! manga://localhost/ext/<token>             an image of the extensions
+//!                                           server (an icon, a thumbnail)
 //! ```
 //!
 //! (On Windows the webview spells it `http://manga.localhost/…`; the page
@@ -23,7 +25,7 @@ use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::archive::{self, safe_entry_name, MAX_ENTRY_BYTES};
-use super::store::{is_remote_format, VolumeLocation, FORMAT_ARCHIVE, FORMAT_FOLDER};
+use super::store::{is_remote_format, is_served_format, VolumeLocation, FORMAT_ARCHIVE, FORMAT_FOLDER};
 use super::webdav::remote::Remote;
 use super::{is_image_name, thumbs};
 use crate::db::Db;
@@ -36,6 +38,8 @@ pub enum Asset {
     Page { volume: String, page: usize },
     Thumb { volume: String, page: usize },
     Cover { series: String },
+    /// A token from `manga::suwayomi::Service::image_token`.
+    Ext { token: String },
 }
 
 /// What our own ids look like: a UUID, or anything as plain. Never a path.
@@ -69,6 +73,7 @@ pub fn parse(path: &str) -> Option<Asset> {
         ["page", id, n] if is_opaque_id(id) => Some(Asset::Page { volume: id.to_string(), page: page_number(n)? }),
         ["thumb", id, n] if is_opaque_id(id) => Some(Asset::Thumb { volume: id.to_string(), page: page_number(n)? }),
         ["cover", id] if is_opaque_id(id) => Some(Asset::Cover { series: id.to_string() }),
+        ["ext", token] if is_opaque_id(token) => Some(Asset::Ext { token: token.to_string() }),
         _ => None,
     }
 }
@@ -104,7 +109,7 @@ fn read_folder_page(dir: &Path, name: &str) -> Option<Vec<u8>> {
 /// The bytes of page `page` (0-based) of a volume. A remote volume needs
 /// `remote` (and may wait on its server).
 pub fn page_bytes(remote: Option<&Remote>, location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
-    if is_remote_format(&location.format) {
+    if is_served_format(&location.format) {
         return remote?.page_bytes(location, page);
     }
     let name = location.pages.get(page)?;
@@ -182,7 +187,30 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
             };
             (etag, body)
         }
+        Asset::Ext { token } => {
+            // The token names one server path; the same path is the same image.
+            let etag = format!("\"{token}-e\"");
+            if if_none_match == Some(etag.as_str()) {
+                return Reply { etag: Some(etag), ..Reply::status(304) };
+            }
+            (etag, remote.and_then(|remote| remote.extension_image(token)))
+        }
         Asset::Cover { series } => {
+            // A series from an extension: its cover is a path on its server.
+            if let Ok(Some((kind, source_id, Some(path)))) = db.manga_series_origin(series) {
+                if kind == crate::manga::suwayomi::SOURCE_KIND {
+                    let signature = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, format!("{source_id}\0{path}").as_bytes()).simple().to_string();
+                    let etag = format!("\"{signature}-c\"");
+                    if if_none_match == Some(etag.as_str()) {
+                        return Reply { etag: Some(etag), ..Reply::status(304) };
+                    }
+                    let body = cached_cover(cache_dir, &format!("cover-{series}"), &signature, || remote?.extension_cover(&source_id, &path));
+                    return match body {
+                        Some(body) => Reply { status: 200, content_type: Some(sniff(&body)), etag: Some(etag), body: if method == "HEAD" { Vec::new() } else { body } },
+                        None => Reply::status(404),
+                    };
+                }
+            }
             let Ok(Some((cover, first))) = db.manga_series_cover(series) else { return Reply::status(404) };
             let remote_series = first.as_ref().is_some_and(|first| is_remote_format(&first.format));
             if remote_series {

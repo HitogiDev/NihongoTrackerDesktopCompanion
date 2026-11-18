@@ -4,31 +4,26 @@ import { BookOpen, FolderPlus, Puzzle, Server, type LucideIcon } from 'lucide-re
 import { Button } from '../../components/ui/Button';
 import { MANGA } from './Cover';
 
-function Way({ icon: Icon, title, body, action, soon = false }: {
+function Way({ icon: Icon, title, body, action }: {
   icon: LucideIcon;
   title: string;
   body: string;
   action?: ReactNode;
-  soon?: boolean;
 }) {
-  const { t } = useTranslation('manga');
   return (
-    <li className={soon ? 'surface-muted flex flex-col p-5' : 'surface flex flex-col p-5'}>
-      <div className="flex items-center justify-between gap-3">
-        <span className={soon ? 'grid h-10 w-10 place-items-center rounded-field bg-base-300 text-base-content/50' : `grid h-10 w-10 place-items-center rounded-field ${MANGA.bgColor} ${MANGA.color}`}>
-          <Icon className="h-5 w-5" aria-hidden="true" />
-        </span>
-        {soon ? <span className="badge badge-ghost badge-sm">{t('tabs.soon')}</span> : null}
-      </div>
-      <h3 className={soon ? 'mt-4 font-semibold text-base-content/70' : 'mt-4 font-semibold'}>{title}</h3>
+    <li className="surface flex flex-col p-5">
+      <span className={`grid h-10 w-10 place-items-center rounded-field ${MANGA.bgColor} ${MANGA.color}`}>
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <h3 className="mt-4 font-semibold">{title}</h3>
       <p className="mt-1 flex-1 text-sm text-base-content/60">{body}</p>
       {action ? <div className="mt-4">{action}</div> : null}
     </li>
   );
 }
 
-/** No library yet: the three ways manga gets here, two of them ready. */
-export function EmptyLibrary({ onAdd, adding, onAddServer }: { onAdd: () => void; adding: boolean; onAddServer: () => void }) {
+/** No library yet: the three ways manga gets here. */
+export function EmptyLibrary({ onAdd, adding, onAddServer, onExtensions }: { onAdd: () => void; adding: boolean; onAddServer: () => void; onExtensions: () => void }) {
   const { t } = useTranslation('manga');
   return (
     <section className="mx-auto max-w-4xl py-8 text-center">
@@ -60,7 +55,17 @@ export function EmptyLibrary({ onAdd, adding, onAddServer }: { onAdd: () => void
             </Button>
           }
         />
-        <Way icon={Puzzle} title={t('empty.extensions.title')} body={t('empty.extensions.body')} soon />
+        <Way
+          icon={Puzzle}
+          title={t('empty.extensions.title')}
+          body={t('empty.extensions.body')}
+          action={
+            <Button appearance="outline" size="sm" onClick={onExtensions}>
+              <Puzzle className="h-4 w-4" />
+              {t('empty.extensions.action')}
+            </Button>
+          }
+        />
       </ul>
       <p className="mx-auto mt-6 max-w-xl text-xs text-base-content/50">{t('empty.tip')}</p>
     </section>

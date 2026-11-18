@@ -281,6 +281,23 @@
     "owocrNoCoordinatesTitle": "owocr está en marcha, pero sin coordenadas",
     "owocrFailed": "No hay owocr en {{url}}",
     "owocrLastError": "Último intento: {{error}}",
-    "owocrPrivacy": "La app solo se conecta a 127.0.0.1, nunca a otro ordenador. Un motor en línea elegido en owocr (Google Lens, Bing…) sí manda las páginas a su servicio."
+    "owocrPrivacy": "La app solo se conecta a 127.0.0.1, nunca a otro ordenador. Un motor en línea elegido en owocr (Google Lens, Bing…) sí manda las páginas a su servicio.",
+    "ext": "Extensiones",
+    "extManagedHint": "La app instala Suwayomi-Server (con tu permiso) y lo arranca solo mientras usas extensiones.",
+    "extCustomHint": "Las extensiones corren en tu propio Suwayomi-Server.",
+    "extInstalled": "{{size}} en disco · {{state}}",
+    "extMissing": "Sin instalar ({{size}} a descargar).",
+    "extInstall": "Instalar…",
+    "extRemove": "Eliminar servidor",
+    "extRemoveConfirm": "Eliminarlo",
+    "extRemoveHint": "Borra Suwayomi, su Java y las extensiones instaladas. Las series de tu biblioteca y los capítulos descargados se quedan.",
+    "extRemoved": "Suwayomi eliminado",
+    "extNoCustom": "Aún no hay servidor guardado.",
+    "extSetCustom": "Configurar servidor",
+    "extEditCustom": "Editar servidor",
+    "extAdult": "Mostrar fuentes para adultos",
+    "extAdultHint": "Muestra las extensiones y fuentes marcadas como NSFW o mixtas. Las series añadidas desde ellas nunca muestran su título en Discord.",
+    "extIdle": "Parar el servidor tras (minutos sin uso)",
+    "extIdleHint": "0 lo mantiene en marcha hasta que cierres la app."
   }
 }

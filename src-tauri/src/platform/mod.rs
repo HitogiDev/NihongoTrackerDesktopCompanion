@@ -122,6 +122,10 @@ use stub as imp;
 /// any application. A no-op where `Capabilities::ctrl_shield` is false.
 pub use imp::{capabilities, foreground_window, game_window_center, idle_seconds, shield_ctrl, visible_windows};
 
+/// Starts a child process without a window (the managed Suwayomi-Server's
+/// Java): `CREATE_NO_WINDOW` on Windows, nothing elsewhere.
+pub use imp::hide_child_window;
+
 /// Saves a PNG of `pid`'s window titled `title` (the focused game, for a mined
 /// sentence). False when the platform cannot capture it.
 #[cfg(any(windows, target_os = "macos"))]
@@ -202,6 +206,23 @@ pub fn ocr_runtime_target() -> Option<&'static str> {
         ("linux", "x86_64") => Some("linux-x64"),
         ("linux", "aarch64") => Some("linux-arm64"),
         ("macos", "aarch64") => Some("osx-arm64"),
+        _ => None,
+    }
+}
+
+// ── managed extensions server (`manga::suwayomi`) ──────────────────────
+
+/// Which Temurin JRE the managed Suwayomi-Server downloads here (a key of
+/// `manga::suwayomi::assets::runtime_for`), or `None` where Adoptium builds
+/// none.
+pub fn java_runtime_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => Some("windows-x64"),
+        ("windows", "aarch64") => Some("windows-aarch64"),
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-aarch64"),
+        ("macos", "x86_64") => Some("mac-x64"),
+        ("macos", "aarch64") => Some("mac-aarch64"),
         _ => None,
     }
 }

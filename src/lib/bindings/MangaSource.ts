@@ -5,7 +5,7 @@
  */
 export type MangaSource = { id: string, 
 /**
- * `local` or `webdav` (`suwayomi` later).
+ * `local`, `webdav` or `suwayomi`.
  */
 kind: string, name: string, 
 /**

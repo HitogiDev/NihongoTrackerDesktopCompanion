@@ -30,7 +30,8 @@ use super::sync::client_for;
 use crate::db::Db;
 use crate::manga::archive::{self, MAX_ENTRY_BYTES};
 use crate::manga::library::LIBRARY_CHANGED;
-use crate::manga::store::{VolumeLocation, FORMAT_REMOTE_ARCHIVE, FORMAT_REMOTE_FOLDER};
+use crate::manga::store::{VolumeLocation, FORMAT_REMOTE_ARCHIVE, FORMAT_REMOTE_FOLDER, FORMAT_SUWAYOMI_CHAPTER};
+use crate::manga::suwayomi::graphql::SwError;
 
 /// A `.mokuro` past this size is not one.
 const MAX_TEXT_BYTES: u64 = 64 * 1024 * 1024;
@@ -73,6 +74,20 @@ pub struct Remote {
     offline_root: PathBuf,
     app: Option<AppHandle>,
     downloads: Mutex<HashMap<String, Download>>,
+    /// The extensions server, for chapters of series from extensions. Set
+    /// once at start.
+    pub suwayomi: std::sync::OnceLock<Arc<crate::manga::suwayomi::Service>>,
+}
+
+impl From<SwError> for DavError {
+    fn from(error: SwError) -> Self {
+        match error {
+            SwError::Offline => DavError::Offline,
+            SwError::Unauthorized => DavError::Unauthorized,
+            SwError::NotFound => DavError::NotFound,
+            other => DavError::Extension(other.code()),
+        }
+    }
 }
 
 /// `.cbz`, `.png`…: the extension of a remote name, if it is a plain one.
@@ -91,7 +106,14 @@ fn key(source_id: &str, path: &str, signature: Option<&str>, extension: &str) ->
 
 impl Remote {
     pub fn new(db: Arc<Db>, cache_root: PathBuf, offline_root: PathBuf, limit_bytes: u64, app: Option<AppHandle>) -> Self {
-        Remote { db, cache: Cache::new(cache_root, limit_bytes), offline_root, app, downloads: Mutex::new(HashMap::new()) }
+        Remote {
+            db,
+            cache: Cache::new(cache_root, limit_bytes),
+            offline_root,
+            app,
+            downloads: Mutex::new(HashMap::new()),
+            suwayomi: std::sync::OnceLock::new(),
+        }
     }
 
     pub(crate) fn client(&self, source_id: &str) -> Result<Client, DavError> {
@@ -200,6 +222,9 @@ impl Remote {
     /// The page list of a remote volume, reading the archive's central
     /// directory the first time (and storing it).
     pub fn ensure_index(&self, location: &VolumeLocation) -> Result<Vec<String>, DavError> {
+        if location.pages.is_empty() && location.format == FORMAT_SUWAYOMI_CHAPTER {
+            return self.chapter_index(location);
+        }
         if !location.pages.is_empty() || location.format != FORMAT_REMOTE_ARCHIVE {
             return Ok(location.pages.clone());
         }
@@ -226,6 +251,7 @@ impl Remote {
                 let path = format!("{}{name}", location.source_ref);
                 self.small_file(&location.source_id, &path, location.signature.as_deref(), MAX_ENTRY_BYTES)
             }
+            FORMAT_SUWAYOMI_CHAPTER => self.chapter_page(location, page),
             _ => return None,
         };
         result.map_err(|error| log::debug!("remote page {}/{page}: {error}", location.id)).ok()
@@ -381,6 +407,29 @@ impl Remote {
                     progress(bytes, total.map(|total| total.max(bytes)));
                 }
             }
+            FORMAT_SUWAYOMI_CHAPTER => {
+                if !offline {
+                    return Ok(());
+                }
+                let pages = self.ensure_index(location)?;
+                let location = VolumeLocation { pages: pages.clone(), ..location.clone() };
+                std::fs::create_dir_all(dir.join("pages")).map_err(other)?;
+                let total = pages.len() as u64;
+                for index in 0..pages.len() {
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err(DavError::Cancelled);
+                    }
+                    let target = self.offline_page(&location.id, index, "page.img").ok_or(DavError::NotFound)?;
+                    if !target.is_file() {
+                        let page = self.chapter_page(&location, index)?;
+                        std::fs::write(&target, &page).map_err(other)?;
+                    }
+                    // Pages, not bytes: a chapter's size is not known before.
+                    progress(index as u64 + 1, Some(total));
+                }
+                self.db.set_manga_offline(&location.id, dir_size(&dir) as i64).map_err(|e| DavError::Other(e.to_string()))?;
+                return Ok(());
+            }
             _ => return Err(DavError::NotFound),
         }
         if offline {
@@ -400,6 +449,77 @@ impl Remote {
         }
         let _ = bytes;
         Ok(())
+    }
+
+    // ── chapters from extensions ───────────────────────────────────────
+
+    fn extensions(&self) -> Result<Arc<crate::manga::suwayomi::Service>, DavError> {
+        self.suwayomi.get().cloned().ok_or(DavError::Extension("not-configured"))
+    }
+
+    /// A chapter's pages, asked of its server the first time (and stored).
+    fn chapter_index(&self, location: &VolumeLocation) -> Result<Vec<String>, DavError> {
+        let service = self.extensions()?;
+        let chapter: i64 = location.source_ref.parse().map_err(|_| DavError::NotFound)?;
+        let mode = service.mode_blocking();
+        if mode.source_id() != location.source_id {
+            // A series of the other mode's server: only what is downloaded.
+            return Err(DavError::Extension("other-server"));
+        }
+        let pages = tauri::async_runtime::block_on(async { service.connect(mode).await?.chapter_pages(chapter).await })?;
+        self.db.set_manga_volume_pages(&location.id, &pages).map_err(|e| DavError::Other(e.to_string()))?;
+        Ok(pages)
+    }
+
+    /// One page of a chapter: its offline copy, the cache, or the server.
+    fn chapter_page(&self, location: &VolumeLocation, page: usize) -> Result<Vec<u8>, DavError> {
+        // Being read: the managed server is in use.
+        if let Some(service) = self.suwayomi.get() {
+            service.touch();
+        }
+        if let Some(dir) = self.offline_dir(&location.id) {
+            if let Ok(entries) = std::fs::read_dir(dir.join("pages")) {
+                let prefix = format!("{page}.");
+                if let Some(entry) = entries.filter_map(Result::ok).find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix)) {
+                    if let Ok(bytes) = std::fs::read(entry.path()) {
+                        return Ok(bytes);
+                    }
+                }
+            }
+        }
+        let path = location.pages.get(page).ok_or(DavError::NotFound)?;
+        let key = key(&location.source_id, path, location.signature.as_deref(), "img");
+        if let Some(bytes) = self.cache.get(&key) {
+            return Ok(bytes);
+        }
+        let bytes = self.extensions()?.fetch_blocking(&location.source_id, path, MAX_ENTRY_BYTES)?;
+        self.cache.put(&key, &bytes);
+        Ok(bytes)
+    }
+
+    /// An image of an extensions server by its token (an icon, a
+    /// thumbnail), through the cache.
+    pub fn extension_image(&self, token: &str) -> Option<Vec<u8>> {
+        let service = self.suwayomi.get()?;
+        let (source_row, path) = service.image_path(token)?;
+        let key = key(&source_row, &path, None, "img");
+        if let Some(bytes) = self.cache.get(&key) {
+            return Some(bytes);
+        }
+        let bytes = service.fetch_blocking(&source_row, &path, MAX_ENTRY_BYTES).ok()?;
+        self.cache.put(&key, &bytes);
+        Some(bytes)
+    }
+
+    /// A series' cover on an extensions server (a server path), cached.
+    pub fn extension_cover(&self, source_row: &str, path: &str) -> Option<Vec<u8>> {
+        let key = key(source_row, path, None, "img");
+        if let Some(bytes) = self.cache.get(&key) {
+            return Some(bytes);
+        }
+        let bytes = self.suwayomi.get()?.fetch_blocking(source_row, path, MAX_ENTRY_BYTES).ok()?;
+        self.cache.put(&key, &bytes);
+        Some(bytes)
     }
 
     pub fn usage(&self) -> WebdavCacheUsage {

@@ -57,7 +57,7 @@ impl Auth {
         }
     }
 
-    fn apply(&self, request: RequestBuilder) -> RequestBuilder {
+    pub(crate) fn apply(&self, request: RequestBuilder) -> RequestBuilder {
         match self {
             Auth::None => request,
             Auth::Basic { username, password } => request.basic_auth(username, Some(password)),
@@ -91,6 +91,9 @@ pub enum DavError {
     Status(u16),
     #[error("{0}")]
     Other(String),
+    /// From the extensions server (`manga::suwayomi::graphql::SwError::code`).
+    #[error("extensions server: {0}")]
+    Extension(&'static str),
 }
 
 impl DavError {
@@ -106,6 +109,7 @@ impl DavError {
             DavError::Changed => "changed",
             DavError::Cancelled => "cancelled",
             DavError::InvalidUrl => "invalid-url",
+            DavError::Extension(code) => code,
             DavError::Status(_) | DavError::Other(_) => "error",
         }
     }

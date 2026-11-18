@@ -337,6 +337,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE manga_volumes ADD COLUMN cover TEXT",
     "ALTER TABLE manga_volumes ADD COLUMN layers_json TEXT",
     "ALTER TABLE manga_volumes ADD COLUMN size INTEGER",
+    // Series from extensions (see `manga::suwayomi`): adult by their source.
+    "ALTER TABLE manga_series ADD COLUMN source_adult INTEGER NOT NULL DEFAULT 0",
 ];
 
 #[derive(Debug, thiserror::Error)]

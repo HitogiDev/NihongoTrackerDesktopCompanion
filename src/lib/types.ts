@@ -12,6 +12,18 @@ import type { DictionarySummary } from './bindings/DictionarySummary';
 import type { DiscordDecision } from './bindings/DiscordDecision';
 import type { DiscordPresence } from './bindings/DiscordPresence';
 import type { DiscordReason } from './bindings/DiscordReason';
+import type { ExtAction } from './bindings/ExtAction';
+import type { ExtBrowse } from './bindings/ExtBrowse';
+import type { ExtBrowseKind } from './bindings/ExtBrowseKind';
+import type { ExtChapter } from './bindings/ExtChapter';
+import type { ExtComponent } from './bindings/ExtComponent';
+import type { ExtExtension } from './bindings/ExtExtension';
+import type { ExtInstall } from './bindings/ExtInstall';
+import type { ExtManga } from './bindings/ExtManga';
+import type { ExtMangaDetail } from './bindings/ExtMangaDetail';
+import type { ExtMode } from './bindings/ExtMode';
+import type { ExtSource } from './bindings/ExtSource';
+import type { ExtStatus } from './bindings/ExtStatus';
 import type { FilterPreview } from './bindings/FilterPreview';
 import type { HookerState } from './bindings/HookerState';
 import type { HookerStatus } from './bindings/HookerStatus';
@@ -70,6 +82,18 @@ import type { WebdavSyncProgress } from './bindings/WebdavSyncProgress';
 
 export type {
   AnimeSession,
+  ExtAction,
+  ExtBrowse,
+  ExtBrowseKind,
+  ExtChapter,
+  ExtComponent,
+  ExtExtension,
+  ExtInstall,
+  ExtManga,
+  ExtMangaDetail,
+  ExtMode,
+  ExtSource,
+  ExtStatus,
   BlacklistEntry,
   Capabilities,
   DictionaryEntry,

@@ -87,6 +87,10 @@ pub fn capabilities() -> Capabilities {
 
 pub fn shield_ctrl(_armed: bool, _blocking: bool) {}
 
+/// A child process with no window of its own. Nothing to do here: only
+/// Windows opens a console for a console program.
+pub fn hide_child_window(_command: &mut std::process::Command) {}
+
 /// WebKitGTK's DMA-BUF renderer fails to create its EGL display on many
 /// setups (NVIDIA, and the AppImage, whose bundled libraries are older than the
 /// system Mesa): "Could not create default EGL display: EGL_BAD_PARAMETER"

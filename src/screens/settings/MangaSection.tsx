@@ -12,6 +12,7 @@ import { useAppStore } from '../../store/useAppStore';
 import type { OcrEngine, OcrVariant, Settings } from '../../lib/types';
 import { OcrInstallModal } from '../manga/ocr/OcrInstallModal';
 import { OwocrSettings } from '../manga/ocr/OwocrSettings';
+import { ExtensionsSettings } from './ExtensionsSettings';
 import { isDownloading, OCR_QUERY, ocrErrorText, useOcrInstallStore, useOcrStatus } from '../manga/ocr/useOcr';
 
 const CACHE_SIZES_MB = [512, 1024, 2048, 5120, 10240, 20480];
@@ -281,6 +282,7 @@ export function MangaSection({ settings }: { settings: Settings }) {
         checked={settings.manga_ocr_auto}
         onChange={(v) => void updateSettings({ manga_ocr_auto: v })}
       />
+      <ExtensionsSettings settings={settings} />
     </div>
   );
 }

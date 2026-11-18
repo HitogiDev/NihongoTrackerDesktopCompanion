@@ -53,6 +53,10 @@ src-tauri/src/
     ocr/         OCR integrado (ONNX vía `ort`): assets (archivos y SHA-256),
                  download, engine, beam, text, layout, worker (cola), export;
                  owocr (cliente WebSocket del owocr del usuario + conversión)
+    suwayomi/    Extensiones vía Suwayomi-Server: assets (jar y JRE con SHA-256),
+                 install, process (arranque headless), graphql (cliente),
+                 catalog (lo que ve la UI, filtro adulto), library (series y
+                 capítulos en la biblioteca)
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -288,7 +292,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3, M4 y M5.
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3, M4, M5 y M6.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -386,7 +390,10 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   lista negra mira el `mediaId` y `manga:<serie>`; una serie sin vincular es
   `Unresolved` (su título es el nombre de una carpeta) y `is_adult` viaja en
   la sesión desde `manga_series.is_adult`. Nunca se publica la portada local.
-  Cuando haya fuentes con NSFW (M6), la serie se marca `is_adult` al añadirla.
+  Una serie de una fuente de extensión NSFW **o MIXED** se añade con
+  `is_adult` y `source_adult`, y vincularla no lo quita
+  (`link_manga_series` hace `MAX(?, source_adult)`; el comando relee el
+  valor antes de avisar a la sesión).
 - **WebDAV** (`manga/webdav/`, M3): mokuro-bunko o cualquier WebDAV. La
   fuente (`manga_sources.kind = 'webdav'`) guarda la URL sin credenciales; el
   `user:pass@` que se escriba en ella pasa a Basic. Las credenciales
@@ -549,8 +556,69 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `ocr::owocr::…reads_a_real_page_with_owocr` (`NTDC_OWOCR_PORT`,
   `NTDC_OCR_PAGE`, `NTDC_OCR_EXPECT`). Nunca guardes modelos ni runtime en
   el repo.
-- Sin hacer todavía (M6+): extensiones. El `share_activity`
-  (amigos inmersos) aún no incluye el manga.
+- **Extensiones** (`manga/suwayomi/`, M6): fuentes de Tachiyomi/Mihon
+  (tienda Keiyoushi) a través de Suwayomi-Server, en dos modos
+  (`manga_ext_mode`): **gestionado** o **URL propia**. Cada modo es una fila
+  de `manga_sources` (`suwayomi-managed`, `suwayomi-custom`, `kind =
+  'suwayomi'`) con sus credenciales en `auth_json` (Basic, como WebDAV);
+  `ExtStatus` no lleva URL, puerto ni credenciales (hay un test). Verificado
+  contra **v2.4.2366** (introspección del esquema, `ConfigModule.kt`,
+  `ApplicationRootDir.kt`, `ExtensionStoreMutation.kt`, `JavalinSetup.kt`).
+- **Gestionado**: nada se descarga ni arranca antes del diálogo
+  (`ExtInstallModal`: qué, tamaño, espacio, carpeta, licencias, que las
+  extensiones son código de terceros). `install.rs` baja el jar y el JRE de
+  Temurin de este SO/arquitectura (`platform::java_runtime_target`) con
+  `ocr::download::fetch` (reanudable, SHA-256 fijado en `assets.rs`, el del
+  JRE es el que publica Adoptium) y desempaqueta el JRE (zip en Windows,
+  tar.gz si no) por una carpeta temporal, rechazando rutas que salgan; `.ready`
+  lleva el checksum. Todo en `app_data_dir/suwayomi/` (`bin/`, `jre/`,
+  `data/` = `rootDir`, `server.log`). Actualizar la versión es un PR que
+  cambia `assets.rs`.
+- **Arranque** (`process.rs`): `-Dsuwayomi.tachidesk.config.server.<clave>`
+  manda sobre su `server.conf` (y `rootDir` solo se lee así): `ip=127.0.0.1`,
+  puerto libre al azar, `systemTrayEnabled`, `initialOpenInBrowserEnabled`,
+  `webUIEnabled` y `kcefEnabled` (sin Chromium) a `false`,
+  `authMode=BASIC_AUTH` con usuario y contraseña aleatorios,
+  `globalUpdateInterval=0`, `backupInterval=0`, `-Djava.awt.headless=true`,
+  `java.io.tmpdir` dentro de `data/`. Los argumentos van en un `@archivo`
+  (0600, se borra al responder) para que la contraseña no salga en la lista
+  de procesos; Suwayomi no la escribe en su `server.conf`. Sin ventana en
+  Windows (`platform::hide_child_window`, `CREATE_NO_WINDOW`). Espera a
+  `aboutServer` (hasta 180 s); un servidor que dejó un cierre brusco
+  (`server.pid`) se para antes. Se arranca solo al usar extensiones
+  (`Service::connect`, bajo un `tokio::Mutex`), se para tras
+  `manga_ext_idle_minutes` sin uso (hilo `suwayomi-idle`; servir una página
+  cuenta como uso), al cambiar de modo y en `RunEvent::Exit`.
+- **Tienda**: al arrancar el gestionado se añade Keiyoushi
+  (`addExtensionStore` con el `index.pb` que nombra su `repo.json`, y el de
+  `raw.githubusercontent.com` si GitHub no responde); a un servidor propio
+  solo si el usuario pulsa el botón. Los errores GraphQL llegan con 200 y una
+  traza en `errors[].message`: se registran y son `SwError::Server`, nunca
+  se enseñan.
+- **Lo que ve la UI** (`catalog.rs`): NSFW y MIXED se filtran **en Rust**
+  salvo `manga_ext_show_adult` (por defecto no), también al instalar,
+  explorar, abrir o añadir (`adult-hidden`). Imágenes por token opaco
+  (`manga://…/ext/<token>`, `Service::image_token`, uuid v5 de fila + ruta);
+  Rust solo pide rutas `/api/v1/…` del mismo servidor (`graphql::server_path`,
+  también para las páginas) y sin redirecciones.
+- **Biblioteca** (`library.rs`): serie = `manga_series` (`source =
+  'suwayomi'`, `source_ref` = id de Suwayomi), capítulo = volumen
+  `suwayomi-chapter` (`store::is_served_format`; `is_remote_format` sigue
+  siendo solo WebDAV, así que el progreso de Mokuro Reader y la exportación
+  `.mokuro` no los tocan). Ids: uuid v5 de fila + id. Las rutas de página
+  (`fetchChapterPages`) se guardan en `pages_json` al abrir el capítulo
+  (`Remote::ensure_index`); las páginas salen de la copia sin conexión, la
+  caché de WebDAV o el servidor (`Remote::chapter_page`). "Leer" un capítulo
+  añade la serie (la sesión necesita una para el log). Sesión, logs, minado
+  y OCR funcionan igual; el texto OCR se guarda por capítulo. "Descargar"
+  guarda las páginas en `manga/offline/<capítulo>/` (sin depender de que el
+  servidor siga, a diferencia de la descarga propia de Suwayomi).
+- Probar Suwayomi de verdad: `suwayomi::tests::runs_the_real_server`
+  (`#[ignore]`; `NTDC_SWY_DIR`, `NTDC_SWY_JAR`, `NTDC_SWY_JRE`,
+  `NTDC_SWY_EXT`, `NTDC_SWY_QUERY`). Nunca guardes el jar, el JRE ni sus
+  datos en el repo.
+- Sin hacer todavía: el `share_activity` (amigos inmersos) aún no incluye
+  el manga.
 
 ### Copia de seguridad
 
@@ -571,7 +639,8 @@ capturas no van dentro.
 `discord://status`, `updater://available`, `updater://progress`,
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
 `manga://session-ended`, `manga://webdav-sync`, `manga://download`,
-`manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`. Están
+`manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`,
+`manga://ext-status`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve
