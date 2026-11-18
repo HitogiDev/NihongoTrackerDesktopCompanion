@@ -73,6 +73,32 @@ foreach ($arch in @(
       throw "Visual Studio Ninja was not found at $vsNinja."
     }
     $configureArgs += @("-DCMAKE_CXX_COMPILER=$($compiler.Source)", "-DCMAKE_MAKE_PROGRAM=$vsNinja")
+    # With two Visual Studio installations CMake can pair this cl.exe with the
+    # other installation's link.exe, and the compiler check fails. Use the
+    # linker and librarian from the same toolset.
+    $clDir = Split-Path -Parent $compiler.Source
+    foreach ($tool in @(@{ Exe = 'link.exe'; Var = 'CMAKE_LINKER' }, @{ Exe = 'lib.exe'; Var = 'CMAKE_AR' })) {
+      $path = Join-Path $clDir $tool.Exe
+      if (Test-Path -LiteralPath $path -PathType Leaf) { $configureArgs += "-D$($tool.Var)=$($path -replace '\\', '/')" }
+    }
+    # The resource compiler and manifest tool come from the Windows SDK that
+    # VsDevCmd picked, which can be a partial preview SDK without them. Take
+    # the newest installed SDK that actually ships both.
+    $sdkBin = Join-Path $programFilesX86 'Windows Kits\10\bin'
+    if (Test-Path -LiteralPath $sdkBin) {
+      $sdkTools = Get-ChildItem -LiteralPath $sdkBin -Directory |
+        Where-Object { $_.Name -match '^10\.' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        ForEach-Object { Join-Path $_.FullName 'x64' } |
+        Where-Object { (Test-Path (Join-Path $_ 'rc.exe')) -and (Test-Path (Join-Path $_ 'mt.exe')) } |
+        Select-Object -First 1
+      if ($sdkTools) {
+        # Forward slashes: CMake writes these paths into .cmake files, where
+        # a backslash starts an escape sequence.
+        $sdkTools = $sdkTools -replace '\\', '/'
+        $configureArgs += @("-DCMAKE_RC_COMPILER=$sdkTools/rc.exe", "-DCMAKE_MT=$sdkTools/mt.exe")
+      }
+    }
   } else {
     $compilerName = if ($name -eq 'x64') { 'x86_64-w64-mingw32-g++.exe' } else { 'i686-w64-mingw32-g++.exe' }
     $compiler = Get-Command $compilerName -ErrorAction SilentlyContinue
