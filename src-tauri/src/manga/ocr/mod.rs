@@ -1,10 +1,12 @@
-//! The built-in OCR: text for manga pages that have none, read on this
-//! computer by ONNX models (see `engine`), on a thread of its own with a
-//! queue (see `worker`).
+//! The OCR: text for manga pages that have none, read on this computer by
+//! ONNX models (see `engine`) or, if the user chooses it, by owocr running
+//! on this computer (see `owocr`), on a thread of its own with a queue (see
+//! `worker`). Each job uses the engine chosen when it starts; owocr is never
+//! replaced by the built-in OCR (or the other way round) when it fails.
 //!
 //! What it reads is stored as `.mokuro` pages in `manga_page_text` (engine
-//! `builtin`), which `mokuro::volume_text` uses for the pages a `.mokuro`
-//! does not cover. The reader asks for the pages it shows when they have no
+//! `builtin` or `owocr`), which `mokuro::volume_text` uses for the pages a
+//! `.mokuro` does not cover. The reader asks for the pages it shows when they have no
 //! text; "process volume" queues every page without text.
 //!
 //! Events: `manga://ocr-status` (`OcrStatus`) whenever the engine or a
@@ -16,6 +18,7 @@ pub mod download;
 pub mod engine;
 pub mod export;
 pub mod layout;
+pub mod owocr;
 pub mod text;
 pub mod worker;
 
@@ -23,13 +26,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use self::assets::Variant;
 use self::worker::{OcrVolumeRun, Priority, Queue, Shared, Work};
 use super::mokuro::MokuroPage;
-use super::store::ENGINE_BUILTIN;
+use super::store::{ENGINE_BUILTIN, ENGINE_OWOCR};
 use crate::state::AppState;
 
 pub const STATUS_EVENT: &str = "manga://ocr-status";
@@ -37,10 +40,30 @@ pub const STATUS_EVENT: &str = "manga://ocr-status";
 pub const PROGRESS_EVENT: &str = "manga://ocr-progress";
 pub const PAGE_EVENT: &str = "manga://ocr-page";
 
+/// Which OCR reads pages (`Settings::manga_ocr_engine`).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum OcrEngine {
+    /// The ONNX models of `engine`, downloaded on demand.
+    #[default]
+    Builtin,
+    /// owocr, which the user installs and runs (see `owocr`).
+    Owocr,
+}
+
 /// The OCR as the UI shows it.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct OcrStatus {
+    /// The engine chosen in settings.
+    pub engine: OcrEngine,
+    /// The chosen engine can be asked for pages now without installing
+    /// anything: owocr, or the built-in OCR once installed. Whether owocr
+    /// really answers shows when it is asked (`error`).
+    pub ready: bool,
+    /// The chosen engine can run on this computer at all.
+    pub usable: bool,
     /// ONNX Runtime has a build for this computer.
     pub supported: bool,
     /// The runtime and the chosen variant's models are on disk.
@@ -246,12 +269,24 @@ impl Service {
         assets::all(variant).is_some_and(|assets| assets.iter().all(|asset| asset.present(&self.dir)))
     }
 
-    pub fn status(&self, variant: Variant) -> OcrStatus {
+    /// The chosen engine can be asked for pages (see `OcrStatus::ready`).
+    pub fn ready(&self, engine: OcrEngine, variant: Variant) -> bool {
+        match engine {
+            OcrEngine::Owocr => true,
+            OcrEngine::Builtin => self.installed(variant),
+        }
+    }
+
+    pub fn status(&self, engine: OcrEngine, variant: Variant) -> OcrStatus {
         let queue = self.shared.0.lock().unwrap();
         let mut runs: Vec<OcrVolumeRun> = queue.runs.values().cloned().collect();
         runs.sort_by(|a, b| a.title.cmp(&b.title));
+        let supported = assets::runtime().is_some();
         OcrStatus {
-            supported: assets::runtime().is_some(),
+            engine,
+            ready: self.ready(engine, variant),
+            usable: engine == OcrEngine::Owocr || supported,
+            supported,
             installed: self.installed(variant),
             variant,
             accelerator: crate::platform::ocr_accelerator().map(str::to_string),
@@ -279,11 +314,13 @@ impl Service {
         result
     }
 
-    /// The engine is dropped before the next page: its files changed.
+    /// The engine is dropped before the next page: its files, the variant or
+    /// the engine chosen changed.
     pub fn reload(&self) {
         self.with_queue(|queue| {
             queue.reload = true;
             queue.error = None;
+            queue.provider = None;
         });
     }
 
@@ -352,6 +389,22 @@ impl Service {
         answer.recv().map_err(|_| "error".to_string())?
     }
 
+    /// "Test connection": sends owocr on `port` a small image, through the
+    /// queue (after a region, before pages). Blocks until it answers or times
+    /// out: call it off the async runtime.
+    pub fn probe_owocr(&self, app: &AppHandle, port: u16) -> owocr::OwocrProbe {
+        self.ensure_thread(app);
+        let (reply, answer) = mpsc::channel();
+        self.with_queue(|queue| queue.push("", -1, Priority::Region, Work::Probe { port, reply }));
+        answer.recv().unwrap_or_else(|_| owocr::OwocrProbe {
+            url: format!("ws://127.0.0.1:{port}"),
+            ok: false,
+            code: "error".into(),
+            line_boxes: false,
+            millis: 0,
+        })
+    }
+
     /// Pages of a volume waiting in the queue, for the reader.
     pub fn queued_pages(&self, volume_id: &str) -> Vec<i64> {
         let queue = self.shared.0.lock().unwrap();
@@ -372,14 +425,31 @@ impl Service {
     }
 }
 
-fn variant(app: &AppHandle) -> Variant {
-    app.state::<AppState>().settings.try_read().map(|settings| settings.manga_ocr_variant).unwrap_or_default()
+/// What a job is read with, as settings say when it starts. Waits for the
+/// settings lock (this is the OCR thread, never the async runtime): falling
+/// back to a default would swap the engine the user chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Choice {
+    Builtin(Variant),
+    Owocr(u16),
+}
+
+fn choice(app: &AppHandle) -> Choice {
+    let state = app.state::<AppState>();
+    let settings = state.settings.blocking_read();
+    match settings.manga_ocr_engine {
+        OcrEngine::Builtin => Choice::Builtin(settings.manga_ocr_variant),
+        OcrEngine::Owocr => Choice::Owocr(settings.manga_owocr_port),
+    }
 }
 
 pub fn emit_status(app: &AppHandle) {
     let state = app.state::<AppState>();
     if let Some(service) = state.manga.ocr.get() {
-        let _ = app.emit(STATUS_EVENT, service.status(variant(app)));
+        let Ok(settings) = state.settings.try_read() else { return };
+        let status = service.status(settings.manga_ocr_engine, settings.manga_ocr_variant);
+        drop(settings);
+        let _ = app.emit(STATUS_EVENT, status);
     }
 }
 
@@ -390,66 +460,94 @@ fn set(shared: &Shared, f: impl FnOnce(&mut Queue)) {
 /// The OCR thread: takes jobs until the app closes.
 fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
     let mut engine: Option<engine::Engine> = None;
+    let mut owocr_client: Option<owocr::Client> = None;
     loop {
-        let job = match worker::next(shared, engine.is_none()) {
+        let job = match worker::next(shared, engine.is_none() && owocr_client.is_none()) {
             Ok(job) => job,
             Err(true) => return,
             Err(false) => {
-                // Nothing to do for a while: give the memory back.
+                // Nothing to do for a while: give the memory (and owocr's
+                // connection) back.
                 engine = None;
+                owocr_client = None;
                 set(shared, |queue| queue.provider = None);
                 emit_status(app);
                 continue;
             }
         };
+        if let Work::Probe { port, reply } = &job.work {
+            // Its own connection: the test is for the port typed in settings.
+            let probe = owocr::probe(*port, owocr::PROBE_TIMEOUT);
+            set(shared, |queue| queue.current = None);
+            let _ = reply.send(probe);
+            continue;
+        }
         let reload = std::mem::take(&mut shared.0.lock().unwrap().reload);
         if reload {
             engine = None;
+            owocr_client = None;
         }
-        if engine.is_none() {
-            set(shared, |queue| {
-                queue.loading = true;
-                queue.provider = None;
-            });
-            emit_status(app);
-            let loaded = engine::Engine::load(dir, variant(app));
-            match loaded {
-                Ok(loaded) => {
-                    let provider = loaded.provider.name();
-                    log::info!("OCR ready on {provider}");
-                    set(shared, |queue| {
-                        queue.loading = false;
-                        queue.provider = Some(provider);
-                        queue.error = None;
-                    });
-                    engine = Some(loaded);
+        let result = match choice(app) {
+            Choice::Owocr(port) => {
+                // The built-in engine is not used meanwhile: its memory goes.
+                engine = None;
+                if owocr_client.as_ref().is_some_and(|client| client.port() != port) {
+                    owocr_client = None;
                 }
-                Err(error) => {
-                    log::warn!("OCR did not load: {error}");
-                    // Nothing queued can be read: say so and empty the queue.
-                    let mut failed = vec![job];
+                let client = owocr_client.get_or_insert_with(|| owocr::Client::new(port, owocr::PAGE_TIMEOUT));
+                set(shared, |queue| queue.provider = Some("owocr"));
+                let result = read(app, &mut Recognizer::Owocr(client), &job);
+                match &result {
+                    Err(ReadError::Owocr(error)) if error.stops_queue() => {
+                        log::warn!("owocr: {error}");
+                        fail_queue(app, shared, job, error.code());
+                        continue;
+                    }
+                    Err(_) => {}
+                    // It answers: an earlier owocr error is over.
+                    Ok(_) => set(shared, |queue| queue.error = None),
+                }
+                result
+            }
+            Choice::Builtin(variant) => {
+                owocr_client = None;
+                if engine.is_none() {
                     set(shared, |queue| {
-                        queue.loading = false;
-                        queue.error = Some(error.clone());
-                        queue.current = None;
-                        queue.runs.clear();
-                        failed.extend(std::iter::from_fn(|| queue.pop()));
+                        queue.loading = true;
+                        queue.provider = None;
                     });
-                    for job in failed {
-                        finish(app, &job, Err(error.clone()));
+                    emit_status(app);
+                    match engine::Engine::load(dir, variant) {
+                        Ok(loaded) => {
+                            let provider = loaded.provider.name();
+                            log::info!("OCR ready on {provider}");
+                            set(shared, |queue| {
+                                queue.loading = false;
+                                queue.provider = Some(provider);
+                                queue.error = None;
+                            });
+                            engine = Some(loaded);
+                        }
+                        Err(error) => {
+                            log::warn!("OCR did not load: {error}");
+                            set(shared, |queue| queue.loading = false);
+                            fail_queue(app, shared, job, &error);
+                            continue;
+                        }
                     }
                     emit_status(app);
-                    continue;
                 }
+                let engine_ref = engine.as_mut().expect("loaded above");
+                let result = read(app, &mut Recognizer::Builtin(engine_ref), &job);
+                // The accelerator may have given way to the CPU.
+                let provider = engine_ref.provider.name();
+                set(shared, |queue| queue.provider = Some(provider));
+                result
             }
-            emit_status(app);
-        }
-        let engine_ref = engine.as_mut().expect("loaded above");
-        let result = read(app, engine_ref, &job);
+        };
+        let result = result.map_err(|error| error.to_string());
         set(shared, |queue| {
             queue.current = None;
-            // The accelerator may have given way to the CPU.
-            queue.provider = Some(engine_ref.provider.name());
             if let Some(run) = queue.runs.get_mut(&job.volume_id).filter(|_| job.priority == Priority::Volume) {
                 match &result {
                     Ok(_) => run.done += 1,
@@ -473,37 +571,136 @@ fn run(app: &AppHandle, shared: &Shared, dir: &Path) {
     }
 }
 
+/// Nothing queued can be read (the engine did not load, owocr is not there):
+/// say so once and empty the queue, instead of failing page after page.
+fn fail_queue(app: &AppHandle, shared: &Shared, job: worker::Job, error: &str) {
+    let mut failed = vec![job];
+    set(shared, |queue| {
+        queue.error = Some(error.to_string());
+        queue.current = None;
+        queue.runs.clear();
+        failed.extend(queue.take_reads());
+    });
+    for job in failed {
+        finish(app, &job, Err(error.to_string()));
+    }
+    emit_status(app);
+}
+
 /// What a job produced: a page's text, or a region's.
 enum Read {
     Page(Option<MokuroPage>),
     Region(String),
 }
 
-fn read(app: &AppHandle, engine: &mut engine::Engine, job: &worker::Job) -> Result<Read, String> {
+/// The engine a job is read with.
+enum Recognizer<'a> {
+    Builtin(&'a mut engine::Engine),
+    Owocr(&'a mut owocr::Client),
+}
+
+enum ReadError {
+    Other(String),
+    Owocr(owocr::OwocrError),
+}
+
+impl std::fmt::Display for ReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadError::Other(error) => f.write_str(error),
+            ReadError::Owocr(error) => f.write_str(error.code()),
+        }
+    }
+}
+
+fn other(error: impl ToString) -> ReadError {
+    ReadError::Other(error.to_string())
+}
+
+impl From<&str> for ReadError {
+    fn from(error: &str) -> Self {
+        ReadError::Other(error.to_string())
+    }
+}
+
+impl From<String> for ReadError {
+    fn from(error: String) -> Self {
+        ReadError::Other(error)
+    }
+}
+
+/// What owocr is sent for a box the user drew: the box with a wide margin
+/// (its detector misses text that touches the edge of the image), as a PNG
+/// of its own, and where the box is inside it, to keep only its lines.
+struct Crop {
+    png: Vec<u8>,
+    size: (u32, u32),
+    /// The drawn box, in the crop's pixels.
+    inside: [f64; 4],
+}
+
+/// `None` when the box is empty or off the page.
+fn crop_png(image: &image::DynamicImage, bbox: [f64; 4]) -> Option<Crop> {
+    let (w, h) = (f64::from(image.width()), f64::from(image.height()));
+    if bbox.iter().any(|v| !v.is_finite()) || (bbox[2] - bbox[0]).abs() < 2.0 || (bbox[3] - bbox[1]).abs() < 2.0 {
+        return None;
+    }
+    let margin = (0.25 * (bbox[2] - bbox[0]).abs().max((bbox[3] - bbox[1]).abs())).max(24.0);
+    let x1 = (bbox[0].min(bbox[2]) - margin).clamp(0.0, w).floor();
+    let y1 = (bbox[1].min(bbox[3]) - margin).clamp(0.0, h).floor();
+    let x2 = (bbox[0].max(bbox[2]) + margin).clamp(0.0, w).ceil();
+    let y2 = (bbox[1].max(bbox[3]) + margin).clamp(0.0, h).ceil();
+    if x2 - x1 < 2.0 || y2 - y1 < 2.0 {
+        return None;
+    }
+    let crop = image.crop_imm(x1 as u32, y1 as u32, (x2 - x1) as u32, (y2 - y1) as u32);
+    let mut png = std::io::Cursor::new(Vec::new());
+    crop.write_to(&mut png, image::ImageFormat::Png).ok()?;
+    let inside = [bbox[0].min(bbox[2]) - x1, bbox[1].min(bbox[3]) - y1, bbox[0].max(bbox[2]) - x1, bbox[1].max(bbox[3]) - y1];
+    Some(Crop { png: png.into_inner(), size: (crop.width(), crop.height()), inside })
+}
+
+fn read(app: &AppHandle, recognizer: &mut Recognizer, job: &worker::Job) -> Result<Read, ReadError> {
     let state = app.state::<AppState>();
-    if matches!(job.work, Work::Page) && state.db.manga_page_text_engine(&job.volume_id, job.page).map_err(|e| e.to_string())?.is_some() {
+    if matches!(job.work, Work::Page) && state.db.manga_page_text_engine(&job.volume_id, job.page).map_err(other)?.is_some() {
         // Read already (or corrected by hand): nothing to redo.
         return Ok(Read::Page(None));
     }
-    let location = state.db.manga_volume_location(&job.volume_id).map_err(|e| e.to_string())?.ok_or("not-found")?;
+    let location = state.db.manga_volume_location(&job.volume_id).map_err(other)?.ok_or("not-found")?;
     let index = usize::try_from(job.page).map_err(|_| "not-found")?;
     let name = location.pages.get(index).ok_or("not-found")?.clone();
     let remote = state.manga.remote();
     let bytes = super::protocol::page_bytes(remote.as_deref(), &location, index).ok_or("unreadable")?;
-    let image = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+    let image = image::load_from_memory(&bytes).map_err(other)?;
     match &job.work {
         Work::Page => {
-            let page = engine.recognize_page(&image, &name)?;
-            let json = serde_json::to_string(&page).map_err(|e| e.to_string())?;
+            let (page, tag) = match recognizer {
+                Recognizer::Builtin(engine) => (engine.recognize_page(&image, &name)?, ENGINE_BUILTIN),
+                // The page as it is: every format the library reads, Pillow
+                // opens too.
+                Recognizer::Owocr(client) => {
+                    let result = client.recognize(&bytes, (image.width(), image.height())).map_err(ReadError::Owocr)?;
+                    (owocr::to_page(&result, &name), ENGINE_OWOCR)
+                }
+            };
+            let json = serde_json::to_string(&page).map_err(other)?;
             let had_text = state.db.manga_volume(&job.volume_id).ok().flatten().is_some_and(|volume| volume.ocr_state != "none");
-            state.db.set_manga_page_text(&job.volume_id, job.page, &json, ENGINE_BUILTIN).map_err(|e| e.to_string())?;
+            state.db.set_manga_page_text(&job.volume_id, job.page, &json, tag).map_err(other)?;
             if !had_text {
                 // The volume has text now: the library shows it.
                 let _ = app.emit(super::library::LIBRARY_CHANGED, ());
             }
             Ok(Read::Page(Some(page)))
         }
-        Work::Region { bbox, .. } => engine.recognize_box(&image, *bbox).map(Read::Region),
+        Work::Region { bbox, .. } => match recognizer {
+            Recognizer::Builtin(engine) => Ok(Read::Region(engine.recognize_box(&image, *bbox)?)),
+            Recognizer::Owocr(client) => {
+                let crop = crop_png(&image, *bbox).ok_or("bad-box")?;
+                let result = client.recognize(&crop.png, crop.size).map_err(ReadError::Owocr)?;
+                Ok(Read::Region(owocr::to_text(&result, crop.inside)))
+            }
+        },
+        Work::Probe { .. } => Err(ReadError::Other("error".into())),
     }
 }
 
@@ -573,4 +770,28 @@ pub fn save_edited_page(app: &AppHandle, volume_id: &str, page: i64, image: (f64
     let _ = app.emit(PAGE_EVENT, OcrPage { volume_id: volume_id.to_string(), page, ok: true });
     let _ = app.emit(super::library::LIBRARY_CHANGED, ());
     Ok(edited)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drawn_box_goes_to_owocr_as_its_own_png_with_a_margin() {
+        let page = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(400, 600, image::Rgb([255, 255, 255])));
+        // Drawn from bottom right to top left.
+        let crop = crop_png(&page, [300.0, 300.0, 200.0, 100.0]).unwrap();
+        // 100 × 200 plus a quarter of 200 on every side.
+        assert_eq!(crop.size, (200, 300));
+        assert_eq!(crop.inside, [50.0, 50.0, 150.0, 250.0]);
+        let decoded = image::load_from_memory(&crop.png).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), crop.size);
+        // At the edge: cut to the page, at least 24 px around.
+        let edge = crop_png(&page, [380.0, 0.0, 400.0, 50.0]).unwrap();
+        assert_eq!(edge.size, (44, 74));
+        assert_eq!(edge.inside, [24.0, 0.0, 44.0, 50.0]);
+        assert!(crop_png(&page, [10.0, 10.0, 10.5, 10.5]).is_none());
+        assert!(crop_png(&page, [f64::NAN, 0.0, 10.0, 10.0]).is_none());
+        assert!(crop_png(&page, [500.0, 700.0, 600.0, 800.0]).is_none());
+    }
 }

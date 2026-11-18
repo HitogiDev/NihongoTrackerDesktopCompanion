@@ -21,6 +21,9 @@ fn d_manga_dwell() -> u64 {
 fn d_manga_idle_log() -> u64 {
     10
 }
+fn d_owocr_port() -> u16 {
+    crate::manga::ocr::owocr::DEFAULT_PORT
+}
 fn d_manga_webdav_cache() -> u64 {
     crate::manga::webdav::cache::DEFAULT_LIMIT_MB
 }
@@ -176,6 +179,13 @@ pub struct Settings {
     /// is installed.
     #[serde(default = "d_true")]
     pub manga_ocr_auto: bool,
+    /// Which OCR reads pages without text: the built-in one, or owocr
+    /// running on this computer (`manga::ocr::owocr`).
+    #[serde(default)]
+    pub manga_ocr_engine: crate::manga::ocr::OcrEngine,
+    /// owocr's `websocket_port`. Always on 127.0.0.1.
+    #[serde(default = "d_owocr_port")]
+    pub manga_owocr_port: u16,
     #[serde(default = "d_anki_deck")]
     pub anki_deck: String,
     #[serde(default = "d_anki_model")]
@@ -342,6 +352,8 @@ impl Default for Settings {
             manga_webdav_sync_progress: false,
             manga_ocr_variant: Default::default(),
             manga_ocr_auto: true,
+            manga_ocr_engine: Default::default(),
+            manga_owocr_port: d_owocr_port(),
             anki_deck: d_anki_deck(),
             anki_model: d_anki_model(),
             anki_field_sources: d_anki_field_sources(),

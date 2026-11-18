@@ -406,6 +406,7 @@ pub fn run() {
             commands::manga_session_state,
             commands::manga_mine_block,
             commands::manga_ocr_status,
+            commands::manga_owocr_test,
             commands::manga_ocr_read_pages,
             commands::manga_ocr_process_volume,
             commands::manga_ocr_cancel_volume,

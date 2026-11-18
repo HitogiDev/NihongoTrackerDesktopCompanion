@@ -51,7 +51,8 @@ src-tauri/src/
                  sync (listado a la biblioteca), cache (LRU), ranged (CBZ por
                  rangos como Read+Seek), remote (de dónde sale cada archivo, descargas)
     ocr/         OCR integrado (ONNX vía `ort`): assets (archivos y SHA-256),
-                 download, engine, beam, text, layout, worker (cola), export
+                 download, engine, beam, text, layout, worker (cola), export;
+                 owocr (cliente WebSocket del owocr del usuario + conversión)
 packages/
   yomitan-content/  Renderer de structured content de Yomitan (TS), compartido
                     con el Frontend web. Sin Tauri dentro
@@ -287,7 +288,7 @@ Lo que hay que saber antes de tocarlo:
 
 Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 `src/screens/manga/`. El plan completo (WebDAV, OCR, Suwayomi) está en
-`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3 y M4.
+`docs/plan-lector-manga.md`; hoy existen las fases M0, M1, M2, M3, M4 y M5.
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
@@ -504,11 +505,51 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   permiso de escritura el error es `read-only`. Conserva título y uuids de un
   `.mokuro` previo y recuerda el `volume_uuid` para el progreso de Mokuro
   Reader. Reemplazar exige una segunda confirmación.
+- **owocr como motor** (`ocr/owocr.rs`, M5; Ajustes → Lector de manga →
+  Motor de OCR: Integrado · owocr, `manga_ocr_engine`, `manga_owocr_port`).
+  owocr (AuroraWright/owocr, GPL-3.0) es un programa que el usuario instala
+  y arranca: la app **no** lo instala, no lo empaqueta ni copia su código;
+  solo le habla por WebSocket, siempre a `127.0.0.1` (owocr escucha en
+  `0.0.0.0`, pero las páginas nunca van a otra máquina). Protocolo
+  verificado en owocr 1.26.8 (`run.py`: `WebsocketServerThread`,
+  `OutputResult`; `ocr.py`: `OcrResult`): con `read_from=websocket
+  write_to=websocket output_format=json` (puerto 7331), un mensaje binario
+  es una imagen; contesta `True` al que la mandó (`False` en pausa) y el
+  resultado, `json.dumps(asdict(OcrResult))`, va a **todos** los clientes,
+  sin id. Si el motor falla no manda nada. Con `output_format=json` owocr
+  se salta los motores sin coordenadas (`mangaocr`; `mangaocrs` sí las da);
+  en modo texto el resultado es texto plano.
+- Por eso **una petición en vuelo cada vez**: todo pasa por la cola del
+  worker (también "Probar conexión", `Work::Probe`), se vacía lo que llegó
+  antes de mandar, un resultado solo cuenta tras nuestro `True` y si su
+  `image_properties` mide lo que nuestra imagen; lo demás se descarta.
+  Timeout (60 s la página, 20 s la prueba) y, tras cualquier error, la
+  conexión se tira para que un resultado tardío no caiga en la siguiente.
+  Errores como códigos: `owocr-unavailable`, `-paused`, `-timeout`,
+  `-no-coordinates` (llegó texto), `-bad-reply`. Salvo el timeout, vacían
+  la cola con el error en `OcrStatus.error`, que la UI avisa una vez
+  (`useOcrStatus`). **Nunca se cae al integrado** si owocr falla: el motor
+  de cada trabajo es el de los ajustes al empezarlo (`choice`, con
+  `blocking_read`, no un valor por defecto).
+- Conversión (`to_page`, pura): un párrafo = un bloque, cada línea con sus
+  cuatro esquinas en píxeles (la rotación se deshace en píxeles, como owocr
+  la construye en `quad_to_bounding_box`), dirección del párrafo, de sus
+  líneas o de su forma, columnas de derecha a izquierda, el orden de
+  `layout::reading_order` y el `post_process` de manga-ocr. Se guarda con
+  engine `owocr`; las correcciones (`manual`) siguen ganando. La caja
+  dibujada va recortada con margen (su detector pierde lo que toca el
+  borde) y solo cuentan las líneas con el centro dentro (`to_text`).
+- `OcrStatus` lleva `engine`, `ready` (owocr, o el integrado instalado) y
+  `usable`: la UI usa esos dos, no `installed`/`supported`, para pedir
+  páginas. Con owocr no hay diálogo de descarga.
 - Probar el OCR de verdad: los tests `#[ignore]`
-  `ocr::download::…downloads_the_real_files` (`NTDC_OCR_FETCH_DIR`) y
+  `ocr::download::…downloads_the_real_files` (`NTDC_OCR_FETCH_DIR`),
   `ocr::engine::…reads_a_real_page` (`NTDC_OCR_DIR`, `NTDC_OCR_PAGE`,
-  `NTDC_OCR_EXPECT`). Nunca guardes modelos ni runtime en el repo.
-- Sin hacer todavía (M5+): owocr, extensiones. El `share_activity`
+  `NTDC_OCR_EXPECT`) y, con un owocr arrancado a mano,
+  `ocr::owocr::…reads_a_real_page_with_owocr` (`NTDC_OWOCR_PORT`,
+  `NTDC_OCR_PAGE`, `NTDC_OCR_EXPECT`). Nunca guardes modelos ni runtime en
+  el repo.
+- Sin hacer todavía (M6+): extensiones. El `share_activity`
   (amigos inmersos) aún no incluye el manga.
 
 ### Copia de seguridad

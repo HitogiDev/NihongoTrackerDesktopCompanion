@@ -38,10 +38,12 @@ pub fn is_remote_format(format: &str) -> bool {
 
 // `manga_volumes.ocr_state` is `none` (no text), `mokuro` (a `.mokuro` file
 // next to the volume, set by `apply_manga_scan`) or `ocr` (no `.mokuro`, but
-// pages read by the built-in OCR or written by hand: `manga_page_text`).
+// pages read by the built-in OCR or owocr, or written by hand: `manga_page_text`).
 
 /// `manga_page_text.engine` of the built-in OCR.
 pub const ENGINE_BUILTIN: &str = "builtin";
+/// `manga_page_text.engine` of a page read by owocr (`manga::ocr::owocr`).
+pub const ENGINE_OWOCR: &str = "owocr";
 /// `manga_page_text.engine` of a page the user corrected: it wins over the
 /// `.mokuro` too.
 pub const ENGINE_MANUAL: &str = "manual";

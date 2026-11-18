@@ -236,7 +236,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   // ── OCR ────────────────────────────────────────────────────────────
   // Pages on screen without text are read as soon as they show (and the next
-  // ones after them), when the OCR is installed and the user wants it so.
+  // ones after them), when the OCR is ready (owocr chosen, or the built-in
+  // one installed) and the user wants it so.
   const ocr = useOcrStatus().data;
   const autoOcr = useAppStore((s) => s.settings?.manga_ocr_auto ?? true);
   const showInstall = useOcrInstallStore((s) => s.show);
@@ -260,11 +261,11 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   }, [missing, volume.id]);
   const shownKey = shownPages.join(',');
   useEffect(() => {
-    if (!ocr?.installed || !autoOcr || !textLoaded) return;
+    if (!ocr?.ready || !autoOcr || !textLoaded) return;
     const last = shownPages.length > 0 ? Math.max(...shownPages) : -1;
     const ahead = Array.from({ length: vertical ? 2 : 4 }, (_, offset) => last + 1 + offset);
     readPages(shownPages, ahead);
-  }, [ocr?.installed, autoOcr, textLoaded, shownKey, vertical, readPages]);
+  }, [ocr?.ready, autoOcr, textLoaded, shownKey, vertical, readPages]);
   useEffect(() => {
     const off = listen<OcrPage>(events.mangaOcrPage, ({ payload }) => {
       if (payload.volume_id !== volume.id) return;
@@ -556,7 +557,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
             const vertical = box[3] - box[1] > box[2] - box[0];
             editPage(pageIndex, (blocks) => [...blocks, { box, vertical, text: '' }]);
             setSelection({ page: pageIndex, block: fresh });
-            if (ocr?.installed) void recognize(pageIndex, fresh, box);
+            if (ocr?.ready) void recognize(pageIndex, fresh, box);
           }}
         />
       );
@@ -633,13 +634,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
               <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
               {t('ocr.reading')}
             </span>
-          ) : shownWithoutText && !editing && ocr?.supported ? (
+          ) : shownWithoutText && !editing && ocr?.usable ? (
             <Button
               appearance="ghost"
               size="sm"
-              title={ocr.installed ? t('ocr.readPageHint') : t('ocr.installHint')}
+              title={ocr.ready ? t('ocr.readPageHint') : t('ocr.installHint')}
               onClick={() => {
-                if (!ocr.installed) {
+                if (!ocr.ready) {
                   showInstall();
                   return;
                 }
@@ -687,7 +688,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           dirty={dirtyPages.length > 0}
           saving={savingEdits}
           recognizing={recognizing}
-          canRecognize={Boolean(ocr?.installed) && selectedBlock !== null}
+          canRecognize={Boolean(ocr?.ready) && selectedBlock !== null}
           onChange={(patch) => {
             if (!selection || selection.block === null) return;
             const { page: index, block } = selection;

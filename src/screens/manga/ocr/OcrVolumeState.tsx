@@ -48,9 +48,9 @@ export function OcrVolumeState({ volume, status, disabled }: { volume: MangaVolu
     <Button
       appearance="ghost"
       size="sm"
-      disabled={disabled || status?.supported === false}
-      title={status?.installed ? t('ocr.volume.processHint') : t('ocr.volume.installHint')}
-      onClick={() => void processVolume(volume.id, Boolean(status?.installed))}
+      disabled={disabled || status?.usable === false}
+      title={status?.ready ? t('ocr.volume.processHint') : t('ocr.volume.installHint')}
+      onClick={() => void processVolume(volume.id, Boolean(status?.ready))}
     >
       <ScanText className={`h-4 w-4 ${MANGA.color}`} />
       <span className="hidden sm:inline">{t('ocr.volume.process')}</span>

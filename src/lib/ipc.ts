@@ -23,6 +23,7 @@ import type {
   EditedBlock,
   OcrExport,
   OcrStatus,
+  OwocrProbe,
   ReaderPrefs,
   ReaderTarget,
   ReaderVolume,
@@ -294,9 +295,11 @@ export const ipc = {
   /** Mines a text block, with the panel around it as the card's picture. */
   mangaMineBlock: (volumeId: string, page: number, block: number) =>
     invoke<MinedSentence>('manga_mine_block', { volumeId, page, block }),
-  // built-in OCR (`manga::ocr`)
+  // OCR (`manga::ocr`): the built-in one or owocr, as settings choose
   mangaOcrStatus: () => invoke<OcrStatus>('manga_ocr_status'),
-  /** Reads pages without text: `visible` first, `ahead` after. Rejects with `not-installed`. */
+  /** "Test connection": a small image to owocr on `port` of this computer. Rejects with `bad-port`. */
+  mangaOwocrTest: (port: number) => invoke<OwocrProbe>('manga_owocr_test', { port }),
+  /** Reads pages without text: `visible` first, `ahead` after. Rejects with `not-installed` (built-in OCR not downloaded). */
   mangaOcrReadPages: (volumeId: string, visible: number[], ahead: number[]) =>
     invoke<void>('manga_ocr_read_pages', { volumeId, visible, ahead }),
   /** Queues every page of a volume without text; resolves with how many. */

@@ -9,8 +9,9 @@ import { ipc } from '../../lib/ipc';
 import { formatBytes } from '../../lib/manga';
 import { toast } from '../../store/useToastStore';
 import { useAppStore } from '../../store/useAppStore';
-import type { OcrVariant, Settings } from '../../lib/types';
+import type { OcrEngine, OcrVariant, Settings } from '../../lib/types';
 import { OcrInstallModal } from '../manga/ocr/OcrInstallModal';
+import { OwocrSettings } from '../manga/ocr/OwocrSettings';
 import { isDownloading, OCR_QUERY, ocrErrorText, useOcrInstallStore, useOcrStatus } from '../manga/ocr/useOcr';
 
 const CACHE_SIZES_MB = [512, 1024, 2048, 5120, 10240, 20480];
@@ -77,6 +78,50 @@ function WebdavCache({ settings }: { settings: Settings }) {
         ) : null}
       </Field>
     </div>
+  );
+}
+
+const OCR_ENGINES: OcrEngine[] = ['builtin', 'owocr'];
+
+/** Which OCR reads pages: the built-in one or owocr, each with its settings. */
+function OcrEngineSettings({ settings }: { settings: Settings }) {
+  const { t } = useTranslation('settings');
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const queryClient = useQueryClient();
+  const status = useOcrStatus().data;
+  const engine = settings.manga_ocr_engine;
+  return (
+    <>
+      <div className="p-3">
+        <Field label={t('manga.ocrEngine')} hint={t(engine === 'owocr' ? 'manga.ocrEngineOwocrHint' : 'manga.ocrEngineBuiltinHint')}>
+          <div className="join flex flex-wrap" role="radiogroup" aria-label={t('manga.ocrEngine')}>
+            {OCR_ENGINES.map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={engine === option}
+                className={engine === option ? 'join-item btn btn-primary btn-sm' : 'join-item btn btn-outline btn-sm'}
+                onClick={async () => {
+                  if (option === engine) return;
+                  await updateSettings({ manga_ocr_engine: option });
+                  await queryClient.invalidateQueries({ queryKey: OCR_QUERY });
+                }}
+              >
+                {t(`manga.ocrEngines.${option}`)}
+              </button>
+            ))}
+          </div>
+        </Field>
+      </div>
+      {engine === 'owocr' ? (
+        <div className="p-3">
+          <OwocrSettings settings={settings} status={status} />
+        </div>
+      ) : (
+        <OcrSettings settings={settings} />
+      )}
+    </>
   );
 }
 
@@ -229,7 +274,7 @@ export function MangaSection({ settings }: { settings: Settings }) {
         onChange={(v) => void updateSettings({ manga_webdav_sync_progress: v })}
       />
       <WebdavCache settings={settings} />
-      <OcrSettings settings={settings} />
+      <OcrEngineSettings settings={settings} />
       <Toggle
         label={t('manga.ocrAuto')}
         description={t('manga.ocrAutoHint')}
