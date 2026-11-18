@@ -658,10 +658,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `NTDC_SWY_EXT`, `NTDC_SWY_QUERY`). Nunca guardes el jar, el JRE ni sus
   datos en el repo.
 - **Amigos inmersos** (`share_activity`, `sync::immersion_presence`, pura y
-  con tests): el manga va tras la VN y antes del vídeo, con la misma política
-  que Discord (`discord::manga_privacy`): lista negra = nada, adulta o sin
-  vincular = solo "Inmersión en japonés". La lista negra se aplica aunque
-  Discord esté apagado.
+  con tests): VN, luego manga, luego vídeo, cada uno con la misma política
+  que Discord (`discord::vn_privacy`, `manga_privacy`, `anime_privacy`, que
+  `decide` también usa): lista negra = nada, adulta (o portada adulta en una
+  VN), sin vincular o modo genérico = solo "Inmersión en japonés". La lista
+  negra se aplica aunque Discord esté apagado.
 - Un servidor que rechaza las credenciales (`last_error = 'unauthorized'`)
   cuenta como uno caído en la ficha (`unreachableReason`): "Leer" solo ofrece
   lo descargado y el aviso dice por qué. Los contadores pasan por

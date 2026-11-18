@@ -28,22 +28,35 @@ pub fn immersion_presence(snapshot: &crate::state::TrackerSnapshot, settings: &c
         return json!({"sharing": false, "active": false});
     }
     let inactive = json!({"sharing": true, "active": false});
+    // The same policy as Discord for every kind of session: a blacklisted work
+    // shares nothing, an adult or unresolved one only says "immersing".
+    let title_for = |reason: crate::discord::Reason, title: &str| {
+        if reason == crate::discord::Reason::Full {
+            title.to_string()
+        } else {
+            crate::i18n::discord_generic(&settings.language).to_string()
+        }
+    };
     let current = if let Some(session) = snapshot.vn.as_ref().filter(|session| session.counting) {
-        Some((session.media_title.clone(), session.media_type.clone(), session.started_at.clone(), session.elapsed_secs))
+        match crate::discord::vn_privacy(session, settings, blacklist) {
+            Err(_) => return inactive,
+            Ok(reason) => Some((title_for(reason, &session.media_title), session.media_type.clone(), session.started_at.clone(), session.elapsed_secs)),
+        }
     } else if let Some(manga) = snapshot.manga.as_ref().filter(|session| session.counting) {
         match crate::discord::manga_privacy(manga, settings, blacklist) {
             Err(_) => return inactive,
+            Ok(reason) => Some((title_for(reason, manga.title()), "manga".to_string(), manga.started_at.clone(), manga.elapsed_secs)),
+        }
+    } else if let Some(session) = snapshot.anime.as_ref().filter(|session| !session.paused && session.media.is_some()) {
+        match crate::discord::anime_privacy(session, settings, blacklist) {
+            Err(_) => return inactive,
             Ok(reason) => {
-                let title = if reason == crate::discord::Reason::Full {
-                    manga.title().to_string()
-                } else {
-                    crate::i18n::discord_generic(&settings.language).to_string()
-                };
-                Some((title, "manga".to_string(), manga.started_at.clone(), manga.elapsed_secs))
+                let title = session.media.as_ref().map(|media| media.title.as_str()).unwrap_or_default();
+                Some((title_for(reason, title), "anime".to_string(), session.started_at.clone(), session.elapsed_secs))
             }
         }
     } else {
-        snapshot.anime.as_ref().filter(|session| !session.paused).and_then(|session| session.media.as_ref().map(|media| (media.title.clone(), "anime".to_string(), session.started_at.clone(), session.elapsed_secs)))
+        None
     };
     match current {
         Some((title, media_type, started_at, elapsed)) => json!({"sharing": true, "active": true, "mediaTitle": title, "mediaType": media_type, "startedAt": started_at, "elapsedSeconds": elapsed}),
@@ -575,7 +588,7 @@ mod anki_url_tests {
 mod presence_tests {
     use super::immersion_presence;
     use crate::config::Settings;
-    use crate::discord::tests::{entry, manga};
+    use crate::discord::tests::{entry, manga, vn};
     use crate::state::TrackerSnapshot;
 
     fn sharing() -> Settings {
@@ -613,6 +626,33 @@ mod presence_tests {
         for (snapshot, key) in [(reading(Some("30104"), false), "30104"), (reading(None, true), "manga:ser-1")] {
             let payload = immersion_presence(&snapshot, &sharing(), &[entry(key, "media")]);
             assert_eq!(payload, serde_json::json!({"sharing": true, "active": false}));
+        }
+    }
+
+    fn playing(is_adult: bool) -> TrackerSnapshot {
+        TrackerSnapshot { vn: Some(vn(is_adult)), ..Default::default() }
+    }
+
+    #[test]
+    fn a_novel_follows_the_same_policy_as_discord() {
+        let full = immersion_presence(&playing(false), &sharing(), &[]);
+        assert_eq!(full["mediaTitle"], "蒼の彼方のフォーリズム");
+        assert_eq!(full["mediaType"], "vn");
+
+        let adult = immersion_presence(&playing(true), &sharing(), &[]);
+        assert_eq!(adult["active"], true);
+        assert_eq!(adult["mediaTitle"], crate::i18n::discord_generic("en"));
+
+        let mut adult_cover = playing(false);
+        adult_cover.vn.as_mut().unwrap().is_adult_image = Some(true);
+        assert_eq!(immersion_presence(&adult_cover, &sharing(), &[])["mediaTitle"], crate::i18n::discord_generic("en"));
+
+        let generic = Settings { discord_generic_mode: true, ..sharing() };
+        assert_eq!(immersion_presence(&playing(false), &generic, &[])["mediaTitle"], crate::i18n::discord_generic("en"));
+
+        for key in ["v18", "aokana.exe"] {
+            let blocked = immersion_presence(&playing(false), &sharing(), &[entry(key, "media")]);
+            assert_eq!(blocked, serde_json::json!({"sharing": true, "active": false}));
         }
     }
 

@@ -111,6 +111,16 @@ fn msvc_command(program: &Path, target: &str, msvc: bool, configure: bool) -> Co
             if configure {
                 command.arg(format!("-DCMAKE_C_COMPILER={}", tool.path().display()));
                 command.arg(format!("-DCMAKE_CXX_COMPILER={}", tool.path().display()));
+                // The linker and librarian from the same toolset as cl.exe. Left
+                // to itself CMake takes the first link.exe it finds, and on a
+                // machine with two MSVC toolsets that one can belong to the
+                // other version, which fails the compiler check.
+                for (name, variable) in [("link.exe", "CMAKE_LINKER"), ("lib.exe", "CMAKE_AR")] {
+                    let sibling = tool.path().with_file_name(name);
+                    if sibling.is_file() {
+                        command.arg(format!("-D{variable}={}", sibling.display()));
+                    }
+                }
             }
             for (key, value) in tool.env() {
                 command.env(key, value);
