@@ -18,9 +18,10 @@ import { Cover, MANGA } from './Cover';
 import { backToLibrary, COVER_TRANSITION } from './coverTransition';
 import { inViewTransition } from '../../lib/viewTransition';
 import { openVolume, useMangaLibraryEvents, useMangaSeries } from './useMangaLibrary';
-import { ServerStatus } from './Servers';
 import { extErrorText } from './ext/useExtensions';
-import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore, useWebdavSyncEvents } from './useWebdav';
+import { SuggestionCard } from './Suggestions';
+import { useSuggestions } from './useSuggestions';
+import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore } from './useWebdav';
 
 /** A chapter of a series from an extension (its pages come from the Suwayomi server). */
 const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
@@ -353,12 +354,12 @@ export default function SeriesDetailScreen() {
   const { t, i18n } = useTranslation(['manga', 'common']);
   const { seriesId = '' } = useParams();
   useMangaLibraryEvents();
-  useWebdavSyncEvents();
   useDownloadEvents();
   const detail = useMangaSeries(seriesId);
   const ocr = useOcrStatus().data;
   const [linking, setLinking] = useState(false);
   const series = detail.data?.series;
+  const suggestion = useSuggestions().byId.get(seriesId);
   const volumes = detail.data?.volumes ?? [];
   const source = detail.data?.source ?? null;
   const offline = unreachableReason(source);
@@ -405,11 +406,11 @@ export default function SeriesDetailScreen() {
           <>
             {source && offline ? <OfflineBanner source={source} reason={offline} /> : null}
             <Hero series={series} volumes={volumes} source={source} onLink={() => setLinking(true)} />
+            {suggestion && !series.media_id ? <SuggestionCard suggestion={suggestion} onChoose={() => setLinking(true)} /> : null}
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[11px] uppercase tracking-[0.2em] text-base-content/60">{series.source === 'suwayomi' ? t('ext.manga.chapters') : t('detail.volumes')}</h2>
                 <span className="flex items-center gap-3 text-xs text-base-content/50">
-                  {source && !offline && source.kind !== 'suwayomi' ? <ServerStatus source={source} /> : null}
                   {formatCount(volumes.length, i18n.language)}
                   {series.source === 'suwayomi' ? <RefreshChapters seriesId={series.id} /> : null}
                 </span>
@@ -424,7 +425,7 @@ export default function SeriesDetailScreen() {
               onClose={() => setLinking(false)}
               mediaType="manga"
               allowTypeChange={false}
-              initialQuery={series.title}
+              initialQuery={suggestion?.query ?? series.title}
               onPick={async (hit) => {
                 try {
                   await ipc.mangaLinkSeries(series.id, hit.contentId, hit.title.contentTitleNative || hit.title.contentTitleRomaji || series.title, Boolean(hit.isAdult));

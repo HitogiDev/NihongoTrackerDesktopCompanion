@@ -32,6 +32,7 @@ import type { MangaContinue } from './bindings/MangaContinue';
 import type { MangaLibrary } from './bindings/MangaLibrary';
 import type { MangaPause } from './bindings/MangaPause';
 import type { MangaSeries } from './bindings/MangaSeries';
+import type { MangaLinkSuggestion } from './bindings/MangaLinkSuggestion';
 import type { MangaSeriesDetail } from './bindings/MangaSeriesDetail';
 import type { MangaSession } from './bindings/MangaSession';
 import type { MangaSource } from './bindings/MangaSource';
@@ -111,6 +112,7 @@ export type {
   MangaLibrary,
   MangaPause,
   MangaSeries,
+  MangaLinkSuggestion,
   MangaSeriesDetail,
   MangaSession,
   MangaSource,

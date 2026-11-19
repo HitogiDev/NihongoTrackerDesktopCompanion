@@ -46,6 +46,7 @@ src-tauri/src/
   sync.rs        Outbox con reintentos + push de líneas
   commands.rs    Superficie IPC
   manga/         Lector de manga: biblioteca local, CBZ, .mokuro, protocolo manga://,
+                 sugerencias de vínculo con NihongoTracker (suggest.rs),
                  sesión de lectura, logs y minado con recorte (session.rs, crop.rs)
     webdav/      Fuentes WebDAV: client (HTTP y credenciales), propfind, layout,
                  sync (listado a la biblioteca), cache (LRU), ranged (CBZ por
@@ -372,6 +373,57 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `PageImage` solo enseña imágenes decodificadas. La tira de miniaturas usa
   `manga://thumb` y `content-visibility`; la rejilla de la biblioteca monta las
   series de 120 en 120 (`GRID_BATCH`).
+- **Portadas en orden** (`screens/manga/coverQueue.ts`): una tarjeta de la
+  rejilla no pide su portada hasta estar cerca de la pantalla (un único
+  IntersectionObserver, 240 px de margen) y entonces espera turno en una cola
+  de 6 que sirve antes la posición más baja; si sale de la vista antes de su
+  turno, lo cede (la que ya carga termina: va a la caché). Una portada ya vista
+  en la sesión se pide al momento, o la transición de vuelta no tendría imagen.
+  En Rust, las portadas y la miniatura 0 que hay que bajar de un servidor
+  (WebDAV o extensiones) pasan por `protocol::FetchGate` (FIFO de 4, solo en
+  fallo de caché): sin ella cada petición iba por su lado y llegaban de abajo
+  arriba. Las páginas del lector nunca esperan ahí.
+- **Cabecera de la pantalla Manga**: atajos, recargar (no en Extensiones) y un
+  solo botón de ajustes (`LibraryMenu.tsx`, menú con flechas/Home/End/Esc) que
+  enseña lo de cada pestaña (`menuGroups`): carpetas en Local, servidores en
+  WebDAV, ajustes de extensiones en Extensiones, todo en Todo. "Ajustes del
+  lector" deja `settings:section = manga` y navega a Ajustes.
+- **Progreso de sincronización WebDAV**: discreto, un anillo (`SyncRing`) en la
+  pestaña WebDAV (se ve desde todas) y en la línea de cada servidor con un
+  "Listando 729 / 1.122" pequeño. Nunca en la ficha de una serie.
+- **Orden y filtros** (`screens/manga/libraryView.ts`, puro y con tests, en la
+  cabecera de la rejilla con `LibraryToolbar.tsx`): título A–Z/Z–A (colación
+  numérica), último leído, añadido, más tomos; filtros de lectura (en curso,
+  terminada, sin empezar: `seriesStatus`), texto y vínculo (vinculada, sin
+  vincular, con sugerencia). Las pestañas son el filtro de origen. Todo en el
+  cliente sobre la biblioteca ya cargada (1.000 series son unos ms); cada
+  opción dice cuántas dejaría (`optionCounts`, solo con el panel abierto). Se
+  recuerda una vez para todas las pestañas en `localStorage`
+  (`manga:library:view`, con try/catch).
+- **Sugerencias de vínculo** (`manga/suggest.rs`, el bucle en
+  `sync::spawn_manga_suggester`): para cada serie sin vincular, Rust busca su
+  título limpio (`clean_title`: fuera corchetes y paréntesis —si todo el
+  título va entre corchetes, como "[Oshi no Ko]", se queda lo de dentro—,
+  marcas de tomo, rangos, `_`; "#Zombie…" conserva su `#` y "Mob Psycho 100"
+  su número) en `/api/media/search` tipo manga y guarda el mejor resultado con
+  similitud ≥ 0,6 (Dice por pares de caracteres sobre todos sus títulos y
+  sinónimos, `score`) en `manga_link_suggestions` (con portada, `is_adult` y
+  puntuación; `media_id NULL` = buscada sin nada bueno, se reintenta a los 30
+  días). **Nunca vincula**: confirmar (`manga_confirm_suggestions`) pasa por
+  `link_series`, el mismo camino que un vínculo a mano (`link_manga_series` +
+  `session::series_linked`). Descartar guarda `manga_link_dismissed` (sin
+  clave foránea, como el progreso) y pone en su lugar el siguiente resultado de
+  la misma búsqueda, desde la caché. Ritmo (`Pace`): una búsqueda cada 1,5 s,
+  pausas de 30 s→10 min ante 429 y de 15 s→10 min ante fallos, 30 min ante
+  401/403; un aviso (`suggest_wake`) solo corta la espera cuando no había nada
+  que hacer. Orden: lo que la rejilla enseña primero
+  (`manga_suggest_priority`, hasta 240 ids, con debounce desde la pantalla),
+  luego lo último leído, luego por título. Cada título limpio se busca una vez
+  (`manga_title_search`). Ajuste `manga_link_suggestions` (por defecto sí). La
+  UI: tarjeta "¿Es esta?" en la ficha, una marca en la portada de la rejilla y
+  el filtro "con sugerencia", que cambia la rejilla por la revisión en bloque
+  (`SuggestionReview`, cada pareja visible antes de confirmar). Una portada de
+  NihongoTracker adulta se enseña difuminada.
 - **Transiciones**: de una portada de la rejilla a su ficha y de vuelta, con
   View Transitions donde existen (`lib/viewTransition.ts` mira
   `document.startViewTransition`; nunca con `prefers-reduced-motion`) y un
@@ -728,7 +780,7 @@ capturas no van dentro.
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
 `manga://session-ended`, `manga://webdav-sync`, `manga://download`,
 `manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`,
-`manga://ext-status`. Están
+`manga://ext-status`, `manga://suggestions`. Están
 centralizados en `src/lib/ipc.ts` (`events`).
 
 `log://celebration` lleva el `celebration` y los `newAchievements` que devuelve

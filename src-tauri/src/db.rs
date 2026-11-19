@@ -308,6 +308,35 @@ CREATE TABLE IF NOT EXISTS manga_offline (
     bytes INTEGER NOT NULL DEFAULT 0,
     downloaded_at TEXT NOT NULL
 );
+-- Link suggestions (see `manga::suggest`): what the background search of an
+-- unlinked series found, never a link. `media_id` NULL: looked up, nothing
+-- good enough.
+CREATE TABLE IF NOT EXISTS manga_link_suggestions (
+    series_id TEXT PRIMARY KEY REFERENCES manga_series(id) ON DELETE CASCADE,
+    query TEXT NOT NULL,
+    media_id TEXT,
+    media_title TEXT,
+    media_subtitle TEXT,
+    media_image TEXT,
+    is_adult INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
+    checked_at TEXT NOT NULL
+);
+-- Media the user said a series is not. No foreign key, like progress: it
+-- outlives a series that goes away for a while and comes back.
+CREATE TABLE IF NOT EXISTS manga_link_dismissed (
+    series_id TEXT NOT NULL,
+    media_id TEXT NOT NULL,
+    dismissed_at TEXT NOT NULL,
+    PRIMARY KEY (series_id, media_id)
+);
+-- Hits of each cleaned title (normalised), so one series in two folders,
+-- or a rescan, never searches twice.
+CREATE TABLE IF NOT EXISTS manga_title_search (
+    query TEXT PRIMARY KEY,
+    hits_json TEXT NOT NULL,
+    searched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manga_page_read (
     volume_id TEXT NOT NULL,
     page INTEGER NOT NULL,

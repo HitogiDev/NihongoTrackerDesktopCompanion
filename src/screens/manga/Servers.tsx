@@ -4,11 +4,49 @@ import { CloudOff, Pencil, Plus, RefreshCw, Server, ShieldAlert, Trash2 } from '
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { ipc } from '../../lib/ipc';
-import { displayUrl, relativeTime } from '../../lib/manga';
+import { displayUrl, formatCount, relativeTime } from '../../lib/manga';
 import type { MangaSource } from '../../lib/types';
 import { toast } from '../../store/useToastStore';
 import { MANGA } from './Cover';
 import { syncSource, useWebdavSyncStore } from './useWebdav';
+
+/**
+ * A small ring that fills as a sync lists series, for the WebDAV tab and a
+ * server's own line: the sync is background work, never the main thing on
+ * screen. Without a total yet it spins.
+ */
+export function SyncRing({ done, total, className = '' }: { done: number; total: number; className?: string }) {
+  const { t } = useTranslation('manga');
+  const label = total > 0 ? t('webdav.status.syncingCount', { done, total }) : t('webdav.status.syncing');
+  const fraction = total > 0 ? Math.min(1, done / total) : 0.25;
+  // r = 6 on a 16 box: a circumference of 2πr.
+  const length = 2 * Math.PI * 6;
+  return (
+    <span role="img" aria-label={label} title={label} className={`inline-grid h-3.5 w-3.5 shrink-0 place-items-center text-primary ${className}`}>
+      <svg viewBox="0 0 16 16" className={total > 0 ? 'h-full w-full -rotate-90' : 'h-full w-full -rotate-90 motion-safe:animate-spin'} aria-hidden="true">
+        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2.5" />
+        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${fraction * length} ${length}`} className="motion-safe:transition-[stroke-dasharray] motion-safe:duration-500" />
+      </svg>
+    </span>
+  );
+}
+
+/** Every WebDAV source being listed now, added up: what the tab's ring shows. */
+export function useWebdavSyncSummary(sources: MangaSource[]): { done: number; total: number } | null {
+  const progress = useWebdavSyncStore((s) => s.progress);
+  let running = false;
+  let done = 0;
+  let total = 0;
+  for (const source of sources) {
+    if (source.kind !== 'webdav') continue;
+    const current = progress[source.id];
+    if (!(current?.running ?? source.syncing)) continue;
+    running = true;
+    done += current?.done ?? 0;
+    total += current?.total ?? 0;
+  }
+  return running ? { done, total } : null;
+}
 
 /** One line on how a server is doing: listing, offline, refused, or when it was last seen. */
 export function ServerStatus({ source, className = '' }: { source: MangaSource; className?: string }) {
@@ -16,12 +54,16 @@ export function ServerStatus({ source, className = '' }: { source: MangaSource; 
   const progress = useWebdavSyncStore((s) => s.progress[source.id]);
   const running = progress?.running ?? source.syncing;
   if (running) {
+    const total = progress?.total ?? 0;
+    const done = progress?.done ?? 0;
     return (
-      <span className={`inline-flex items-center gap-1.5 text-xs text-base-content/60 ${className}`}>
-        <span className="loading loading-spinner loading-xs" aria-hidden="true" />
-        {progress && progress.total > 0
-          ? t('webdav.status.syncingCount', { done: progress.done, total: progress.total })
-          : t('webdav.status.syncing')}
+      <span className={`inline-flex items-center gap-1.5 text-xs tabular-nums text-base-content/55 ${className}`}>
+        <SyncRing done={done} total={total} />
+        <span aria-hidden="true">
+          {total > 0
+            ? t('webdav.status.syncingShort', { done: formatCount(done, i18n.language), total: formatCount(total, i18n.language) })
+            : t('webdav.status.syncing')}
+        </span>
       </span>
     );
   }
@@ -152,7 +194,7 @@ export function ServerStrip({ sources, onManage }: { sources: MangaSource[]; onM
             </button>
             <span className="hidden shrink-0 text-xs tabular-nums text-base-content/55 sm:inline">{t('folders.series', { count: Number(source.series_count) })}</span>
             <Button appearance="ghost" size="sm" shape="square" disabled={running} aria-label={t('webdav.actions.sync', { name: source.name })} title={t('webdav.actions.sync', { name: source.name })} onClick={() => void syncSource(source.id)}>
-              <RefreshCw className={running ? 'h-4 w-4 motion-safe:animate-spin' : 'h-4 w-4'} />
+              <RefreshCw className="h-4 w-4" />
             </Button>
           </li>
         );

@@ -499,6 +499,10 @@ textarea,
   .manga-reader-in {
     animation: manga-reader-in 260ms ease-out both;
   }
+  .manga-menu-in {
+    animation: manga-menu-in 140ms ease-out both;
+    transform-origin: top right;
+  }
   ::view-transition-group(manga-cover) {
     animation-duration: 340ms;
     animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -517,6 +521,10 @@ textarea,
 }
 @keyframes manga-fade-in {
   from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes manga-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
 @keyframes manga-reader-in {

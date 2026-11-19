@@ -12,7 +12,6 @@
   },
   "actions": {
     "addFolder": "Añadir carpeta",
-    "folders": "Carpetas",
     "rescan": "Volver a escanear la biblioteca",
     "readVolume": "Leer {{volume}}",
     "continueAt": "Seguir con {{volume}} · p. {{page}}"
@@ -103,7 +102,6 @@
   },
   "webdav": {
     "actions": {
-      "servers": "Servidores",
       "add": "Conectar un servidor",
       "sync": "Buscar cambios en {{name}}",
       "syncAll": "Volver a listar todo {{name}}",
@@ -123,7 +121,8 @@
       "unauthorized": "El servidor rechazó las credenciales",
       "failed": "La última sincronización falló",
       "synced": "Sincronizado {{when}}",
-      "never": "Aún sin sincronizar"
+      "never": "Aún sin sincronizar",
+      "syncingShort": "Listando {{done}} / {{total}}"
     },
     "form": {
       "title": "Conectar un servidor WebDAV",
@@ -535,6 +534,87 @@
       "checksum": "Una descarga no era el archivo esperado.",
       "cancelled": "Cancelado.",
       "invalid-url": "Escribe una dirección completa http:// o https://."
+    }
+  },
+  "menu": {
+    "label": "Ajustes de la biblioteca",
+    "local": "Carpetas de este equipo",
+    "manageFolders": "Gestionar carpetas…",
+    "addFolder": "Añadir una carpeta…",
+    "addingFolder": "Añadiendo la carpeta…",
+    "webdav": "Servidores WebDAV",
+    "manageServers": "Gestionar servidores…",
+    "addServer": "Conectar un servidor…",
+    "extensions": "Extensiones",
+    "openExtensions": "Explorar extensiones",
+    "extSettings": "Ajustes de extensiones…",
+    "readerSettings": "Ajustes del lector de manga…"
+  },
+  "view": {
+    "sortLabel": "Ordenar series",
+    "sort": {
+      "title-asc": "Título, A–Z",
+      "title-desc": "Título, Z–A",
+      "last-read": "Leído por última vez",
+      "added": "Añadido recientemente",
+      "volumes": "Más tomos"
+    },
+    "filters": "Filtros",
+    "activeCount_one": "{{count, number}} filtro activo",
+    "activeCount_other": "{{count, number}} filtros activos",
+    "clear": "Quitar filtros",
+    "shown": "{{shown}} de {{total}}",
+    "empty": "Ninguna serie cumple estos filtros",
+    "emptyBody": "Cambia o quita los filtros para ver el resto de la biblioteca.",
+    "status": {
+      "label": "Lectura",
+      "any": "Todas",
+      "reading": "En curso",
+      "finished": "Terminadas",
+      "unstarted": "Sin empezar"
+    },
+    "text": {
+      "label": "Texto",
+      "any": "Todas",
+      "with": "Con texto",
+      "without": "Sin texto"
+    },
+    "link": {
+      "label": "NihongoTracker",
+      "any": "Todas",
+      "linked": "Vinculadas",
+      "unlinked": "Sin vincular",
+      "suggested": "Sugeridas"
+    }
+  },
+  "suggest": {
+    "isThisIt": "¿Es esta?",
+    "why": "Encontrada al buscar «{{query}}»",
+    "score": "Coincide al {{percent}} %",
+    "scoreHint": "Cuánto se parecen sus títulos al nombre de la serie",
+    "confirm": "Confirmar",
+    "choose": "Elegir otra",
+    "dismiss": "Descartar",
+    "badge": "Hay una coincidencia de NihongoTracker por revisar",
+    "toast": {
+      "linked_one": "{{count, number}} serie vinculada a NihongoTracker",
+      "linked_other": "{{count, number}} series vinculadas a NihongoTracker"
+    },
+    "review": {
+      "title": "Sugerencias por revisar",
+      "open": "Revisar los vínculos sugeridos",
+      "waiting_one": "{{count, number}} sugerencia",
+      "waiting_other": "{{count, number}} sugerencias",
+      "selectAll": "Seleccionar todas",
+      "body": "Nada se vincula hasta que lo confirmas. Revisa cada pareja antes.",
+      "confirmSelected_one": "Confirmar {{count, number}}",
+      "confirmSelected_other": "Confirmar {{count, number}}",
+      "pick": "Seleccionar {{title}} → {{media}}",
+      "confirmOne": "Vincular {{title}}",
+      "dismissOne": "Descartar la sugerencia de {{title}}",
+      "none": "No hay sugerencias por revisar",
+      "noneBody": "Las series sin vincular se buscan en NihongoTracker en segundo plano. Las coincidencias aparecen aquí.",
+      "back": "Todas las series"
     }
   }
 }

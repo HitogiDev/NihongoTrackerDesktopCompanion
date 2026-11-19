@@ -91,6 +91,11 @@ manga_webdav_cache_mb: number,
  */
 manga_webdav_sync_progress: boolean, 
 /**
+ * Look unlinked series up on NihongoTracker in the background and
+ * suggest a media for each (`manga::suggest`). Never links on its own.
+ */
+manga_link_suggestions: boolean, 
+/**
  * The built-in OCR's recognizer weights (`manga::ocr::assets::Variant`).
  */
 manga_ocr_variant: OcrVariant, 

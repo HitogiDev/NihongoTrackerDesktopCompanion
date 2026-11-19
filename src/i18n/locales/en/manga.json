@@ -12,7 +12,6 @@
   },
   "actions": {
     "addFolder": "Add folder",
-    "folders": "Folders",
     "rescan": "Rescan the library",
     "readVolume": "Read {{volume}}",
     "continueAt": "Continue {{volume}} · p. {{page}}"
@@ -103,7 +102,6 @@
   },
   "webdav": {
     "actions": {
-      "servers": "Servers",
       "add": "Connect a server",
       "sync": "Check {{name}} for changes",
       "syncAll": "List everything on {{name}} again",
@@ -123,7 +121,8 @@
       "unauthorized": "The server refused the credentials",
       "failed": "The last sync failed",
       "synced": "Synced {{when}}",
-      "never": "Not synced yet"
+      "never": "Not synced yet",
+      "syncingShort": "Listing {{done}} / {{total}}"
     },
     "form": {
       "title": "Connect a WebDAV server",
@@ -535,6 +534,87 @@
       "checksum": "A download was not the expected file.",
       "cancelled": "Cancelled.",
       "invalid-url": "Enter a full http:// or https:// address."
+    }
+  },
+  "menu": {
+    "label": "Library settings",
+    "local": "Folders on this computer",
+    "manageFolders": "Manage folders…",
+    "addFolder": "Add a folder…",
+    "addingFolder": "Adding the folder…",
+    "webdav": "WebDAV servers",
+    "manageServers": "Manage servers…",
+    "addServer": "Connect a server…",
+    "extensions": "Extensions",
+    "openExtensions": "Browse extensions",
+    "extSettings": "Extension settings…",
+    "readerSettings": "Manga reader settings…"
+  },
+  "view": {
+    "sortLabel": "Sort series",
+    "sort": {
+      "title-asc": "Title, A–Z",
+      "title-desc": "Title, Z–A",
+      "last-read": "Last read",
+      "added": "Recently added",
+      "volumes": "Most volumes"
+    },
+    "filters": "Filters",
+    "activeCount_one": "{{count, number}} filter on",
+    "activeCount_other": "{{count, number}} filters on",
+    "clear": "Clear filters",
+    "shown": "{{shown}} of {{total}}",
+    "empty": "No series matches these filters",
+    "emptyBody": "Change or clear the filters to see the rest of the library.",
+    "status": {
+      "label": "Reading",
+      "any": "Any",
+      "reading": "In progress",
+      "finished": "Finished",
+      "unstarted": "Not started"
+    },
+    "text": {
+      "label": "Text",
+      "any": "Any",
+      "with": "With text",
+      "without": "Without text"
+    },
+    "link": {
+      "label": "NihongoTracker",
+      "any": "Any",
+      "linked": "Linked",
+      "unlinked": "Not linked",
+      "suggested": "Suggested"
+    }
+  },
+  "suggest": {
+    "isThisIt": "Is this it?",
+    "why": "Found by searching “{{query}}”",
+    "score": "{{percent}}% match",
+    "scoreHint": "How much its titles look like the series' name",
+    "confirm": "Confirm",
+    "choose": "Choose another",
+    "dismiss": "Dismiss",
+    "badge": "A NihongoTracker match is waiting for review",
+    "toast": {
+      "linked_one": "{{count, number}} series linked to NihongoTracker",
+      "linked_other": "{{count, number}} series linked to NihongoTracker"
+    },
+    "review": {
+      "title": "Suggestions to review",
+      "open": "Review the suggested links",
+      "waiting_one": "{{count, number}} suggestion",
+      "waiting_other": "{{count, number}} suggestions",
+      "selectAll": "Select all",
+      "body": "Nothing is linked until you confirm it. Check each pair first.",
+      "confirmSelected_one": "Confirm {{count, number}}",
+      "confirmSelected_other": "Confirm {{count, number}}",
+      "pick": "Select {{title}} → {{media}}",
+      "confirmOne": "Link {{title}}",
+      "dismissOne": "Dismiss the suggestion for {{title}}",
+      "none": "No suggestions to review",
+      "noneBody": "Unlinked series are looked up on NihongoTracker in the background. Matches show up here.",
+      "back": "All series"
     }
   }
 }

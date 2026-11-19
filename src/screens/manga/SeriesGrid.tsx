@@ -7,6 +7,7 @@ import type { MangaContinue, MangaSeries } from '../../lib/types';
 import { Cover, CoverProgress, MANGA } from './Cover';
 import { openVolume } from './useMangaLibrary';
 import { openSeries } from './coverTransition';
+import { SuggestionBadge } from './Suggestions';
 
 const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-6';
 
@@ -21,7 +22,7 @@ export function TextBadge({ className = '' }: { className?: string }) {
   );
 }
 
-export function SeriesCard({ series }: { series: MangaSeries }) {
+export function SeriesCard({ series, position, suggested = false }: { series: MangaSeries; position?: number; suggested?: boolean }) {
   const { t } = useTranslation('manga');
   const navigate = useNavigate();
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
@@ -34,9 +35,10 @@ export function SeriesCard({ series }: { series: MangaSeries }) {
         onClick={(event) => openSeries(event, series.id, navigate)}
       >
         <div data-series-cover={series.id} className="relative aspect-[2/3] overflow-hidden rounded-box shadow-sm ring-1 ring-base-content/5 motion-safe:transition motion-safe:duration-200 motion-safe:ease-out group-hover:shadow-lg motion-safe:group-hover:-translate-y-1">
-          <Cover src={mangaUrl.cover(series.id)} />
+          <Cover src={mangaUrl.cover(series.id)} queued={position} />
           <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-neutral/40 via-transparent to-transparent opacity-0 motion-safe:transition-opacity group-hover:opacity-100" />
           {series.has_text ? <TextBadge className="absolute right-2 top-2" /> : null}
+          {suggested && !series.media_id ? <SuggestionBadge className="absolute left-2 top-2" /> : null}
           <CoverProgress percent={percent} label={t('grid.progress', { percent })} />
         </div>
         <h3 className="mt-2.5 line-clamp-2 text-sm font-medium leading-snug group-hover:text-base-content">{series.title}</h3>
@@ -57,7 +59,7 @@ export const GRID_BATCH = 120;
  * time: the next batch comes in when the end of the grid scrolls into view
  * (or Tab reaches it), so opening the screen never builds every card.
  */
-export function SeriesGrid({ series }: { series: MangaSeries[] }) {
+export function SeriesGrid({ series, suggested }: { series: MangaSeries[]; suggested?: ReadonlySet<string> }) {
   // Without IntersectionObserver nothing would ever add a batch: all of them.
   const [shown, setShown] = useState(() => (typeof IntersectionObserver === 'undefined' ? Infinity : GRID_BATCH));
   const end = useRef<HTMLDivElement>(null);
@@ -73,7 +75,7 @@ export function SeriesGrid({ series }: { series: MangaSeries[] }) {
   }, [more, shown]);
   return (
     <>
-      <ul className={GRID}>{series.slice(0, shown).map((item) => <SeriesCard key={item.id} series={item} />)}</ul>
+      <ul className={GRID}>{series.slice(0, shown).map((item, index) => <SeriesCard key={item.id} series={item} position={index} suggested={suggested?.has(item.id)} />)}</ul>
       {more ? (
         <div ref={end} className="flex justify-center py-4" aria-hidden="true">
           <span className="loading loading-dots loading-sm text-base-content/40" />

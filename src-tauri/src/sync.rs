@@ -78,6 +78,80 @@ pub fn spawn_presence_sync(app: AppHandle) {
     });
 }
 
+/// Looks unlinked manga series up on NihongoTracker, one search at a time,
+/// and keeps what it finds as suggestions (`manga::suggest`). Never in the
+/// watcher's tick and never a link: the user confirms each one. Paced by
+/// `suggest::Pace` (one search every 1.5 s, longer pauses on 429 or
+/// failures), series on screen first, and a title searched once.
+pub fn spawn_manga_suggester(app: AppHandle) {
+    use crate::manga::suggest::{self, Outcome, Pace, Step};
+    tauri::async_runtime::spawn(async move {
+        // Let the app start before the first search.
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        let mut pace = Pace::default();
+        let mut dirty = false;
+        let mut last_emit = std::time::Instant::now();
+        loop {
+            let state = app.state::<AppState>();
+            let settings = state.settings_snapshot().await;
+            let configured = settings.api_key.as_deref().is_some_and(|key| !key.trim().is_empty());
+            let outcome = if !settings.manga_link_suggestions || !configured {
+                Outcome::Idle
+            } else {
+                let priority = state.manga.suggest_priority.lock().unwrap().clone();
+                match suggest::prepare(&state.db, &priority) {
+                    Ok(Step::Nothing) | Err(_) => Outcome::Idle,
+                    Ok(Step::Done { series_id }) => {
+                        dirty = true;
+                        remove_priority(&state, &series_id);
+                        Outcome::Cached
+                    }
+                    Ok(Step::Search { series_id, query }) => {
+                        let client = state.client().await;
+                        match client.search_media(&query, suggest::SEARCH_TYPE, suggest::SEARCH_HITS).await {
+                            Ok(hits) => {
+                                if suggest::finish(&state.db, &series_id, &query, &hits).is_ok() {
+                                    dirty = true;
+                                }
+                                remove_priority(&state, &series_id);
+                                Outcome::Searched
+                            }
+                            Err(ApiError::Http { status: 429, .. }) => Outcome::RateLimited,
+                            Err(ApiError::Http { status: 401 | 403, .. }) | Err(ApiError::NotConfigured) => Outcome::Unauthorized,
+                            Err(error) => {
+                                log::debug!("manga suggestion search failed: {error}");
+                                Outcome::Failed
+                            }
+                        }
+                    }
+                }
+            };
+            // The page hears about it every couple of seconds, not per series.
+            if dirty && (outcome == Outcome::Idle || last_emit.elapsed() > Duration::from_secs(2)) {
+                dirty = false;
+                last_emit = std::time::Instant::now();
+                let _ = app.emit(crate::manga::suggest::SUGGESTIONS_CHANGED, ());
+            }
+            let wait = pace.after(outcome);
+            if wait.is_zero() {
+                tokio::task::yield_now().await;
+            } else if Pace::interruptible(outcome) {
+                let wake = state.manga.suggest_wake.notified();
+                tokio::select! {
+                    _ = tokio::time::sleep(wait) => {}
+                    _ = wake => {}
+                }
+            } else {
+                tokio::time::sleep(wait).await;
+            }
+        }
+    });
+}
+
+fn remove_priority(state: &AppState, series_id: &str) {
+    state.manga.suggest_priority.lock().unwrap().retain(|id| id != series_id);
+}
+
 /// The address to call, normalised the way Yomitan accepts it: a bare
 /// `host:port` gets `http://`, and an empty field falls back to the default.
 fn anki_url(settings: &crate::config::Settings) -> String {
