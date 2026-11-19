@@ -100,6 +100,29 @@ pub fn list_pages<R: Read + Seek>(reader: R) -> Result<Vec<String>, ArchiveError
     Ok(pages)
 }
 
+/// The image entries of an archive in reading order, from its central
+/// directory alone. Opening each entry (`by_index_raw`, as [`list_pages`]
+/// does for its size check) reads that entry's local header: on a remote
+/// archive that is one request per page, minutes for a volume. Sizes are
+/// left to [`read_page`], which enforces the same limits when a page is read.
+pub fn list_page_names<R: Read + Seek>(reader: R) -> Result<Vec<String>, ArchiveError> {
+    let archive = zip::ZipArchive::new(reader)?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(ArchiveError::TooManyEntries);
+    }
+    let mut pages: Vec<String> = (0..archive.len())
+        .filter_map(|index| archive.name_for_index(index))
+        .filter(|raw| !raw.ends_with('/'))
+        .filter_map(|raw| {
+            let name = safe_entry_name(raw)?;
+            (name == *raw && !is_junk(&name) && is_image_name(&name)).then_some(name)
+        })
+        .collect();
+    pages.sort_by(|a, b| natural_cmp(a, b));
+    pages.dedup();
+    Ok(pages)
+}
+
 pub fn list_pages_at(path: &Path) -> Result<Vec<String>, ArchiveError> {
     list_pages(BufReader::new(File::open(path)?))
 }
@@ -173,6 +196,67 @@ mod tests {
             zip::CompressionMethod::Stored,
         );
         assert_eq!(list_pages(Cursor::new(bytes)).unwrap(), ["001.jpg", "2.jpg", "10.jpg"]);
+    }
+
+    /// Counts where reads land, like a remote archive read by ranges would.
+    struct Tracking<R> {
+        inner: R,
+        pos: u64,
+        /// Where each read started.
+        reads: Vec<u64>,
+    }
+
+    impl<R> Tracking<R> {
+        fn new(inner: R) -> Self {
+            Tracking { inner, pos: 0, reads: Vec::new() }
+        }
+
+        /// Distinct places read before `end` (each would be a range request).
+        fn places_before(&self, end: u64) -> usize {
+            let mut places: Vec<u64> = self.reads.iter().copied().filter(|&at| at < end).collect();
+            places.dedup();
+            places.len()
+        }
+    }
+
+    impl<R: Read> Read for Tracking<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.reads.last() != Some(&self.pos) {
+                self.reads.push(self.pos);
+            }
+            let n = self.inner.read(buf)?;
+            self.pos += n as u64;
+            Ok(n)
+        }
+    }
+
+    impl<R: Seek> Seek for Tracking<R> {
+        fn seek(&mut self, to: std::io::SeekFrom) -> std::io::Result<u64> {
+            self.pos = self.inner.seek(to)?;
+            Ok(self.pos)
+        }
+    }
+
+    #[test]
+    fn page_names_come_from_the_central_directory_alone() {
+        let page = vec![7u8; 4096];
+        let entries: Vec<(String, &[u8])> = (1..=20).map(|n| (format!("{n}.jpg"), page.as_slice())).collect();
+        let mut all: Vec<(&str, &[u8])> = entries.iter().map(|(name, data)| (name.as_str(), *data)).collect();
+        all.push(("__MACOSX/._1.jpg", b"x"));
+        all.push(("notes.txt", b"x"));
+        all.push(("../evil.png", b"x"));
+        let bytes = archive(&all, zip::CompressionMethod::Stored);
+        let directory = zip::ZipArchive::new(Cursor::new(bytes.clone())).unwrap().central_directory_start();
+
+        let mut by_name = Tracking::new(Cursor::new(bytes.clone()));
+        let names = list_page_names(&mut by_name).unwrap();
+        let mut by_entry = Tracking::new(Cursor::new(bytes));
+        assert_eq!(names, list_pages(&mut by_entry).unwrap());
+        assert_eq!(names.len(), 20);
+        // Opening every entry reads every local header; names alone only
+        // touch the start once (the archive's own check of its first header).
+        assert!(by_entry.places_before(directory) >= 20);
+        assert!(by_name.places_before(directory) <= 1, "{:?}", by_name.reads);
     }
 
     #[test]

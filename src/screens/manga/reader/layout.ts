@@ -90,12 +90,16 @@ export function orderBlocks<T extends { page: number; block: number }>(blocks: T
   return [...blocks].sort((a, b) => a.page - b.page || a.block - b.block);
 }
 
-/** A click on the page: the outer thirds turn it, the middle shows the controls. */
-export function clickAction(x: number, width: number, direction: ReadingDirection): 'next' | 'previous' | 'toggle' {
+/**
+ * Where a click on the page lands: the outer thirds turn it; the middle is
+ * where a double click hides the controls (a single click there does nothing,
+ * and a double click on the sides would only turn two pages).
+ */
+export function clickAction(x: number, width: number, direction: ReadingDirection): 'next' | 'previous' | 'middle' {
   const ratio = width > 0 ? x / width : 0.5;
   if (ratio < 0.35) return direction === 'rtl' ? 'next' : 'previous';
   if (ratio > 0.65) return direction === 'rtl' ? 'previous' : 'next';
-  return 'toggle';
+  return 'middle';
 }
 
 /** The pages to decode ahead of time: the spreads around the current one. */

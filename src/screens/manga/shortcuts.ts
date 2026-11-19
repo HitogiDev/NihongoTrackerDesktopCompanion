@@ -44,7 +44,7 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'firstLast', keys: [['Home'], ['End']] },
       { label: 'turnByClick', keys: [], mouse: rtl ? 'clickSidesRtl' : 'clickSidesLtr' },
       { label: 'turnByWheel', keys: [], mouse: 'wheel' },
-      { label: 'showControls', keys: [], mouse: 'clickMiddle' },
+      { label: 'hideControls', keys: [], mouse: 'doubleClickMiddle' },
     ],
   };
   const strip: ShortcutGroup = {
@@ -55,7 +55,7 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'scrollScreen', keys: [['Space'], ['PgDn']] },
       { label: 'scrollScreenBack', keys: [['Shift', 'Space'], ['PgUp']] },
       { label: 'firstLast', keys: [['Home'], ['End']] },
-      { label: 'showControls', keys: [], mouse: 'click' },
+      { label: 'hideControls', keys: [], mouse: 'doubleClick' },
     ],
   };
   const text: ShortcutGroup = {

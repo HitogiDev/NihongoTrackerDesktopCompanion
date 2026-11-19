@@ -230,7 +230,8 @@ impl Remote {
         }
         let pages = match self.local_archive(location) {
             Some(path) => archive::list_pages_at(&path).map_err(|e| DavError::Other(e.to_string()))?,
-            None => self.with_ranged(location, |file| archive::list_pages(file))?,
+            // Names only: sizes would cost a request per page.
+            None => self.with_ranged(location, |file| archive::list_page_names(file))?,
         };
         self.db.set_manga_volume_pages(&location.id, &pages).map_err(|e| DavError::Other(e.to_string()))?;
         Ok(pages)
@@ -337,7 +338,17 @@ impl Remote {
         {
             let mut downloads = self.downloads.lock().unwrap();
             if downloads.contains_key(&location.id) {
-                return Ok(());
+                drop(downloads);
+                // Already downloading (the card's button, or an earlier Read):
+                // wait for it, so whoever asked can open the volume right after.
+                while self.downloads.lock().unwrap().contains_key(&location.id) {
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+                return if offline || self.local_archive(location).is_some() || location.format != FORMAT_REMOTE_ARCHIVE {
+                    Ok(())
+                } else {
+                    Err(DavError::Cancelled)
+                };
             }
             let progress = DownloadProgress { volume_id: location.id.clone(), offline, received: 0, total: None, done: false, error: None };
             downloads.insert(location.id.clone(), Download { cancel: cancel.clone(), progress });

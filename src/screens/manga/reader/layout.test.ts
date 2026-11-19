@@ -48,7 +48,7 @@ describe('navigation', () => {
     expect(clickAction(10, 1000, 'rtl')).toBe('next');
     expect(clickAction(990, 1000, 'rtl')).toBe('previous');
     expect(clickAction(990, 1000, 'ltr')).toBe('next');
-    expect(clickAction(500, 1000, 'rtl')).toBe('toggle');
+    expect(clickAction(500, 1000, 'rtl')).toBe('middle');
   });
 
   it('preloads the two spreads on each side, nearest first', () => {

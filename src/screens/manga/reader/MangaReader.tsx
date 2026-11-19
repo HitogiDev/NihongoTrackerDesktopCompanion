@@ -586,18 +586,31 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     else goPrevious();
   };
 
+  const onPage = (event: ReactMouseEvent) =>
+    !(event.target as HTMLElement).closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]');
+
   const onClick = (event: ReactMouseEvent) => {
-    const element = event.target as HTMLElement;
-    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]')) return;
+    if (!onPage(event)) return;
     if (settingsOpen) {
       setSettingsOpen(false);
       return;
     }
     if (window.getSelection()?.toString()) return;
-    const action = vertical ? 'toggle' : clickAction(event.clientX, window.innerWidth, prefs.direction);
+    if (vertical) return;
+    const action = clickAction(event.clientX, window.innerWidth, prefs.direction);
     if (action === 'next') goNext();
     else if (action === 'previous') goPrevious();
-    else chrome.toggle();
+  };
+
+  // A double click in the middle (anywhere on the strip) hides the controls
+  // until the next one: a single click would bring them back at the next
+  // move of the mouse.
+  const onDoubleClick = (event: ReactMouseEvent) => {
+    if (!onPage(event) || settingsOpen) return;
+    if (!vertical && clickAction(event.clientX, window.innerWidth, prefs.direction) !== 'middle') return;
+    // A double click also selects the word under it.
+    window.getSelection()?.removeAllRanges();
+    chrome.toggleLock();
   };
 
   const { pin } = chrome;
@@ -651,8 +664,9 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'} ${fadeIn ? 'manga-reader-in' : ''}`}
+      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onWheel={onWheel}
     >
       {vertical ? (
