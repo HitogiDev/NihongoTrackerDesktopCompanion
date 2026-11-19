@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayUrl, formatBytes, mangaErrorKey, readPercent, relativeTime } from './manga';
+import { displayUrl, formatBytes, isServedFormat, mangaErrorKey, readPercent, relativeTime } from './manga';
 
 describe('manga helpers', () => {
   it('formats sizes as people read them', () => {
@@ -31,5 +31,10 @@ describe('manga helpers', () => {
   it('keeps read percentages in range', () => {
     expect(readPercent(9, 10)).toBe(100);
     expect(readPercent(null, 10)).toBe(0);
+  });
+
+  it('tells volumes served from a server from ones on disk', () => {
+    expect(['remote-archive', 'remote-folder', 'suwayomi-chapter'].every(isServedFormat)).toBe(true);
+    expect(['archive', 'folder'].some(isServedFormat)).toBe(false);
   });
 });

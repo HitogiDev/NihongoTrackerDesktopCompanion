@@ -18,6 +18,10 @@ fn d_afk() -> u64 {
 fn d_manga_dwell() -> u64 {
     3
 }
+/// About what two spreads ahead used to be.
+fn d_manga_preload() -> u32 {
+    4
+}
 fn d_manga_idle_log() -> u64 {
     10
 }
@@ -168,6 +172,26 @@ pub struct Settings {
     /// keeps it open until the reader closes.
     #[serde(default = "d_manga_idle_log")]
     pub manga_idle_log_minutes: u64,
+    /// The reader's clock starts by itself once the user is reading; off, it
+    /// only starts from its menu (`manga_clock_start`).
+    #[serde(default = "d_true")]
+    pub manga_auto_start: bool,
+    /// ...after this many seconds of reading (focused, not away). 0 starts at
+    /// once. Those seconds are not counted.
+    #[serde(default)]
+    pub manga_auto_start_delay_secs: u64,
+    /// Pause the clock while the reader window is not focused.
+    #[serde(default = "d_true")]
+    pub manga_pause_on_unfocus: bool,
+    /// Seconds without input before the reader's clock pauses. `None` follows
+    /// `afk_timeout_secs`; 0 never pauses.
+    #[serde(default)]
+    pub manga_afk_timeout_secs: Option<u64>,
+    /// Pages the reader loads and decodes ahead of the one on screen (plus
+    /// the spread before it). More is smoother on a slow server and costs
+    /// memory and data.
+    #[serde(default = "d_manga_preload")]
+    pub manga_preload_pages: u32,
     /// Megabytes the WebDAV cache may hold (offline downloads not included).
     #[serde(default = "d_manga_webdav_cache")]
     pub manga_webdav_cache_mb: u64,
@@ -367,6 +391,11 @@ impl Default for Settings {
             manga_page_dwell_secs: d_manga_dwell(),
             manga_confirm_before_log: true,
             manga_idle_log_minutes: d_manga_idle_log(),
+            manga_auto_start: true,
+            manga_auto_start_delay_secs: 0,
+            manga_pause_on_unfocus: true,
+            manga_afk_timeout_secs: None,
+            manga_preload_pages: d_manga_preload(),
             manga_webdav_cache_mb: d_manga_webdav_cache(),
             manga_webdav_sync_progress: false,
             manga_link_suggestions: true,

@@ -31,6 +31,8 @@ import type { MediaMatch } from './bindings/MediaMatch';
 import type { MangaContinue } from './bindings/MangaContinue';
 import type { MangaLibrary } from './bindings/MangaLibrary';
 import type { MangaPause } from './bindings/MangaPause';
+import type { MangaClock } from './bindings/MangaClock';
+import type { ClockStatus } from './bindings/ClockStatus';
 import type { MangaSeries } from './bindings/MangaSeries';
 import type { MangaLinkSuggestion } from './bindings/MangaLinkSuggestion';
 import type { MangaSeriesDetail } from './bindings/MangaSeriesDetail';
@@ -111,6 +113,8 @@ export type {
   MangaContinue,
   MangaLibrary,
   MangaPause,
+  MangaClock,
+  ClockStatus,
   MangaSeries,
   MangaLinkSuggestion,
   MangaSeriesDetail,

@@ -70,7 +70,8 @@
     "pagesHint": "Pages read for the first time in this session",
     "chars": "{{count, number}} chars",
     "endedPending": "Session of {{title}} finished: confirm it in Pending",
-    "endedLogged": "Session of {{title}} logged"
+    "endedLogged": "Session of {{title}} logged",
+    "pausedStopped": "Paused: stopped by you"
   },
   "mine": {
     "done": "Mined, with the panel as its picture",
@@ -179,5 +180,28 @@
       "Delete": "Delete",
       "Backspace": "Backspace"
     }
+  },
+  "clock": {
+    "title": "Reading clock",
+    "menu": "Reading clock: {{status}}",
+    "running": "Counting",
+    "stopped": "Stopped: start it to count again",
+    "waiting": "Starts when you read",
+    "startsIn": "Starts after {{count}} s of reading",
+    "off": "Not started: automatic start is off",
+    "start": "Start",
+    "stop": "Stop",
+    "finish": "Finish and log",
+    "finishHint": "Ends the session now and logs it.",
+    "editTime": "Edit the time",
+    "saveTime": "Save",
+    "cancelTime": "Cancel",
+    "timeHint": "h:mm:ss, mm:ss or minutes",
+    "timeInvalid": "Not a time: use h:mm:ss, mm:ss or minutes, up to 24 h."
+  },
+  "volumeNav": {
+    "previous": "Previous volume: {{volume}}",
+    "next": "Next volume: {{volume}}",
+    "none": "No volume in this direction"
   }
 }

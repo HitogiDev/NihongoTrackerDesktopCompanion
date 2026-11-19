@@ -16,7 +16,6 @@ export function NovelsSection({ settings }: { settings: Settings }) {
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
           label={t('vn.detect')}
-          description={t('vn.detectHint')}
           checked={settings.detect_visual_novels}
           onChange={(v) => void updateSettings({ detect_visual_novels: v })}
         />
@@ -32,7 +31,6 @@ export function NovelsSection({ settings }: { settings: Settings }) {
         />
         <Toggle
           label={t('vn.confirm')}
-          description={t('vn.confirmHint')}
           checked={settings.vn_confirm_before_log}
           onChange={(v) => void updateSettings({ vn_confirm_before_log: v })}
         />
@@ -61,7 +59,6 @@ export function NovelsSection({ settings }: { settings: Settings }) {
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
           label={t('game.detect')}
-          description={t('game.detectHint')}
           checked={settings.detect_games}
           onChange={(v) => void updateSettings({ detect_games: v })}
         />

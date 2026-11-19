@@ -70,7 +70,8 @@
     "pagesHint": "Páginas leídas por primera vez en esta sesión",
     "chars": "{{count, number}} car.",
     "endedPending": "Sesión de {{title}} terminada: confírmala en Pendientes",
-    "endedLogged": "Sesión de {{title}} registrada"
+    "endedLogged": "Sesión de {{title}} registrada",
+    "pausedStopped": "En pausa: detenido por ti"
   },
   "mine": {
     "done": "Minado, con la viñeta como imagen",
@@ -179,5 +180,28 @@
       "Delete": "Supr",
       "Backspace": "Retroceso"
     }
+  },
+  "clock": {
+    "title": "Cronómetro de lectura",
+    "menu": "Cronómetro de lectura: {{status}}",
+    "running": "Contando",
+    "stopped": "Detenido: inícialo para volver a contar",
+    "waiting": "Arranca cuando leas",
+    "startsIn": "Arranca tras {{count}} s leyendo",
+    "off": "Sin iniciar: el arranque automático está desactivado",
+    "start": "Iniciar",
+    "stop": "Detener",
+    "finish": "Terminar y registrar",
+    "finishHint": "Termina la sesión ahora y la registra.",
+    "editTime": "Editar el tiempo",
+    "saveTime": "Guardar",
+    "cancelTime": "Cancelar",
+    "timeHint": "h:mm:ss, mm:ss o minutos",
+    "timeInvalid": "No es un tiempo: usa h:mm:ss, mm:ss o minutos, hasta 24 h."
+  },
+  "volumeNav": {
+    "previous": "Tomo anterior: {{volume}}",
+    "next": "Tomo siguiente: {{volume}}",
+    "none": "No hay tomo en esta dirección"
   }
 }

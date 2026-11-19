@@ -55,7 +55,6 @@ export function AnimeSection({ settings }: { settings: Settings }) {
         {settings.use_player_position ? <MpvSetupSettings current={trackedPlayer} /> : null}
         <Toggle
           label={t('anime.autoLog')}
-          description={t('anime.autoLogHint')}
           checked={settings.anime_auto_log}
           onChange={(v) => void updateSettings({ anime_auto_log: v })}
         />

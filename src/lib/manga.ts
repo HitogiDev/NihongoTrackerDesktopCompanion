@@ -14,6 +14,15 @@ export const mangaUrl = {
   ext: (token: string) => convertFileSrc(`ext/${token}`, SCHEME),
 };
 
+/**
+ * A volume whose pages come from a server (WebDAV or an extension), like
+ * Rust's `store::is_served_format`. A thumbnail of one costs the whole page
+ * from the server, so the reader shows pages instead.
+ */
+export function isServedFormat(format: string): boolean {
+  return format === 'remote-archive' || format === 'remote-folder' || format === 'suwayomi-chapter';
+}
+
 /** The i18n key for an error code Rust sends back, if it is one of ours. */
 export function mangaErrorKey(error: unknown): string | null {
   const code = String(error);

@@ -821,7 +821,9 @@ function MangaCard({ session }: { session: MangaSession }) {
             <Pause className="w-3 h-3" />
             {session.pause === 'idle'
               ? t('manga.pausedIdle', { duration: formatDuration(session.inactive_secs) })
-              : t('manga.pausedUnfocused')}
+              : session.pause === 'stopped'
+                ? t('manga.pausedStopped')
+                : t('manga.pausedUnfocused')}
           </p>
         ) : null}
 

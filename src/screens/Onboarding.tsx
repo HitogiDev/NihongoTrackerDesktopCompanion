@@ -222,13 +222,11 @@ function TrackStep() {
         />
         <Toggle
           label={t('settings:vn.detect')}
-          description={t('settings:vn.detectHint')}
           checked={settings.detect_visual_novels}
           onChange={(v) => void updateSettings({ detect_visual_novels: v })}
         />
         <Toggle
           label={t('settings:game.detect')}
-          description={t('settings:game.detectHint')}
           checked={settings.detect_games}
           onChange={(v) => void updateSettings({ detect_games: v })}
         />

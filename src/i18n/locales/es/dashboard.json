@@ -103,6 +103,7 @@
     "volumeProgress": "Progreso en el tomo",
     "unlinked": "Sin vincular: el log esperará en Pendientes.",
     "link": "Vincular",
-    "open": "Volver al lector"
+    "open": "Volver al lector",
+    "pausedStopped": "El cronómetro está detenido."
   }
 }

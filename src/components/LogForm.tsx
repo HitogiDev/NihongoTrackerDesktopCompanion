@@ -77,7 +77,7 @@ export function LogForm({
           )}
         </Field>
 
-        <Field label={t('mediaTitle')} hint={t('mediaTitleHint')}>
+        <Field label={t('mediaTitle')}>
           {(id) => (
             <div className="flex gap-2">
               <input
@@ -94,7 +94,7 @@ export function LogForm({
           )}
         </Field>
 
-        <Field label={t('comment')} hint={t('commentHint')}>
+        <Field label={t('comment')}>
           {(id) => (
             <textarea
               id={id}

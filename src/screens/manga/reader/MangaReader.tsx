@@ -11,7 +11,7 @@ import { toast } from '../../../store/useToastStore';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
-import { mangaUrl } from '../../../lib/manga';
+import { isServedFormat, mangaUrl } from '../../../lib/manga';
 import { inViewTransition, withViewTransition } from '../../../lib/viewTransition';
 import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { OcrInstallModal } from '../ocr/OcrInstallModal';
@@ -28,7 +28,7 @@ import { TextLayer, type HoveredBlock } from './TextLayer';
 import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
 import { useMangaSession } from '../useMangaSession';
-import { SessionIndicator } from './SessionIndicator';
+import { ClockMenu } from './ClockMenu';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
 
@@ -38,6 +38,8 @@ const SAVE_DELAY_MS = 600;
 const WHEEL_GAP_MS = 280;
 /** Wider than this (width / height) is a two-page scan that stands alone. */
 const WIDE_RATIO = 1.15;
+/** The most pages the reader preloads, whatever the setting says. */
+const MAX_PRELOAD = 50;
 const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'invisible', invisible: 'always', always: 'hidden', hidden: 'hover' };
 const TEXT_MODE_ICON = { hover: ScanText, invisible: ScanSearch, always: Type, hidden: EyeOff } as const;
 
@@ -132,7 +134,7 @@ function Reader({ target }: { target: ReaderTarget }) {
 
 function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: number }) {
   const { t, i18n } = useTranslation(['mangaReader', 'mining']);
-  const { series, volume, next: nextVolume } = data;
+  const { series, volume, previous: previousVolume, next: nextVolume } = data;
   const count = Number(volume.page_count);
   const viewport = useViewport();
   const chrome = useAutoHide();
@@ -145,6 +147,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [atEnd, setAtEnd] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [clockOpen, setClockOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [natural, setNatural] = useState<Record<number, Size>>({});
   const vertical = prefs.layout === 'vertical';
@@ -455,11 +458,20 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     if (vertical) strip.current?.scrollToPage(target);
   }, [vertical]);
 
-  // Decode the spreads around this one before they are needed.
+  // Load and decode the pages ahead (`manga_preload_pages`) and the spread
+  // before, in either layout. Images that fell out of that window are let
+  // go: the bytes stay in Rust's caches, the decoded pixels do not pile up.
+  const preloadCount = useAppStore((s) => Math.max(0, Math.min(MAX_PRELOAD, Number(s.settings?.manga_preload_pages ?? 4))));
   const preloaded = useRef(new Map<number, HTMLImageElement>());
   useEffect(() => {
-    if (vertical) return;
-    for (const index of preloadPages(spreads, spreadIndex)) {
+    const wanted = vertical
+      ? preloadPages(Array.from({ length: count }, (_, index) => [index]), page, preloadCount)
+      : preloadPages(spreads, spreadIndex, preloadCount);
+    const keep = new Set(wanted);
+    for (const index of preloaded.current.keys()) {
+      if (!keep.has(index)) preloaded.current.delete(index);
+    }
+    for (const index of wanted) {
       if (preloaded.current.has(index)) continue;
       const image = new Image();
       image.decoding = 'async';
@@ -469,7 +481,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         .then(() => rememberSize(index, { width: image.naturalWidth, height: image.naturalHeight }))
         .catch(() => preloaded.current.delete(index));
     }
-  }, [spreads, spreadIndex, vertical, volume.id, rememberSize]);
+  }, [spreads, spreadIndex, vertical, page, count, preloadCount, volume.id, rememberSize]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -634,6 +646,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
   useEffect(() => { pin('shortcuts', shortcutsOpen); }, [pin, shortcutsOpen]);
+  useEffect(() => { pin('clock', clockOpen); }, [pin, clockOpen]);
   const shortcutGroups = useMemo(() => readerShortcuts(prefs.direction, prefs.layout), [prefs.direction, prefs.layout]);
 
   const overlay = editing
@@ -715,7 +728,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       )}
 
       <TopBar
-        visible={chrome.visible || settingsOpen}
+        visible={chrome.visible || settingsOpen || clockOpen}
         title={series.title}
         subtitle={volume.title}
         fullscreen={fullscreen}
@@ -727,7 +740,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onHover={(hovering) => chrome.pin('top', hovering)}
         onFocusWithin={(inside) => chrome.pin('top-focus', inside)}
         extra={<>
-          {ownSession ? <SessionIndicator session={ownSession} /> : null}
+          <ClockMenu volumeId={volume.id} session={ownSession} onOpenChange={setClockOpen} />
           {readingShown ? (
             <span className="badge badge-soft badge-primary gap-1.5" role="status">
               <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
@@ -820,11 +833,17 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       <BottomBar
         visible={chrome.visible || settingsOpen}
         volumeId={volume.id}
+        fullPages={isServedFormat(volume.format)}
         page={page}
         shown={vertical ? [page] : spread}
         pageLabel={pageLabel}
         pageCount={count}
         direction={prefs.direction}
+        previousVolume={previousVolume}
+        nextVolume={nextVolume}
+        // Where the user left off in it (the page is saved on the way out).
+        onPreviousVolume={() => { if (previousVolume) void openVolume(previousVolume.id); }}
+        onNextVolume={() => { if (nextVolume) void openVolume(nextVolume.id); }}
         onSeek={seek}
         onHover={(hovering) => chrome.pin('bottom', hovering)}
         onFocusWithin={(inside) => chrome.pin('bottom-focus', inside)}

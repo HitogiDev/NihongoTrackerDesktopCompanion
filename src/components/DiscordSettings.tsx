@@ -76,7 +76,6 @@ export function DiscordSettings({
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
           label={t('enable')}
-          description={t('enableHint')}
           checked={settings.discord_rpc}
           onChange={(v) => onChange({ discord_rpc: v })}
         />
@@ -96,20 +95,17 @@ export function DiscordSettings({
         />
         <Toggle
           label={t('genericMode')}
-          description={t('genericModeHint')}
           checked={settings.discord_generic_mode}
           onChange={(v) => onChange({ discord_generic_mode: v })}
         />
         <Toggle
           label={t('profileButton')}
-          description={t('profileButtonHint')}
           checked={settings.discord_profile_button}
           onChange={(v) => onChange({ discord_profile_button: v })}
         />
 
         <div className="p-3 space-y-2">
           <p className="text-sm font-medium">{t('preview.title')}</p>
-          <p className="text-xs text-base-content/60">{t('preview.hint')}</p>
           <PresenceCard decision={decision} />
         </div>
 

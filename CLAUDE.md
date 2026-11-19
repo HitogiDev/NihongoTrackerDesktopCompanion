@@ -345,7 +345,7 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `fitSpread`, en píxeles exactos, para que la capa de texto case con la imagen.
 - La lógica pura del lector está en `reader/layout.ts` y `reader/textLayer.ts`
   con sus tests: navegación por teclado según la dirección (en RTL la flecha
-  izquierda avanza), zonas de clic, precarga de ±2 dobles páginas. Las páginas
+  izquierda avanza), zonas de clic, precarga (`preloadPages`). Las páginas
   de una doble página van en el DOM en orden de lectura y una RTL se pinta con
   `flex-row-reverse`: así Tab y los lectores de pantalla llegan antes a la
   primera.
@@ -370,9 +370,16 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   qué página está arriba y a qué distancia, y la devuelve ahí cuando cambia la
   altura de las de encima. Pasar página mantiene la doble página anterior hasta
   que la nueva está decodificada (`decode()`, 250 ms como mucho) y
-  `PageImage` solo enseña imágenes decodificadas. La tira de miniaturas usa
-  `manga://thumb` y `content-visibility`; la rejilla de la biblioteca monta las
-  series de 120 en 120 (`GRID_BATCH`).
+  `PageImage` solo enseña imágenes decodificadas. La precarga
+  (`preloadPages`) son `manga_preload_pages` páginas por delante (4; Ajustes →
+  Lector de manga → Avanzado, hasta 50) más la doble página anterior, en los
+  dos modos; las que salen de esa ventana se sueltan. La tira de miniaturas
+  usa `manga://thumb` y `content-visibility`, salvo en un tomo de servidor
+  (`isServedFormat`): ahí la miniatura obligaría a bajar la página entera para
+  encogerla, así que enseña la página tal cual (la misma petición que el
+  lector precarga). La rueda la mueve en horizontal (listener nativo no
+  pasivo). La rejilla de la biblioteca monta las series de 120 en 120
+  (`GRID_BATCH`).
 - **Portadas en orden** (`screens/manga/coverQueue.ts`): una tarjeta de la
   rejilla no pide su portada hasta estar cerca de la pantalla (un único
   IntersectionObserver, 240 px de margen) y entonces espera turno en una cola
@@ -472,13 +479,36 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `manga_page_dwell_secs` (3 s) en pantalla, con `count_japanese` de sus
   bloques, y **una sola vez** (`manga_page_read`, `INSERT OR IGNORE`). Sin
   texto cuenta la página pero no caracteres.
-- **Cronómetro** como el de una VN: corre solo con la ventana del lector con
-  foco (`Runtime::reader_focused`, de `WindowEvent::Focused` en `lib.rs`) y
-  sin inactividad (`afk_timeout_secs`); el tiempo de permanencia de una página
-  se para con él. La sesión (`MangaSession`) viaja en `TrackerSnapshot.manga`
-  y por `manga://session`; la pintan la barra del lector (`SessionIndicator`)
-  y la tarjeta del Dashboard. La sesión no existe hasta el primer tick de
-  lectura.
+- **Cronómetro**: corre cuando está **armado** y el usuario está presente
+  (con foco si `manga_pause_on_unfocus`, de `Runtime::reader_focused` y
+  `WindowEvent::Focused` en `lib.rs`; sin inactividad,
+  `manga_afk_timeout_secs` o, si es `None`, `afk_timeout_secs`). Se arma solo
+  tras `manga_auto_start_delay_secs` de lectura si `manga_auto_start` (esos
+  segundos no cuentan y mirar a otro lado reinicia la cuenta), o desde el menú
+  del cronómetro (`ClockMenu`, el botón de la sesión en la barra del lector:
+  `manga_clock_action` `start`/`stop`/`finish`). Armado, la ausencia lo pausa
+  y vuelve solo; **detenido** por el usuario no vuelve hasta Iniciar o hasta
+  que se activa `manga_auto_start` (activarlo es pedirlo). Cerrar una sesión
+  ("Terminar y registrar" incluido) lo desarma: la siguiente arranca como
+  cualquier otra (sola tras el retraso, o desde el menú). El tiempo se edita a
+  mano en el menú (`manga_clock_set_elapsed`, `Tracking::set_elapsed`, hasta
+  24 h; `clockTime.ts` lee `h:mm:ss`, `mm:ss` o minutos): sin sesión, crea una
+  con ese tiempo, y el reloj sigue contando desde ahí. La lógica es pura (`Tracking::step`,
+  `start_clock`, `stop_clock`, `finish_now`) y tiene tests. El estado
+  (`MangaClock`: `running`, `paused`, `stopped`, `waiting` con
+  `starts_in_secs`, `off`) existe aunque no haya sesión y viaja por
+  `manga://clock` (`manga_clock_state` al cargar). Sus ajustes son un único
+  componente (`MangaClockSettings`) que usan el menú y Ajustes → Lector de
+  manga. La etiqueta dice qué hace cada opción: una explicación solo va donde
+  la etiqueta no llega (qué es 0, que las series sin vincular siguen yendo a
+  Pendientes). Al añadir una opción, ninguna explicación que repita la
+  etiqueta. Los números (`NumberSetting`) guardan
+  al salir, con Intro o 500 ms después de escribir: guardar en cada tecla o
+  paso de un slider va a Rust y vuelve, y se nota. El tiempo de permanencia de una página se para con el reloj. La
+  sesión (`MangaSession`, `pause` = `unfocused`/`idle`/`stopped`) viaja en
+  `TrackerSnapshot.manga` y por `manga://session`; la pintan la barra del
+  lector y la tarjeta del Dashboard. La sesión no existe hasta el primer tick
+  con el reloj en marcha.
 - **Log** al cerrar el lector (`WindowEvent::Destroyed`), al pasar a otro tomo,
   al salir de la app (`RunEvent::Exit`) o tras `manga_idle_log_minutes` (10)
   con el reloj parado; al volver empieza otra sesión. `log_payload` es puro y
@@ -800,7 +830,7 @@ capturas no van dentro.
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
 `discord://status`, `updater://available`, `updater://progress`,
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
-`manga://session-ended`, `manga://webdav-sync`, `manga://download`,
+`manga://session-ended`, `manga://clock`, `manga://webdav-sync`, `manga://download`,
 `manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`,
 `manga://ext-status`, `manga://suggestions`. Están
 centralizados en `src/lib/ipc.ts` (`events`).

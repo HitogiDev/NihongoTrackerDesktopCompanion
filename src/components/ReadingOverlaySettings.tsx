@@ -82,7 +82,7 @@ export function ReadingOverlaySettings() {
       <div className="space-y-1">
         <Toggle label={t('centerText')} checked={preferences.center_text} onChange={(value) => save({ center_text: value })} />
         <Toggle label={t('alwaysOnTop')} checked={preferences.always_on_top} onChange={(value) => save({ always_on_top: value })} />
-        <Toggle label={t('hideWhenUnfocused')} description={t('hideWhenUnfocusedHint')} checked={preferences.hide_when_unfocused ?? true} onChange={(value) => save({ hide_when_unfocused: value })} />
+        <Toggle label={t('hideWhenUnfocused')} checked={preferences.hide_when_unfocused ?? true} onChange={(value) => save({ hide_when_unfocused: value })} />
         {ctrlShield ? <Toggle label={t('blockCtrl')} description={t('blockCtrlHint')} checked={preferences.block_ctrl_on_hover} onChange={(value) => save({ block_ctrl_on_hover: value })} /> : null}
         <Toggle label={t('toolbarTitleHoverOnly')} checked={preferences.toolbar_title_hover_only} onChange={(value) => save({ toolbar_title_hover_only: value })} />
       </div>
@@ -90,7 +90,7 @@ export function ReadingOverlaySettings() {
         <h3 id="overlay-dictionary-settings" className="text-sm font-semibold">{t('popup.title')}</h3>
         <Toggle label={t('popup.enabled')} checked={preferences.popup_enabled ?? true} onChange={(value) => save({ popup_enabled: value })} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('popup.opacity')} hint={t('popup.opacityHint')}>{(id) => <input id={id} type="number" min={0} max={100} className="input w-full" value={preferences.popup_background_opacity ?? 100} onChange={(event) => {
+          <Field label={t('popup.opacity')}>{(id) => <input id={id} type="number" min={0} max={100} className="input w-full" value={preferences.popup_background_opacity ?? 100} onChange={(event) => {
             const value = event.currentTarget.valueAsNumber;
             if (Number.isFinite(value)) save({ popup_background_opacity: value });
           }} />}</Field>
@@ -98,7 +98,7 @@ export function ReadingOverlaySettings() {
             const value = event.currentTarget.valueAsNumber;
             if (Number.isFinite(value)) save({ lookup_delay_ms: value });
           }} />}</Field>
-          <Field label={t('popup.closeDelay')} hint={t('popup.closeDelayHint')}>{(id) => <input id={id} type="number" min={0} max={5000} step={50} className="input w-full" value={preferences.popup_close_delay_ms ?? 500} onChange={(event) => {
+          <Field label={t('popup.closeDelay')}>{(id) => <input id={id} type="number" min={0} max={5000} step={50} className="input w-full" value={preferences.popup_close_delay_ms ?? 500} onChange={(event) => {
             const value = event.currentTarget.valueAsNumber;
             if (Number.isFinite(value)) save({ popup_close_delay_ms: value });
           }} />}</Field>

@@ -336,9 +336,9 @@
     },
     "mode": {
       "managed": "Managed",
-      "managedHint": "The app downloads Suwayomi-Server and Java, runs it only while you use extensions and stops it when you close the app.",
+      "managedHint": "Downloads Suwayomi-Server and Java, and runs them only while you use extensions.",
       "custom": "My own server",
-      "customHint": "A Suwayomi-Server you already run, on this computer or your network.",
+      "customHint": "A Suwayomi-Server you already run.",
       "recommended": "Recommended"
     },
     "install": {

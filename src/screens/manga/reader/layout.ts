@@ -102,14 +102,20 @@ export function clickAction(x: number, width: number, direction: ReadingDirectio
   return 'middle';
 }
 
-/** The pages to decode ahead of time: the spreads around the current one. */
-export function preloadPages(spreads: number[][], current: number, around = 2): number[] {
+/**
+ * The pages to load and decode ahead of time: `ahead` pages after the
+ * current spread (`manga_preload_pages`), nearest first, then the spread
+ * before it, for going back a step. In the vertical strip every page is its
+ * own "spread".
+ */
+export function preloadPages(spreads: number[][], current: number, ahead = 4): number[] {
   const pages: number[] = [];
-  for (let offset = 1; offset <= around; offset++) {
-    for (const index of [current + offset, current - offset]) {
-      if (index >= 0 && index < spreads.length) pages.push(...spreads[index]);
+  for (let index = current + 1; index < spreads.length && pages.length < ahead; index++) {
+    for (const page of spreads[index]) {
+      if (pages.length < ahead) pages.push(page);
     }
   }
+  if (current - 1 >= 0 && current - 1 < spreads.length) pages.push(...spreads[current - 1]);
   return pages;
 }
 
