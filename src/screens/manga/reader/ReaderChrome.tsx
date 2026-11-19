@@ -141,6 +141,7 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
           onChange={(text_layer) => onChange({ text_layer })}
           options={[
             { value: 'hover', label: t('text.hover') },
+            { value: 'invisible', label: t('text.invisible') },
             { value: 'always', label: t('text.always') },
             { value: 'hidden', label: t('text.hidden') },
           ]}

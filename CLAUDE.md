@@ -448,8 +448,16 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   primera página (`.manga-reader-in`) y otro tomo abierto en ella cruza con
   una transición si la hay.
 - **Capa de texto**: cajas escaladas desde `img_width`, `vertical-rl` si el
-  bloque es vertical, fuente ajustada a la caja (`blockFontSize`). Estilos en
-  `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
+  bloque es vertical. Como el lector de mokuro (`TextBoxes.svelte` de
+  ZXY101/legacy-mokuro-reader): la fuente es el `font_size` del bloque
+  escalado, **sin encoger para caber en la caja** (`blockFontSize`; solo un
+  bloque sin tamaño se ajusta), interlineado `1.1em`, `letter-spacing: 0.1em`,
+  caja recortada a la imagen y una línea más larga que la caja sobresale. Si
+  se ajusta a la caja, el texto queda más pequeño que el de la página y se sale
+  de sus columnas. Cada línea va además en su sitio de la página
+  (`linePlacements`, el rectángulo de sus `lines_coords`): apiladas desde el
+  borde de la caja, las columnas que empiezan a otra altura se amontonan. Sin
+  coordenadas para cada línea, fluyen desde el borde como antes. Estilos en `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
   `src/hooks/useDictionaryHover.ts`, el mismo que el texthooker
   (`openDictionaryAt` para cualquier elemento). Ctrl+C sin selección selecciona
   el bloque y el evento `copy` escribe sus líneas unidas: no depende del

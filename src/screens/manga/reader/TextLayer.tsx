@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Copy, Pickaxe } from 'lucide-react';
 import type { MokuroPage, TextLayerMode } from '../../../lib/types';
 import type { Size } from './layout';
-import { blockBox, blockFontSize, blockText } from './blockGeometry';
+import { blockBox, blockFontSize, blockText, linePlacements } from './blockGeometry';
 
 /** A block of the page under the pointer, for Ctrl+C, Ctrl+M and lookups. */
 export interface HoveredBlock {
@@ -51,7 +51,8 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
       {page.blocks.map((block, index) => {
         const text = blockText(block);
         if (!text) return null;
-        const box = blockBox(block, scale);
+        const box = blockBox(block, scale, page.img_width, page.img_height > 0 ? page.img_height : Infinity);
+        const placed = linePlacements(block, scale, box);
         const busy = mining === `${pageIndex}:${index}`;
         const hovered = (element: HTMLElement): HoveredBlock => ({ text, element, page: pageIndex, block: index });
         const place = (element: HTMLElement) => {
@@ -69,7 +70,7 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
             role="group"
             tabIndex={0}
             aria-label={t('text.block', { n: shown, count: total, page: pageIndex + 1 })}
-            className={block.vertical ? 'manga-block manga-block-vertical' : 'manga-block'}
+            className={`manga-block ${block.vertical ? 'manga-block-vertical' : ''} ${placed ? 'manga-block-placed' : ''}`}
             style={{ ...box, fontSize: blockFontSize(block, scale) }}
             onMouseMove={(event) => onPointer(event, text, lineContext(index))}
             onMouseEnter={(event) => {
@@ -89,7 +90,9 @@ export function TextLayer({ page, pageIndex, size, mode, lineContext, onPointer,
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onHoverBlock(null);
             }}
           >
-            {block.lines.map((line, lineIndex) => <span key={lineIndex} className="manga-line">{line}</span>)}
+            {/* In mokuro's order in the DOM (selection, copy, screen readers),
+                each where it is on the page when the block says so. */}
+            {block.lines.map((line, lineIndex) => <span key={lineIndex} className="manga-line" style={placed?.[lineIndex]}>{line}</span>)}
             <div
               className="manga-block-actions"
               data-busy={busy || undefined}

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
-import { BookX, EyeOff, Loader2, PencilLine, ScanText, Type } from 'lucide-react';
+import { BookX, EyeOff, Loader2, PencilLine, ScanSearch, ScanText, Type } from 'lucide-react';
 import { DictionaryPopup } from '../../../components/DictionaryPopup';
 import { useDictionaryHover } from '../../../hooks/useDictionaryHover';
 import { useAppStore } from '../../../store/useAppStore';
@@ -38,8 +38,8 @@ const SAVE_DELAY_MS = 600;
 const WHEEL_GAP_MS = 280;
 /** Wider than this (width / height) is a two-page scan that stands alone. */
 const WIDE_RATIO = 1.15;
-const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'always', always: 'hidden', hidden: 'hover' };
-const TEXT_MODE_ICON = { hover: ScanText, always: Type, hidden: EyeOff } as const;
+const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'invisible', invisible: 'always', always: 'hidden', hidden: 'hover' };
+const TEXT_MODE_ICON = { hover: ScanText, invisible: ScanSearch, always: Type, hidden: EyeOff } as const;
 
 function useViewport(): Size {
   const [size, setSize] = useState<Size>({ width: window.innerWidth, height: window.innerHeight });
@@ -586,10 +586,28 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     else goPrevious();
   };
 
+  // A block of text keeps its clicks (to select it), unless the text layer is
+  // invisible: there is nothing to see or select, only the page under it.
   const onPage = (event: ReactMouseEvent) =>
-    !(event.target as HTMLElement).closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]');
+    !(event.target as HTMLElement).closest(
+      prefs.text_layer === 'invisible'
+        ? '[data-reader-chrome], [data-edit-layer], dialog, [role="dialog"]'
+        : '[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]',
+    );
+
+  // The dictionary closes on a press outside it (DictionaryPopup); the click
+  // that follows only closed it, it does not turn the page.
+  const closedDictionary = useRef(false);
+  const onPointerDownCapture = (event: ReactPointerEvent) => {
+    closedDictionary.current = Boolean(dictionary.dictionaryRequest)
+      && !(event.target as HTMLElement).closest('[role="dialog"]');
+  };
 
   const onClick = (event: ReactMouseEvent) => {
+    if (closedDictionary.current) {
+      closedDictionary.current = false;
+      return;
+    }
     if (!onPage(event)) return;
     if (settingsOpen) {
       setSettingsOpen(false);
@@ -665,6 +683,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   return (
     <div
       className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
+      onPointerDownCapture={onPointerDownCapture}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onWheel={onWheel}

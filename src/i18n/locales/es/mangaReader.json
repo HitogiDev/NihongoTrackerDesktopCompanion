@@ -45,6 +45,7 @@
   },
   "text": {
     "hover": "Al pasar",
+    "invisible": "Solo búsqueda",
     "always": "Siempre",
     "hidden": "Oculto",
     "toggle": "Texto: {{mode}}",
@@ -132,7 +133,7 @@
       "scrollStep": "Desplazar un poco",
       "scrollScreen": "Bajar una pantalla",
       "scrollScreenBack": "Subir una pantalla",
-      "textLayer": "Capa de texto: al pasar, siempre, oculta",
+      "textLayer": "Capa de texto: al pasar, solo búsqueda, siempre, oculta",
       "lookUp": "Buscar una palabra",
       "nextBlock": "Bloque siguiente o anterior",
       "blockArrows": "Moverse entre bloques (con uno enfocado)",

@@ -45,6 +45,7 @@
   },
   "text": {
     "hover": "On hover",
+    "invisible": "Lookup only",
     "always": "Always",
     "hidden": "Hidden",
     "toggle": "Text: {{mode}}",
@@ -132,7 +133,7 @@
       "scrollStep": "Scroll a little",
       "scrollScreen": "Down a screen",
       "scrollScreenBack": "Up a screen",
-      "textLayer": "Text layer: on hover, always, hidden",
+      "textLayer": "Text layer: on hover, lookup only, always, hidden",
       "lookUp": "Look a word up",
       "nextBlock": "Next or previous text block",
       "blockArrows": "Move between blocks (one focused)",

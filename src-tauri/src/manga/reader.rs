@@ -69,6 +69,9 @@ pub enum TextLayerMode {
     /// Invisible until the pointer is over a block, like mokuro's reader.
     #[default]
     Hover,
+    /// Never drawn, not even on hover (no text, no box), but there: a
+    /// Shift/Alt hover still looks it up, and Ctrl+C / Ctrl+M still work.
+    Invisible,
     Always,
     Hidden,
 }
