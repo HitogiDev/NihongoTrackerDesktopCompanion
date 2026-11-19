@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, BookOpen, Puzzle, Check, ShieldAlert, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, BookmarkCheck, BookmarkPlus, BookOpen, Puzzle, Check, ShieldAlert, CloudDownload, CloudOff, FileArchive, FileDown, Folder, HardDriveDownload, Link2, Play, RefreshCw, ScanText, Server, Trash2, Unlink, UploadCloud, X } from 'lucide-react';
 import { MediaSearchModal } from '../../components/MediaSearchModal';
 import { Button } from '../../components/ui/Button';
 import DropdownSelect from '../../components/ui/DropdownSelect';
@@ -22,6 +22,7 @@ import { extErrorText } from './ext/useExtensions';
 import { SuggestionCard } from './Suggestions';
 import { useSuggestions } from './useSuggestions';
 import { downloadForOffline, syncSource, useDownloadEvents, useDownloadStore } from './useWebdav';
+import { useLibraryToggle } from './SeriesGrid';
 
 /** A chapter of a series from an extension (its pages come from the Suwayomi server). */
 const isChapter = (volume: MangaVolume) => volume.format === 'suwayomi-chapter';
@@ -55,6 +56,8 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
   const cover = mangaUrl.cover(series.id);
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   const [unlinking, setUnlinking] = useState(false);
+  const library = useLibraryToggle();
+  const inLibrary = Boolean(series.in_library_at);
 
   const unlink = async () => {
     setUnlinking(true);
@@ -99,7 +102,7 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="badge badge-ghost gap-1"><BookOpen className="h-3 w-3" />{series.source === 'suwayomi' ? t('ext.detail.chapters', { count: Number(series.volume_count) }) : t('grid.volumes', { count: Number(series.volume_count) })}</span>
             <span className="badge badge-ghost">{t('detail.pages', { count: Number(series.page_count) })}</span>
-            {series.has_text ? <span className={`badge gap-1 border ${MANGA.bgColor} ${MANGA.borderColor} ${MANGA.color}`}><ScanText className="h-3 w-3" />{t('detail.hasText')}</span> : null}
+            {series.has_text ? <span className={`badge gap-1 border ${MANGA.bgColor} ${MANGA.borderColor} ${MANGA.color}`} title={series.has_mokuro ? t('grid.mokuroHint') : t('grid.textHint')}><ScanText className="h-3 w-3" />{series.has_mokuro ? t('grid.mokuro') : t('detail.hasText')}</span> : null}
             {percent > 0 ? <span className="badge badge-ghost">{t('detail.percentRead', { percent })}</span> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -111,6 +114,16 @@ function Hero({ series, volumes, source, onLink }: { series: MangaSeries; volume
                   : t('actions.readVolume', { volume: next.volume.title })}
               </Button>
             ) : null}
+            <Button
+              appearance={inLibrary ? 'soft' : 'outline'}
+              loading={library.busy}
+              aria-pressed={inLibrary}
+              title={inLibrary ? t('library.remove') : t('library.add')}
+              onClick={() => void library.toggle(series)}
+            >
+              {library.busy ? null : inLibrary ? <BookmarkCheck className="h-4 w-4" /> : <BookmarkPlus className="h-4 w-4" />}
+              {inLibrary ? t('library.inLibrary') : t('library.add')}
+            </Button>
             {series.media_id ? (
               <span className="inline-flex min-w-0 items-center gap-1 rounded-field border border-base-300 bg-base-100/70 py-1 pl-3 pr-1 text-sm backdrop-blur-sm">
                 <Link2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
@@ -367,6 +380,14 @@ export default function SeriesDetailScreen() {
   const navigate = useNavigate();
   // Arrived by a view transition, the cover already moved: no fade on top.
   const [fade] = useState(() => !inViewTransition());
+
+  // Opened on purpose: worth a link suggestion even outside "My library"
+  // (Rust looks it up before the rest; nothing happens if it is linked or
+  // was looked up already).
+  const unlinked = series ? !series.media_id : false;
+  useEffect(() => {
+    if (unlinked && !suggestion) void ipc.mangaSuggestPriority([seriesId]).catch(() => undefined);
+  }, [seriesId, unlinked]);
 
   // A remote series: its texts come down in the background while it is looked at.
   useEffect(() => {

@@ -3,13 +3,6 @@
   "subtitle": "Read your manga in Japanese, with mokuro text and dictionary lookups.",
   "search": "Search series",
   "loadFailed": "Could not load the manga library",
-  "tabs": {
-    "label": "Where the manga comes from",
-    "all": "All",
-    "local": "Local",
-    "webdav": "WebDAV",
-    "extensions": "Extensions"
-  },
   "actions": {
     "addFolder": "Add folder",
     "rescan": "Rescan the library",
@@ -23,7 +16,6 @@
     "open": "{{title}} — {{volume}}"
   },
   "grid": {
-    "title": "Series",
     "volumes_one": "{{count, number}} volume",
     "volumes_other": "{{count, number}} volumes",
     "finished_one": "{{count, number}} read",
@@ -34,7 +26,10 @@
     "noMatches": "No series matches the filter",
     "clear": "Clear filter",
     "nothingFound": "No manga in your folders yet",
-    "nothingFoundBody": "Image folders, CBZ and ZIP files count as volumes, and the folder they are in as the series. Add files and rescan."
+    "nothingFoundBody": "Image folders, CBZ and ZIP files count as volumes, and the folder they are in as the series. Add files and rescan.",
+    "mokuro": "mokuro",
+    "mokuroHint": "Comes with mokuro text you can hover and look up",
+    "allTitle": "All series"
   },
   "detail": {
     "back": "Back to the library",
@@ -585,6 +580,13 @@
       "linked": "Linked",
       "unlinked": "Not linked",
       "suggested": "Suggested"
+    },
+    "origin": {
+      "label": "Source",
+      "any": "Any",
+      "local": "Local",
+      "webdav": "WebDAV",
+      "suwayomi": "Extensions"
     }
   },
   "suggest": {
@@ -616,5 +618,25 @@
       "noneBody": "Unlinked series are looked up on NihongoTracker in the background. Matches show up here.",
       "back": "All series"
     }
-  }
+  },
+  "sections": {
+    "label": "Manga sections",
+    "library": "My library",
+    "all": "All series"
+  },
+  "library": {
+    "gridTitle": "My library",
+    "add": "Add to my library",
+    "remove": "Remove from my library",
+    "inLibrary": "In my library",
+    "added": "{{title}} added to your library",
+    "removed": "{{title}} removed from your library",
+    "failed": "Could not change your library: {{message}}",
+    "empty": {
+      "title": "Your library is empty",
+      "body": "Add the series you are reading from All series, with the bookmark on a cover or on its page. They will be here when you open Manga.",
+      "action": "Browse all series"
+    }
+  },
+  "searchLibrary": "Search your library"
 }

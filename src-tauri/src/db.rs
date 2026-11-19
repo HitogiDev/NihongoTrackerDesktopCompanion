@@ -337,6 +337,13 @@ CREATE TABLE IF NOT EXISTS manga_title_search (
     hits_json TEXT NOT NULL,
     searched_at TEXT NOT NULL
 );
+-- "My library": the series the user added to it. No foreign key, like
+-- progress: a series on a drive that is not plugged in, or a server that is
+-- down, comes back with the same id and is still in it.
+CREATE TABLE IF NOT EXISTS manga_shelf (
+    series_id TEXT PRIMARY KEY,
+    added_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manga_page_read (
     volume_id TEXT NOT NULL,
     page INTEGER NOT NULL,

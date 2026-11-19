@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MangaSeries } from '../../lib/types';
-import { activeFilters, applyView, DEFAULT_VIEW, loadView, saveView, seriesStatus } from './libraryView';
+import { activeFilters, applyView, DEFAULT_VIEW, loadSection, loadView, saveSection, saveView, SECTION_DEFAULTS, seriesStatus } from './libraryView';
 
 const make = (id: string, over: Partial<MangaSeries> = {}): MangaSeries => ({
   id,
@@ -14,6 +14,8 @@ const make = (id: string, over: Partial<MangaSeries> = {}): MangaSeries => ({
   volume_count: 3,
   page_count: 600,
   has_text: false,
+  has_mokuro: false,
+  in_library_at: null,
   volumes_finished: 0,
   pages_read: 0,
   last_read_at: null,
@@ -24,7 +26,7 @@ const library = [
   make('Vol 2', { has_text: true, volume_count: 2, created_at: '2026-03-01T00:00:00Z' }),
   make('Vol 10', { media_id: '30104', pages_read: 40, last_read_at: '2026-05-02T10:00:00Z' }),
   make('Akira', { volume_count: 6, volumes_finished: 6, pages_read: 1200, last_read_at: '2026-04-01T10:00:00Z', created_at: '2026-02-01T00:00:00Z' }),
-  make('blame!', { has_text: true }),
+  make('blame!', { has_text: true, source: 'local' }),
 ];
 const ids = (list: MangaSeries[]) => list.map((item) => item.id);
 
@@ -63,18 +65,31 @@ describe('library view', () => {
 
   it('counts the filters, not the order', () => {
     expect(activeFilters({ ...DEFAULT_VIEW, sort: 'added' })).toBe(0);
-    expect(activeFilters({ sort: 'added', text: 'with', link: 'suggested', status: 'any' })).toBe(2);
+    expect(activeFilters({ sort: 'added', text: 'with', link: 'suggested', status: 'any', origin: 'local' })).toBe(3);
+  });
+
+  it('filters by where the series comes from', () => {
+    expect(ids(applyView(library, { ...DEFAULT_VIEW, origin: 'local' }))).toEqual(['blame!']);
+    expect(ids(applyView(library, { ...DEFAULT_VIEW, origin: 'suwayomi' }))).toEqual([]);
   });
 
   describe('storage', () => {
     beforeEach(() => localStorage.clear());
-    it('remembers the view and ignores what it does not know', () => {
-      saveView({ sort: 'volumes', text: 'with', link: 'linked', status: 'reading' });
-      expect(loadView()).toEqual({ sort: 'volumes', text: 'with', link: 'linked', status: 'reading' });
+    it('remembers each section\'s view and ignores what it does not know', () => {
+      const view = { sort: 'volumes', text: 'with', link: 'linked', status: 'reading', origin: 'webdav' } as const;
+      saveView('library', view);
+      expect(loadView('library')).toEqual(view);
+      // The other section keeps its own: all series in title order.
+      expect(loadView('all')).toEqual(DEFAULT_VIEW);
       localStorage.setItem('manga:library:view', JSON.stringify({ sort: 'nope', text: 'with', status: 42 }));
-      expect(loadView()).toEqual({ ...DEFAULT_VIEW, text: 'with' });
+      expect(loadView('library')).toEqual({ ...SECTION_DEFAULTS.library, text: 'with' });
       localStorage.setItem('manga:library:view', '{broken');
-      expect(loadView()).toEqual(DEFAULT_VIEW);
+      expect(loadView('library')).toEqual(SECTION_DEFAULTS.library);
+    });
+    it('opens on "My library" unless the user left on all series', () => {
+      expect(loadSection()).toBe('library');
+      saveSection('all');
+      expect(loadSection()).toBe('all');
     });
   });
 });

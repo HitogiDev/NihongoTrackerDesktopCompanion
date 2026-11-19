@@ -3,13 +3,6 @@
   "subtitle": "Lee manga en japonés, con el texto de mokuro y consultas al diccionario.",
   "search": "Buscar series",
   "loadFailed": "No se pudo cargar la biblioteca de manga",
-  "tabs": {
-    "label": "De dónde sale el manga",
-    "all": "Todo",
-    "local": "Local",
-    "webdav": "WebDAV",
-    "extensions": "Extensiones"
-  },
   "actions": {
     "addFolder": "Añadir carpeta",
     "rescan": "Volver a escanear la biblioteca",
@@ -23,7 +16,6 @@
     "open": "{{title}} — {{volume}}"
   },
   "grid": {
-    "title": "Series",
     "volumes_one": "{{count, number}} tomo",
     "volumes_other": "{{count, number}} tomos",
     "finished_one": "{{count, number}} leído",
@@ -34,7 +26,10 @@
     "noMatches": "Ninguna serie coincide con el filtro",
     "clear": "Quitar filtro",
     "nothingFound": "Aún no hay manga en tus carpetas",
-    "nothingFoundBody": "Las carpetas de imágenes y los archivos CBZ y ZIP son tomos, y la carpeta donde están es la serie. Añade archivos y vuelve a escanear."
+    "nothingFoundBody": "Las carpetas de imágenes y los archivos CBZ y ZIP son tomos, y la carpeta donde están es la serie. Añade archivos y vuelve a escanear.",
+    "mokuro": "mokuro",
+    "mokuroHint": "Trae texto de mokuro para consultar al pasar el ratón",
+    "allTitle": "Todas las series"
   },
   "detail": {
     "back": "Volver a la biblioteca",
@@ -585,6 +580,13 @@
       "linked": "Vinculadas",
       "unlinked": "Sin vincular",
       "suggested": "Sugeridas"
+    },
+    "origin": {
+      "label": "Origen",
+      "any": "Todos",
+      "local": "Local",
+      "webdav": "WebDAV",
+      "suwayomi": "Extensiones"
     }
   },
   "suggest": {
@@ -616,5 +618,25 @@
       "noneBody": "Las series sin vincular se buscan en NihongoTracker en segundo plano. Las coincidencias aparecen aquí.",
       "back": "Todas las series"
     }
-  }
+  },
+  "sections": {
+    "label": "Secciones de manga",
+    "library": "Mi biblioteca",
+    "all": "Todas las series"
+  },
+  "library": {
+    "gridTitle": "Mi biblioteca",
+    "add": "Añadir a mi biblioteca",
+    "remove": "Quitar de mi biblioteca",
+    "inLibrary": "En mi biblioteca",
+    "added": "{{title}} añadida a tu biblioteca",
+    "removed": "{{title}} quitada de tu biblioteca",
+    "failed": "No se pudo cambiar tu biblioteca: {{message}}",
+    "empty": {
+      "title": "Tu biblioteca está vacía",
+      "body": "Añade las series que lees desde Todas las series, con el marcador de la portada o de su ficha. Estarán aquí nada más abrir Manga.",
+      "action": "Ver todas las series"
+    }
+  },
+  "searchLibrary": "Buscar en tu biblioteca"
 }

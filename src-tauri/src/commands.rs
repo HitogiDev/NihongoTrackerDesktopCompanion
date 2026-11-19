@@ -1783,12 +1783,31 @@ pub fn manga_dismiss_suggestion(app: AppHandle, state: State<'_, AppState>, seri
     Ok(())
 }
 
-/// The series the library shows now, top first: looked up before the rest.
+/// Adds series to "My library" (what the Manga screen opens on) or takes
+/// them out. Their files and progress stay where they are.
+#[tauri::command]
+pub fn manga_set_in_library(app: AppHandle, state: State<'_, AppState>, series_ids: Vec<String>, in_library: bool) -> CmdResult<()> {
+    state.db.set_manga_in_library(&series_ids, in_library).map_err(err)?;
+    if in_library {
+        // Now worth looking up a link for (see `suggest`).
+        state.manga.suggest_wake.notify_one();
+    }
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
+/// Series the user opened (a series page): looked up before the rest, even
+/// outside "My library".
 #[tauri::command]
 pub fn manga_suggest_priority(state: State<'_, AppState>, series_ids: Vec<String>) {
-    let mut ids = series_ids;
-    ids.truncate(crate::manga::suggest::PRIORITY_LIMIT);
-    *state.manga.suggest_priority.lock().unwrap() = ids;
+    {
+        // The newest first; the ones opened before stay in line after them.
+        let mut queue = state.manga.suggest_priority.lock().unwrap();
+        let mut ids = series_ids;
+        ids.extend(queue.iter().filter(|id| !ids.contains(id)).cloned().collect::<Vec<_>>());
+        ids.truncate(crate::manga::suggest::PRIORITY_LIMIT);
+        *queue = ids;
+    }
     state.manga.suggest_wake.notify_one();
 }
 
@@ -2392,6 +2411,8 @@ pub async fn manga_ext_add_series(app: AppHandle, state: State<'_, AppState>, ma
         return Err("adult-hidden".into());
     }
     let id = crate::manga::suwayomi::library::add(&state.db, &server, mode.source_id(), manga_id, false).await.map_err(ext_err)?;
+    // Added on purpose: it goes to "My library" too.
+    state.db.set_manga_in_library(std::slice::from_ref(&id), true).map_err(err)?;
     let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
     Ok(id)
 }

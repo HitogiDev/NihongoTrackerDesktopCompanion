@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderCog, FolderPlus, Keyboard, ListFilter, RefreshCw, Search, SearchX, Server, Sparkles, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bookmark, FolderCog, FolderPlus, Keyboard, Library, ListFilter, RefreshCw, Search, SearchX, Server, Sparkles } from 'lucide-react';
 import { MANGA } from './manga/Cover';
 import { Button } from '../components/ui/Button';
 import { EmptyState, ErrorState } from '../components/ui/Empty';
@@ -22,12 +22,10 @@ import { formatCount } from '../lib/manga';
 import { LibraryToolbar } from './manga/LibraryToolbar';
 import { SuggestionReview } from './manga/Suggestions';
 import { useSuggestions } from './manga/useSuggestions';
-import { ipc } from '../lib/ipc';
-import { activeFilters, applyView, DEFAULT_VIEW, loadView, saveView, type LibraryView } from './manga/libraryView';
+import { activeFilters, applyView, cleared, loadSection, loadView, saveSection, saveView, type LibraryView, type Section } from './manga/libraryView';
 import type { MangaSource } from '../lib/types';
 
-const ORIGINS: Origin[] = ['all', 'local', 'webdav', 'extensions'];
-const ORIGIN_SOURCE: Record<Origin, string | null> = { all: null, local: 'local', webdav: 'webdav', extensions: 'suwayomi' };
+const SECTIONS: Section[] = ['library', 'all'];
 
 export default function MangaScreen() {
   const { t, i18n } = useTranslation(['manga', 'common']);
@@ -36,13 +34,18 @@ export default function MangaScreen() {
   const library = useMangaLibrary();
   const { add, adding } = useAddFolder();
   const { rescan, scanning } = useRescan();
-  // Back from a source or a series of one: the Extensions tab again.
+  // Back from a source or a series of one: the extensions again.
   const routeState = useLocation().state as { origin?: Origin } | null;
-  const [origin, setOrigin] = useState<Origin>(routeState?.origin ?? 'all');
+  const [extensions, setExtensions] = useState(routeState?.origin === 'extensions');
+  // "My library" (what the user keeps) or "All series" (every source's
+  // catalogue), remembered with a sort and filters of its own each.
+  const [section, setSectionState] = useState<Section>(loadSection);
+  const setSection = (next: Section) => { setSectionState(next); saveSection(next); setExtensions(false); };
   const [search, setSearch] = useState('');
-  // Sort and filters: one choice for every tab, remembered.
-  const [view, setViewState] = useState<LibraryView>(loadView);
-  const setView = (next: LibraryView) => { setViewState(next); saveView(next); };
+  const [views, setViews] = useState<Record<Section, LibraryView>>(() => ({ library: loadView('library'), all: loadView('all') }));
+  const view = views[section];
+  const setView = (next: LibraryView) => { setViews((current) => ({ ...current, [section]: next })); saveView(section, next); };
+  const origin: Origin = extensions ? 'extensions' : 'all';
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [serversOpen, setServersOpen] = useState(false);
   // `undefined`: the form is closed; `null`: a new server.
@@ -74,36 +77,33 @@ export default function MangaScreen() {
   useEffect(() => { void rescan(true); }, []);
 
   const data = library.data;
-  // The tab and the search, then the view's filters and order.
+  const inLibrary = useMemo(() => (data?.series ?? []).filter((series) => series.in_library_at), [data]);
+  const pool = section === 'library' ? inLibrary : data?.series ?? [];
+  // The section and the search, then the view's filters and order.
   const searched = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    const source = ORIGIN_SOURCE[origin];
-    return (data?.series ?? []).filter((series) =>
-      (!source || series.source === source)
-      && (!needle || `${series.title} ${series.media_title ?? ''}`.toLowerCase().includes(needle)));
-  }, [data, origin, search]);
+    return pool.filter((series) => !needle || `${series.title} ${series.media_title ?? ''}`.toLowerCase().includes(needle));
+  }, [pool, search]);
+  // Suggestions are for the manga the user keeps: "My library" only. In
+  // "All series" a catalogue of a thousand would be a thousand badges.
   const suggestions = useSuggestions();
-  const suggested = useMemo(() => new Set(suggestions.byId.keys()), [suggestions.byId]);
+  const suggested = useMemo(
+    () => (section === 'library' ? new Set(inLibrary.filter((item) => suggestions.byId.has(item.id)).map((item) => item.id)) : new Set<string>()),
+    [section, inLibrary, suggestions.byId],
+  );
   const filtered = useMemo(() => applyView(searched, view, suggested), [searched, view, suggested]);
   const narrowed = activeFilters(view) > 0;
-  const reviewing = view.link === 'suggested';
+  const reviewing = section === 'library' && view.link === 'suggested';
   const waiting = useMemo(() => searched.filter((item) => !item.media_id && suggested.has(item.id)).length, [searched, suggested]);
 
-  // Suggestions look up first what the grid shows first (Rust keeps the pace).
-  useEffect(() => {
-    const ids = filtered.filter((item) => !item.media_id && !suggested.has(item.id)).slice(0, 240).map((item) => item.id);
-    if (ids.length === 0) return;
-    const timer = setTimeout(() => void ipc.mangaSuggestPriority(ids).catch(() => undefined), 800);
-    return () => clearTimeout(timer);
-  }, [filtered, suggested]);
-
   // The extensions server's own rows do not make a library: only its series do.
-  const hasSources = (data?.sources ?? []).some((source) => source.kind !== 'suwayomi' || source.series_count > 0) || origin === 'extensions';
+  const hasSources = (data?.sources ?? []).some((source) => source.kind !== 'suwayomi' || source.series_count > 0) || extensions;
   const hasSeries = (data?.series.length ?? 0) > 0;
   const servers = useMemo(() => (data?.sources ?? []).filter((source) => source.kind === 'webdav'), [data]);
-  const filtering = search.trim() !== '' || origin !== 'all' || narrowed;
-  // A sync is background work: a ring on the WebDAV tab, whatever tab is open.
+  const filtering = search.trim() !== '' || narrowed;
+  // A sync is background work: a small ring in the header, whatever is open.
   const syncing = useWebdavSyncSummary(servers);
+  const total = (count: number) => formatCount(count, i18n.language);
 
   return (
     <Page
@@ -115,7 +115,12 @@ export default function MangaScreen() {
             <Button appearance="ghost" size="sm" shape="square" aria-label={t('mangaReader:shortcuts.title')} title={t('mangaReader:shortcuts.open')} onClick={() => setShortcutsOpen(true)}>
               <Keyboard className="h-4 w-4" />
             </Button>
-            {origin === 'extensions' ? null : (
+            {syncing ? (
+              <button type="button" className="btn btn-ghost btn-sm gap-1.5 px-2" onClick={() => setServersOpen(true)} aria-label={t('menu.manageServers')}>
+                <SyncRing done={syncing.done} total={syncing.total} />
+              </button>
+            ) : null}
+            {extensions ? null : (
               <Button appearance="ghost" size="sm" shape="square" loading={scanning} aria-label={t('actions.rescan')} title={t('actions.rescan')} onClick={() => void rescan()}>
                 {scanning ? null : <RefreshCw className="h-4 w-4" />}
               </Button>
@@ -128,7 +133,7 @@ export default function MangaScreen() {
               onAddFolder={() => void add()}
               onServers={() => setServersOpen(true)}
               onAddServer={() => openForm(null)}
-              onExtensions={() => setOrigin('extensions')}
+              onExtensions={() => setExtensions(true)}
             />
           </>
         ) : null
@@ -137,55 +142,65 @@ export default function MangaScreen() {
       {library.isPending ? (
         <>
           <div className="space-y-3"><SectionTitle>{t('shelf.title')}</SectionTitle><ShelfSkeleton /></div>
-          <div className="space-y-3"><SectionTitle>{t('grid.title')}</SectionTitle><SeriesGridSkeleton /></div>
+          <div className="space-y-3"><SectionTitle>{t(`sections.${section}`)}</SectionTitle><SeriesGridSkeleton /></div>
         </>
       ) : library.isError ? (
         <div className="surface">
           <ErrorState title={t('loadFailed')} error={library.error} retrying={library.isFetching} onRetry={() => void library.refetch()} />
         </div>
       ) : !hasSources ? (
-        <EmptyLibrary onAdd={() => void add()} adding={adding} onAddServer={() => openForm(null)} onExtensions={() => setOrigin('extensions')} />
+        <EmptyLibrary onAdd={() => void add()} adding={adding} onAddServer={() => openForm(null)} onExtensions={() => setExtensions(true)} />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="input input-sm min-w-48 flex-1">
-              <Search className="h-4 w-4 opacity-60" />
-              <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} />
-            </label>
-            <div role="tablist" aria-label={t('tabs.label')} className="tabs tabs-box tabs-sm">
-              {ORIGINS.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={origin === id}
-                  className={origin === id ? 'tab tab-active gap-1.5' : 'tab gap-1.5'}
-                  onClick={() => setOrigin(id)}
-                >
-                  {t(`tabs.${id}`)}
-                  {id === 'webdav' && syncing ? <SyncRing done={syncing.done} total={syncing.total} /> : null}
-                </button>
-              ))}
+          {extensions ? (
+            <div>
+              <button type="button" className="btn btn-ghost btn-sm -ml-2 gap-1.5" onClick={() => setExtensions(false)}>
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                {t(`sections.${section}`)}
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <div role="tablist" aria-label={t('sections.label')} className="tabs tabs-box tabs-sm">
+                {SECTIONS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={section === id}
+                    className={section === id ? 'tab tab-active gap-1.5' : 'tab gap-1.5'}
+                    onClick={() => setSection(id)}
+                  >
+                    {id === 'library' ? <Bookmark className="h-3.5 w-3.5" aria-hidden="true" /> : <Library className="h-3.5 w-3.5" aria-hidden="true" />}
+                    {t(`sections.${id}`)}
+                    <span className="text-xs tabular-nums opacity-60">{total(id === 'library' ? inLibrary.length : data?.series.length ?? 0)}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="input input-sm min-w-48 flex-1">
+                <Search className="h-4 w-4 opacity-60" />
+                <input ref={searchField} type="search" aria-keyshortcuts="/" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={section === 'library' ? t('searchLibrary') : t('search')} />
+              </label>
+            </div>
+          )}
 
-          {origin === 'webdav' && servers.length > 0 ? <ServerStrip sources={servers} onManage={() => setServersOpen(true)} /> : null}
+          {!extensions && section === 'all' && view.origin === 'webdav' && servers.length > 0 ? <ServerStrip sources={servers} onManage={() => setServersOpen(true)} /> : null}
 
-          {origin === 'extensions' ? <ExtensionsPanel series={searched} /> : null}
+          {extensions ? <ExtensionsPanel series={(data?.series ?? []).filter((series) => series.source === 'suwayomi')} /> : null}
 
-          {origin !== 'extensions' && !filtering && data && data.continue_reading.length > 0 ? (
+          {!extensions && section === 'library' && !filtering && data && data.continue_reading.length > 0 ? (
             <section className="space-y-3" aria-label={t('shelf.title')}>
               <SectionTitle>{t('shelf.title')}</SectionTitle>
               <ContinueShelf items={data.continue_reading} />
             </section>
           ) : null}
 
-          {origin === 'extensions' ? null : <section className="space-y-3" aria-label={t('grid.title')}>
+          {extensions ? null : <section className="space-y-3" aria-label={t(`sections.${section}`)}>
             <SectionTitle
               aside={
                 <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
                   <span className="text-xs tabular-nums text-base-content/50">
-                    {narrowed ? t('view.shown', { shown: formatCount(filtered.length, i18n.language), total: formatCount(searched.length, i18n.language) }) : formatCount(filtered.length, i18n.language)}
+                    {narrowed ? t('view.shown', { shown: total(filtered.length), total: total(searched.length) }) : total(filtered.length)}
                   </span>
                   {reviewing ? (
                     <button type="button" className="btn btn-ghost btn-sm gap-1.5" onClick={() => setView({ ...view, link: 'any' })}>
@@ -198,26 +213,40 @@ export default function MangaScreen() {
                       {t('suggest.review.waiting', { count: waiting })}
                     </button>
                   ) : null}
-                  <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} />
+                  {pool.length > 0 ? <LibraryToolbar series={searched} view={view} onChange={setView} suggested={suggested} withSuggestions={section === 'library'} /> : null}
                 </div>
               }
             >
-              {reviewing ? t('suggest.review.title') : t('grid.title')}
+              {reviewing ? t('suggest.review.title') : section === 'library' ? t('library.gridTitle') : t('grid.allTitle')}
             </SectionTitle>
             {reviewing && searched.length > 0 ? (
               <SuggestionReview series={filtered} suggestions={suggestions.byId} />
             ) : filtered.length > 0 ? (
-              <SeriesGrid series={filtered} suggested={suggested} />
+              <SeriesGrid series={filtered} suggested={suggested} toggle={section === 'all'} />
             ) : narrowed && searched.length > 0 ? (
               <div className="surface">
                 <EmptyState
                   icon={ListFilter}
                   title={t('view.empty')}
                   description={t('view.emptyBody')}
-                  action={<Button size="sm" appearance="outline" onClick={() => setView({ ...DEFAULT_VIEW, sort: view.sort })}>{t('view.clear')}</Button>}
+                  action={<Button size="sm" appearance="outline" onClick={() => setView(cleared(view))}>{t('view.clear')}</Button>}
                 />
               </div>
-            ) : origin === 'webdav' && servers.length === 0 ? (
+            ) : section === 'library' && inLibrary.length === 0 && hasSeries ? (
+              <div className="surface">
+                <EmptyState
+                  icon={Bookmark}
+                  title={t('library.empty.title')}
+                  description={t('library.empty.body')}
+                  action={
+                    <Button size="sm" variant="primary" onClick={() => setSection('all')}>
+                      <Library className="h-4 w-4" />
+                      {t('library.empty.action')}
+                    </Button>
+                  }
+                />
+              </div>
+            ) : view.origin === 'webdav' && servers.length === 0 ? (
               <div className="surface">
                 <EmptyState
                   icon={Server}
@@ -231,7 +260,7 @@ export default function MangaScreen() {
                   }
                 />
               </div>
-            ) : origin === 'webdav' && search.trim() === '' ? (
+            ) : view.origin === 'webdav' && search.trim() === '' && searched.length === 0 ? (
               <div className="surface">
                 <EmptyState icon={Server} title={t('webdav.empty.noSeries')} description={t('webdav.empty.noSeriesBody')} />
               </div>
@@ -240,7 +269,7 @@ export default function MangaScreen() {
                 <EmptyState
                   icon={SearchX}
                   title={t('grid.noMatches')}
-                  action={<Button size="sm" appearance="outline" onClick={() => { setSearch(''); setOrigin('all'); setView({ ...DEFAULT_VIEW, sort: view.sort }); }}>{t('grid.clear')}</Button>}
+                  action={<Button size="sm" appearance="outline" onClick={() => { setSearch(''); setView(cleared(view)); }}>{t('grid.clear')}</Button>}
                 />
               </div>
             ) : (
