@@ -407,6 +407,7 @@ pub fn run() {
             commands::manga_confirm_suggestions,
             commands::manga_dismiss_suggestion,
             commands::manga_suggest_priority,
+            commands::manga_set_in_library,
             commands::manga_open_reader,
             commands::manga_reader_target,
             commands::manga_reader_volume,

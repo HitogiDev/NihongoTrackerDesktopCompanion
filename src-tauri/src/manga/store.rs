@@ -103,6 +103,11 @@ pub struct MangaSeries {
     pub page_count: i64,
     /// Some volume has text (a `.mokuro`, or OCR later).
     pub has_text: bool,
+    /// Some volume's text comes from a `.mokuro`: the cover says "mokuro",
+    /// not "OCR".
+    pub has_mokuro: bool,
+    /// When the user added it to "My library"; `None`: not in it.
+    pub in_library_at: Option<String>,
     pub volumes_finished: i64,
     /// Pages up to where the user is in each volume, finished ones in full.
     pub pages_read: i64,
@@ -660,7 +665,9 @@ impl Db {
                         COALESCE(SUM(CASE WHEN p.finished = 1 THEN v.page_count
                                           WHEN p.page IS NULL THEN 0
                                           ELSE MIN(p.page + 1, v.page_count) END), 0),
-                        MAX(p.updated_at)
+                        MAX(p.updated_at),
+                        COALESCE(MAX(v.ocr_state = 'mokuro'), 0),
+                        (SELECT added_at FROM manga_shelf WHERE series_id = s.id)
                  FROM manga_series s
                  LEFT JOIN manga_volumes v ON v.series_id = s.id
                  LEFT JOIN manga_progress p ON p.volume_id = v.id
@@ -685,6 +692,8 @@ impl Db {
                     volumes_finished: r.get(11)?,
                     pages_read: r.get(12)?,
                     last_read_at: r.get(13)?,
+                    has_mokuro: r.get::<_, i64>(14)? != 0,
+                    in_library_at: r.get(15)?,
                 })
             };
             let rows = match filter {
@@ -692,6 +701,22 @@ impl Db {
                 None => stmt.query_map([], map)?.collect::<Result<Vec<_>>>()?,
             };
             Ok(rows)
+        })
+    }
+
+    /// Adds series to "My library" or takes them out. Adding one already
+    /// there keeps the date it was first added.
+    pub fn set_manga_in_library(&self, series_ids: &[String], in_library: bool) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.with(|c| {
+            for id in series_ids {
+                if in_library {
+                    c.execute("INSERT OR IGNORE INTO manga_shelf (series_id, added_at) VALUES (?1, ?2)", params![id, now])?;
+                } else {
+                    c.execute("DELETE FROM manga_shelf WHERE series_id = ?1", params![id])?;
+                }
+            }
+            Ok(())
         })
     }
 

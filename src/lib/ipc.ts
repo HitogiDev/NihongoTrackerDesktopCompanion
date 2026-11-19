@@ -286,6 +286,7 @@ export const ipc = {
   mangaConfirmSuggestions: (seriesIds: string[]) => invoke<number>('manga_confirm_suggestions', { seriesIds }),
   mangaDismissSuggestion: (seriesId: string) => invoke<void>('manga_dismiss_suggestion', { seriesId }),
   mangaSuggestPriority: (seriesIds: string[]) => invoke<void>('manga_suggest_priority', { seriesIds }),
+  mangaSetInLibrary: (seriesIds: string[], inLibrary: boolean) => invoke<void>('manga_set_in_library', { seriesIds, inLibrary }),
   mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
     invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
   /** Opens (or focuses) the reader window on a volume. */

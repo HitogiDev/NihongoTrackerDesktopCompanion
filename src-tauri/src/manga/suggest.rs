@@ -257,10 +257,12 @@ impl Pace {
 }
 
 impl Db {
-    /// The next unlinked series to look up: those on screen first (in the
-    /// order given), then the most recently read, then by title. A series
-    /// already looked up is skipped, unless its search found nothing a
-    /// while ago.
+    /// The next unlinked series to look up: the ones the user opened first
+    /// (in the order given), then those in "My library" or ever read, the
+    /// most recently read first. Nothing else: a catalogue of a thousand
+    /// series on a server is not a thousand searches for manga nobody
+    /// reads. A series already looked up is skipped, unless its search found
+    /// nothing a while ago.
     pub fn next_suggestion_candidate(&self, priority: &[String]) -> Result<Option<(String, String)>> {
         let cutoff = (chrono::Utc::now() - chrono::Duration::days(RETRY_EMPTY_AFTER_DAYS)).to_rfc3339();
         self.with(|c| {
@@ -282,6 +284,7 @@ impl Db {
                                 FROM manga_volumes v JOIN manga_progress p ON p.volume_id = v.id
                                 GROUP BY v.series_id) r ON r.series_id = s.id
                      WHERE {pending}
+                       AND (r.read_at IS NOT NULL OR EXISTS (SELECT 1 FROM manga_shelf b WHERE b.series_id = s.id))
                      ORDER BY r.read_at IS NULL, r.read_at DESC, s.title COLLATE NOCASE
                      LIMIT 1"
                 ),
@@ -547,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn suggestions_never_link_and_follow_what_is_on_screen() {
+    fn suggestions_never_link_and_follow_what_was_opened() {
         let (db, path) = library();
         db.link_manga_series("s3", Some("1"), Some("AKIRA"), false).unwrap();
         db.set_manga_progress("v2", 1, false).unwrap();
@@ -568,6 +571,24 @@ mod tests {
         // A suggestion is only a suggestion.
         let s1 = db.manga_series("s1").unwrap().unwrap();
         assert_eq!(s1.media_id, None);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn only_series_the_user_reads_or_keeps_are_looked_up() {
+        let (db, path) = library();
+        // Never read, not in "My library": a catalogue, not a reading list.
+        assert!(matches!(prepare(&db, &[]).unwrap(), Step::Nothing));
+        db.set_manga_in_library(&["s3".into()], true).unwrap();
+        let Step::Search { series_id, .. } = prepare(&db, &[]).unwrap() else { panic!("a search") };
+        assert_eq!(series_id, "s3");
+        // Taken out again: back to nothing.
+        db.set_manga_in_library(&["s3".into()], false).unwrap();
+        assert!(matches!(prepare(&db, &[]).unwrap(), Step::Nothing));
+        // A series page the user opened is looked up all the same.
+        let Step::Search { series_id, .. } = prepare(&db, &["s2".into()]).unwrap() else { panic!("a search") };
+        assert_eq!(series_id, "s2");
+        assert!(db.manga_series("s3").unwrap().unwrap().in_library_at.is_none());
         let _ = std::fs::remove_file(path);
     }
 

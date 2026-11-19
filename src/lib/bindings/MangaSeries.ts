@@ -16,7 +16,16 @@ media_id: string | null, media_title: string | null, is_adult: boolean, created_
 /**
  * Some volume has text (a `.mokuro`, or OCR later).
  */
-has_text: boolean, volumes_finished: number, 
+has_text: boolean, 
+/**
+ * Some volume's text comes from a `.mokuro`: the cover says "mokuro",
+ * not "OCR".
+ */
+has_mokuro: boolean, 
+/**
+ * When the user added it to "My library"; `None`: not in it.
+ */
+in_library_at: string | null, volumes_finished: number, 
 /**
  * Pages up to where the user is in each volume, finished ones in full.
  */
