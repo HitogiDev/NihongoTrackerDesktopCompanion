@@ -407,18 +407,25 @@ mod tests {
         let gate = Arc::new(FetchGate::new(2));
         let running = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
-        let order = Arc::new(Mutex::new(Vec::new()));
+        let out_of_turn = Arc::new(AtomicUsize::new(0));
         // Hold the gate full so every request below queues, in a known order.
         let first = gate.acquire();
         let second = gate.acquire();
         let mut threads = Vec::new();
         for n in 0..8 {
-            let (shared, running, peak, order) = (gate.clone(), running.clone(), peak.clone(), order.clone());
+            let (shared, running, peak, out_of_turn) =
+                (gate.clone(), running.clone(), peak.clone(), out_of_turn.clone());
             threads.push(std::thread::spawn(move || {
                 let _permit = shared.acquire();
+                // Admitted in ticket order: nobody who asked earlier is still
+                // waiting. (Recording the order after `acquire` would race
+                // with the other thread that holds a permit.)
+                let ticket = n as u64 + 2;
+                if shared.state.lock().unwrap().waiting.first().is_some_and(|&t| t < ticket) {
+                    out_of_turn.fetch_add(1, AtomicOrdering::SeqCst);
+                }
                 let now = running.fetch_add(1, AtomicOrdering::SeqCst) + 1;
                 peak.fetch_max(now, AtomicOrdering::SeqCst);
-                order.lock().unwrap().push(n);
                 std::thread::sleep(std::time::Duration::from_millis(5));
                 running.fetch_sub(1, AtomicOrdering::SeqCst);
             }));
@@ -433,7 +440,7 @@ mod tests {
             thread.join().unwrap();
         }
         assert!(peak.load(AtomicOrdering::SeqCst) <= 2);
-        assert_eq!(*order.lock().unwrap(), (0..8).collect::<Vec<_>>());
+        assert_eq!(out_of_turn.load(AtomicOrdering::SeqCst), 0);
         assert_eq!(gate.state.lock().unwrap().running, 0);
     }
 
