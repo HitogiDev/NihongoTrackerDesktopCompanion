@@ -11,15 +11,33 @@ export type SortKey = (typeof SORTS)[number];
 export const TEXT_FILTERS = ['any', 'with', 'without'] as const;
 export const LINK_FILTERS = ['any', 'linked', 'unlinked', 'suggested'] as const;
 export const STATUS_FILTERS = ['any', 'reading', 'finished', 'unstarted'] as const;
+/** Where a series comes from: `MangaSeries.source`. */
+export const ORIGIN_FILTERS = ['any', 'local', 'webdav', 'suwayomi'] as const;
 
 export interface LibraryView {
   sort: SortKey;
   text: (typeof TEXT_FILTERS)[number];
   link: (typeof LINK_FILTERS)[number];
   status: (typeof STATUS_FILTERS)[number];
+  origin: (typeof ORIGIN_FILTERS)[number];
 }
 
-export const DEFAULT_VIEW: LibraryView = { sort: 'title-asc', text: 'any', link: 'any', status: 'any' };
+export const DEFAULT_VIEW: LibraryView = { sort: 'title-asc', text: 'any', link: 'any', status: 'any', origin: 'any' };
+
+/** The two sections of the Manga screen, each with its own view. */
+export type Section = 'library' | 'all';
+
+/**
+ * "My library" opens on what was read last; "All series" is a catalogue,
+ * in title order.
+ */
+export const SECTION_DEFAULTS: Record<Section, LibraryView> = {
+  library: { ...DEFAULT_VIEW, sort: 'last-read' },
+  all: DEFAULT_VIEW,
+};
+
+/** The view with its filters cleared, its order kept. */
+export const cleared = (view: LibraryView): LibraryView => ({ ...DEFAULT_VIEW, sort: view.sort });
 
 /** Titles the way a person numbers them (`2 < 10`), case and accents aside. */
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -37,7 +55,7 @@ export function seriesStatus(series: MangaSeries): SeriesStatus {
 
 /** How many filters (not the order) narrow the grid now. */
 export function activeFilters(view: LibraryView): number {
-  return Number(view.text !== 'any') + Number(view.link !== 'any') + Number(view.status !== 'any');
+  return Number(view.text !== 'any') + Number(view.link !== 'any') + Number(view.status !== 'any') + Number(view.origin !== 'any');
 }
 
 /** Whether one series passes the view's filters. */
@@ -48,10 +66,11 @@ export function matches(item: MangaSeries, view: LibraryView, suggested: Readonl
   if (view.link === 'unlinked' && item.media_id) return false;
   if (view.link === 'suggested' && (item.media_id || !suggested.has(item.id))) return false;
   if (view.status !== 'any' && seriesStatus(item) !== view.status) return false;
+  if (view.origin !== 'any' && item.source !== view.origin) return false;
   return true;
 }
 
-type FilterKey = 'text' | 'link' | 'status';
+export type FilterKey = 'text' | 'link' | 'status' | 'origin';
 
 /**
  * For each choice of one filter, how many series it would leave with the
@@ -96,32 +115,53 @@ export function applyView(series: MangaSeries[], view: LibraryView, suggested: R
   }
 }
 
-const VIEW_KEY = 'manga:library:view';
+const VIEW_KEYS: Record<Section, string> = { library: 'manga:library:view', all: 'manga:all:view' };
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
-/** The last view the user chose, for every tab (private storage: the default). */
-export function loadView(): LibraryView {
+/** The last view the user chose for a section (private storage: the default). */
+export function loadView(section: Section): LibraryView {
+  const fallback = SECTION_DEFAULTS[section];
   try {
-    const raw = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as Partial<Record<keyof LibraryView, unknown>> | null;
-    if (!raw || typeof raw !== 'object') return DEFAULT_VIEW;
+    const raw = JSON.parse(localStorage.getItem(VIEW_KEYS[section]) ?? 'null') as Partial<Record<keyof LibraryView, unknown>> | null;
+    if (!raw || typeof raw !== 'object') return fallback;
     return {
-      sort: pick(raw.sort, SORTS, DEFAULT_VIEW.sort),
+      sort: pick(raw.sort, SORTS, fallback.sort),
       text: pick(raw.text, TEXT_FILTERS, 'any'),
       link: pick(raw.link, LINK_FILTERS, 'any'),
       status: pick(raw.status, STATUS_FILTERS, 'any'),
+      origin: pick(raw.origin, ORIGIN_FILTERS, 'any'),
     };
   } catch {
-    return DEFAULT_VIEW;
+    return fallback;
   }
 }
 
-export function saveView(view: LibraryView) {
+export function saveView(section: Section, view: LibraryView) {
   try {
-    localStorage.setItem(VIEW_KEY, JSON.stringify(view));
+    localStorage.setItem(VIEW_KEYS[section], JSON.stringify(view));
   } catch {
     // Private storage: the view lasts until the window closes.
+  }
+}
+
+const SECTION_KEY = 'manga:section';
+
+/** The section the screen opened on last time. */
+export function loadSection(): Section {
+  try {
+    return localStorage.getItem(SECTION_KEY) === 'all' ? 'all' : 'library';
+  } catch {
+    return 'library';
+  }
+}
+
+export function saveSection(section: Section) {
+  try {
+    localStorage.setItem(SECTION_KEY, section);
+  } catch {
+    // Private storage: "My library" next time.
   }
 }

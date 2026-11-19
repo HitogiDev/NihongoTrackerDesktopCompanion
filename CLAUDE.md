@@ -383,23 +383,35 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (WebDAV o extensiones) pasan por `protocol::FetchGate` (FIFO de 4, solo en
   fallo de caché): sin ella cada petición iba por su lado y llegaban de abajo
   arriba. Las páginas del lector nunca esperan ahí.
-- **Cabecera de la pantalla Manga**: atajos, recargar (no en Extensiones) y un
-  solo botón de ajustes (`LibraryMenu.tsx`, menú con flechas/Home/End/Esc) que
-  enseña lo de cada pestaña (`menuGroups`): carpetas en Local, servidores en
-  WebDAV, ajustes de extensiones en Extensiones, todo en Todo. "Ajustes del
-  lector" deja `settings:section = manga` y navega a Ajustes.
+- **Secciones de la pantalla Manga**: **Mi biblioteca** (por defecto; "Seguir
+  leyendo" + las series que el usuario añadió) y **Todas las series** (el
+  catálogo de todas las fuentes, A–Z), con la última recordada
+  (`manga:section`). Estar en la biblioteca es la tabla `manga_shelf` (sin
+  clave foránea, como el progreso: sobrevive a un disco desenchufado) y
+  `MangaSeries.in_library_at`; se cambia con `manga_set_in_library` (el
+  marcador de la portada en Todas, que es hermano del enlace y no va dentro,
+  y el botón de la ficha). Añadir una serie desde Extensiones también la mete.
+  El origen (Local/WebDAV/Extensiones) es un filtro más del panel, solo si hay
+  más de uno; Extensiones (tienda y explorar) se abre desde el engranaje.
+- **Cabecera de la pantalla Manga**: atajos, recargar (no en Extensiones), el
+  anillo de sincronización si hay una en marcha y un solo botón de ajustes
+  (`LibraryMenu.tsx`, menú con flechas/Home/End/Esc) con carpetas, servidores
+  y extensiones (en Extensiones, solo sus ajustes). "Ajustes del lector" deja
+  `settings:section = manga` y navega a Ajustes.
 - **Progreso de sincronización WebDAV**: discreto, un anillo (`SyncRing`) en la
-  pestaña WebDAV (se ve desde todas) y en la línea de cada servidor con un
+  cabecera (se ve desde cualquier sección) y en la línea de cada servidor con un
   "Listando 729 / 1.122" pequeño. Nunca en la ficha de una serie.
 - **Orden y filtros** (`screens/manga/libraryView.ts`, puro y con tests, en la
   cabecera de la rejilla con `LibraryToolbar.tsx`): título A–Z/Z–A (colación
   numérica), último leído, añadido, más tomos; filtros de lectura (en curso,
-  terminada, sin empezar: `seriesStatus`), texto y vínculo (vinculada, sin
-  vincular, con sugerencia). Las pestañas son el filtro de origen. Todo en el
+  terminada, sin empezar: `seriesStatus`), texto, vínculo (vinculada, sin
+  vincular y, solo en Mi biblioteca, con sugerencia) y origen. Todo en el
   cliente sobre la biblioteca ya cargada (1.000 series son unos ms); cada
-  opción dice cuántas dejaría (`optionCounts`, solo con el panel abierto). Se
-  recuerda una vez para todas las pestañas en `localStorage`
-  (`manga:library:view`, con try/catch).
+  opción dice cuántas dejaría (`optionCounts`, solo con el panel abierto). Cada
+  sección recuerda la suya en `localStorage` (`manga:library:view`, por
+  defecto último leído; `manga:all:view`, por defecto A–Z; con try/catch).
+- La insignia de una portada dice **mokuro** si algún tomo trae `.mokuro`
+  (`MangaSeries.has_mokuro`) y **OCR** si el texto lo leyó la app.
 - **Sugerencias de vínculo** (`manga/suggest.rs`, el bucle en
   `sync::spawn_manga_suggester`): para cada serie sin vincular, Rust busca su
   título limpio (`clean_title`: fuera corchetes y paréntesis —si todo el
@@ -409,19 +421,21 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   similitud ≥ 0,6 (Dice por pares de caracteres sobre todos sus títulos y
   sinónimos, `score`) en `manga_link_suggestions` (con portada, `is_adult` y
   puntuación; `media_id NULL` = buscada sin nada bueno, se reintenta a los 30
-  días). **Nunca vincula**: confirmar (`manga_confirm_suggestions`) pasa por
+  días). Solo se buscan series de **Mi biblioteca** o que se han leído
+  alguna vez, más la que el usuario abre (la ficha la pone en
+  `manga_suggest_priority`): un catálogo de mil series no son mil búsquedas.
+  **Nunca vincula**: confirmar (`manga_confirm_suggestions`) pasa por
   `link_series`, el mismo camino que un vínculo a mano (`link_manga_series` +
   `session::series_linked`). Descartar guarda `manga_link_dismissed` (sin
   clave foránea, como el progreso) y pone en su lugar el siguiente resultado de
   la misma búsqueda, desde la caché. Ritmo (`Pace`): una búsqueda cada 1,5 s,
   pausas de 30 s→10 min ante 429 y de 15 s→10 min ante fallos, 30 min ante
   401/403; un aviso (`suggest_wake`) solo corta la espera cuando no había nada
-  que hacer. Orden: lo que la rejilla enseña primero
-  (`manga_suggest_priority`, hasta 240 ids, con debounce desde la pantalla),
-  luego lo último leído, luego por título. Cada título limpio se busca una vez
+  que hacer. Orden: las fichas abiertas (`manga_suggest_priority`,
+  la última primero), luego lo último leído, luego por título. Cada título limpio se busca una vez
   (`manga_title_search`). Ajuste `manga_link_suggestions` (por defecto sí). La
-  UI: tarjeta "¿Es esta?" en la ficha, una marca en la portada de la rejilla y
-  el filtro "con sugerencia", que cambia la rejilla por la revisión en bloque
+  UI: tarjeta "¿Es esta?" en la ficha y, solo en Mi biblioteca, una marca en
+  la portada y el filtro "con sugerencia", que cambia la rejilla por la revisión en bloque
   (`SuggestionReview`, cada pareja visible antes de confirmar). Una portada de
   NihongoTracker adulta se enseña difuminada.
 - **Transiciones**: de una portada de la rejilla a su ficha y de vuelta, con

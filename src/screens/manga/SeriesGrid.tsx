@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Play, ScanText } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, Play, ScanText } from 'lucide-react';
 import { mangaUrl, readPercent } from '../../lib/manga';
+import { ipc } from '../../lib/ipc';
+import { toast } from '../../store/useToastStore';
 import type { MangaContinue, MangaSeries } from '../../lib/types';
 import { Cover, CoverProgress, MANGA } from './Cover';
 import { openVolume } from './useMangaLibrary';
@@ -11,23 +13,79 @@ import { SuggestionBadge } from './Suggestions';
 
 const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-6';
 
-/** "OCR" on a cover: this series has text to hover and look up. */
-export function TextBadge({ className = '' }: { className?: string }) {
+/**
+ * On a cover: this series has text to hover and look up. "mokuro" when it
+ * comes with the volumes, "OCR" when the app read it.
+ */
+export function TextBadge({ mokuro, className = '' }: { mokuro: boolean; className?: string }) {
   const { t } = useTranslation('manga');
   return (
-    <span title={t('grid.textHint')} className={`badge badge-sm gap-1 border-0 bg-neutral/80 font-semibold text-neutral-content shadow-sm backdrop-blur-sm ${className}`}>
+    <span title={mokuro ? t('grid.mokuroHint') : t('grid.textHint')} className={`badge badge-sm gap-1 border-0 bg-neutral/80 font-semibold text-neutral-content shadow-sm backdrop-blur-sm ${className}`}>
       <ScanText className="h-3 w-3" aria-hidden="true" />
-      {t('grid.text')}
+      {mokuro ? t('grid.mokuro') : t('grid.text')}
     </span>
   );
 }
 
-export function SeriesCard({ series, position, suggested = false }: { series: MangaSeries; position?: number; suggested?: boolean }) {
+/** Adds series to "My library" or takes them out; the library reloads on its event. */
+export function useLibraryToggle() {
+  const { t } = useTranslation('manga');
+  const [busy, setBusy] = useState(false);
+  const toggle = async (series: Pick<MangaSeries, 'id' | 'title' | 'in_library_at'>) => {
+    const adding = !series.in_library_at;
+    setBusy(true);
+    try {
+      await ipc.mangaSetInLibrary([series.id], adding);
+      toast.success(adding ? t('library.added', { title: series.title }) : t('library.removed', { title: series.title }));
+    } catch (error) {
+      toast.error(t('library.failed', { message: String(error) }));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { toggle, busy };
+}
+
+/**
+ * The bookmark on a cover in "All series": always there for a series in "My
+ * library", on hover or focus for the rest. A sibling of the card's link,
+ * not inside it: a button in a link is two controls in one.
+ */
+function LibraryToggle({ series }: { series: MangaSeries }) {
+  const { t } = useTranslation('manga');
+  const { toggle, busy } = useLibraryToggle();
+  const inLibrary = Boolean(series.in_library_at);
+  const label = inLibrary ? t('library.remove') : t('library.add');
+  return (
+    <button
+      type="button"
+      aria-label={`${label}: ${series.title}`}
+      aria-pressed={inLibrary}
+      title={label}
+      disabled={busy}
+      onClick={() => void toggle(series)}
+      className={inLibrary
+        ? `btn btn-circle btn-xs absolute left-2 top-2 z-10 border-0 bg-base-100/90 shadow-sm backdrop-blur-sm ${MANGA.color}`
+        : 'btn btn-circle btn-xs absolute left-2 top-2 z-10 border-0 bg-base-100/90 text-base-content shadow-sm backdrop-blur-sm opacity-0 focus-visible:opacity-100 group-hover/card:opacity-100 motion-safe:transition-opacity'}
+    >
+      {inLibrary ? <BookmarkCheck className="h-3.5 w-3.5" aria-hidden="true" /> : <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />}
+    </button>
+  );
+}
+
+export function SeriesCard({ series, position, suggested = false, toggle = false }: {
+  series: MangaSeries;
+  position?: number;
+  suggested?: boolean;
+  /** Offer adding it to "My library" (the "All series" grid). */
+  toggle?: boolean;
+}) {
   const { t } = useTranslation('manga');
   const navigate = useNavigate();
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   return (
-    <li>
+    <li className="group/card relative">
+      {toggle ? <LibraryToggle series={series} /> : null}
       <Link
         to={`/manga/${series.id}`}
         className="group block rounded-box focus-visible:outline-offset-4"
@@ -37,7 +95,7 @@ export function SeriesCard({ series, position, suggested = false }: { series: Ma
         <div data-series-cover={series.id} className="relative aspect-[2/3] overflow-hidden rounded-box shadow-sm ring-1 ring-base-content/5 motion-safe:transition motion-safe:duration-200 motion-safe:ease-out group-hover:shadow-lg motion-safe:group-hover:-translate-y-1">
           <Cover src={mangaUrl.cover(series.id)} queued={position} />
           <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-neutral/40 via-transparent to-transparent opacity-0 motion-safe:transition-opacity group-hover:opacity-100" />
-          {series.has_text ? <TextBadge className="absolute right-2 top-2" /> : null}
+          {series.has_text ? <TextBadge mokuro={series.has_mokuro} className="absolute right-2 top-2" /> : null}
           {suggested && !series.media_id ? <SuggestionBadge className="absolute left-2 top-2" /> : null}
           <CoverProgress percent={percent} label={t('grid.progress', { percent })} />
         </div>
@@ -59,7 +117,7 @@ export const GRID_BATCH = 120;
  * time: the next batch comes in when the end of the grid scrolls into view
  * (or Tab reaches it), so opening the screen never builds every card.
  */
-export function SeriesGrid({ series, suggested }: { series: MangaSeries[]; suggested?: ReadonlySet<string> }) {
+export function SeriesGrid({ series, suggested, toggle = false }: { series: MangaSeries[]; suggested?: ReadonlySet<string>; toggle?: boolean }) {
   // Without IntersectionObserver nothing would ever add a batch: all of them.
   const [shown, setShown] = useState(() => (typeof IntersectionObserver === 'undefined' ? Infinity : GRID_BATCH));
   const end = useRef<HTMLDivElement>(null);
@@ -75,7 +133,7 @@ export function SeriesGrid({ series, suggested }: { series: MangaSeries[]; sugge
   }, [more, shown]);
   return (
     <>
-      <ul className={GRID}>{series.slice(0, shown).map((item, index) => <SeriesCard key={item.id} series={item} position={index} suggested={suggested?.has(item.id)} />)}</ul>
+      <ul className={GRID}>{series.slice(0, shown).map((item, index) => <SeriesCard key={item.id} series={item} position={index} suggested={suggested?.has(item.id)} toggle={toggle} />)}</ul>
       {more ? (
         <div ref={end} className="flex justify-center py-4" aria-hidden="true">
           <span className="loading loading-dots loading-sm text-base-content/40" />

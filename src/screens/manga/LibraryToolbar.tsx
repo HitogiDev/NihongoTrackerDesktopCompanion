@@ -3,27 +3,39 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDownUp, Check, ChevronDown, ListFilter } from 'lucide-react';
 import { formatCount } from '../../lib/manga';
 import type { MangaSeries } from '../../lib/types';
-import { activeFilters, DEFAULT_VIEW, LINK_FILTERS, optionCounts, SORTS, STATUS_FILTERS, TEXT_FILTERS, type LibraryView } from './libraryView';
+import { activeFilters, cleared, LINK_FILTERS, optionCounts, ORIGIN_FILTERS, SORTS, STATUS_FILTERS, TEXT_FILTERS, type FilterKey, type LibraryView } from './libraryView';
 
-type FilterKey = 'text' | 'link' | 'status';
-const GROUPS: { key: FilterKey; options: readonly string[] }[] = [
-  { key: 'status', options: STATUS_FILTERS },
-  { key: 'text', options: TEXT_FILTERS },
-  { key: 'link', options: LINK_FILTERS },
-];
+interface FilterGroup { key: FilterKey; options: readonly string[] }
+
+/**
+ * The filter groups: where the series come from only when there is more
+ * than one place, and "suggested" only where suggestions are shown.
+ */
+export function filterGroups(series: MangaSeries[], withSuggestions: boolean): FilterGroup[] {
+  const origins = new Set(series.map((item) => item.source));
+  const groups: FilterGroup[] = [
+    { key: 'status', options: STATUS_FILTERS },
+    { key: 'text', options: TEXT_FILTERS },
+    { key: 'link', options: withSuggestions ? LINK_FILTERS : LINK_FILTERS.filter((option) => option !== 'suggested') },
+  ];
+  if (origins.size > 1) groups.push({ key: 'origin', options: ORIGIN_FILTERS.filter((option) => option === 'any' || origins.has(option)) });
+  return groups;
+}
 
 /** Sort and filters for the library grid, in its header. */
-export function LibraryToolbar({ series, view, onChange, suggested }: {
-  /** The series the tab and search leave, before these filters. */
+export function LibraryToolbar({ series, view, onChange, suggested, withSuggestions }: {
+  /** The series the section and search leave, before these filters. */
   series: MangaSeries[];
   view: LibraryView;
   onChange: (view: LibraryView) => void;
   suggested: ReadonlySet<string>;
+  withSuggestions: boolean;
 }) {
+  const groups = useMemo(() => filterGroups(series, withSuggestions), [series, withSuggestions]);
   return (
     <div className="flex items-center gap-1">
       <SortMenu value={view.sort} onChange={(sort) => onChange({ ...view, sort })} />
-      <FilterPopover series={series} view={view} onChange={onChange} suggested={suggested} />
+      <FilterPopover series={series} view={view} onChange={onChange} suggested={suggested} groups={groups} />
     </div>
   );
 }
@@ -109,11 +121,12 @@ function SortMenu({ value, onChange }: { value: LibraryView['sort']; onChange: (
   );
 }
 
-function FilterPopover({ series, view, onChange, suggested }: {
+function FilterPopover({ series, view, onChange, suggested, groups }: {
   series: MangaSeries[];
   view: LibraryView;
   onChange: (view: LibraryView) => void;
   suggested: ReadonlySet<string>;
+  groups: FilterGroup[];
 }) {
   const { t, i18n } = useTranslation('manga');
   const [open, setOpen] = useState(false);
@@ -123,8 +136,8 @@ function FilterPopover({ series, view, onChange, suggested }: {
   const active = activeFilters(view);
   // Only while open: a thousand series, a dozen passes.
   const counts = useMemo(
-    () => (open ? Object.fromEntries(GROUPS.map(({ key, options }) => [key, optionCounts(series, view, key, options as never, suggested)])) : null),
-    [open, series, view, suggested],
+    () => (open ? Object.fromEntries(groups.map(({ key, options }) => [key, optionCounts(series, view, key, options as never, suggested)])) : null),
+    [open, series, view, suggested, groups],
   ) as Record<FilterKey, Record<string, number>> | null;
 
   useEffect(() => {
@@ -169,7 +182,7 @@ function FilterPopover({ series, view, onChange, suggested }: {
             }
           }}
         >
-          {GROUPS.map(({ key, options }) => (
+          {groups.map(({ key, options }) => (
             <fieldset key={key} className="space-y-1.5">
               <legend className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-base-content/55">{t(`view.${key}.label`)}</legend>
               <div className="grid grid-cols-2 gap-1.5">
@@ -203,7 +216,7 @@ function FilterPopover({ series, view, onChange, suggested }: {
               type="button"
               className="btn btn-ghost btn-sm"
               disabled={active === 0}
-              onClick={() => onChange({ ...DEFAULT_VIEW, sort: view.sort })}
+              onClick={() => onChange(cleared(view))}
             >
               {t('view.clear')}
             </button>
