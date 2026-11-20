@@ -16,6 +16,8 @@ export interface ZoomPan {
   reset: () => void;
   /** Zooms around the center of the window (the keyboard). */
   zoomBy: (factor: number) => void;
+  /** Moves a zoomed page by window pixels, animated (Ctrl+arrows). */
+  panStep: (dx: number, dy: number) => void;
   subscribe: (listener: () => void) => () => void;
   getScale: () => number;
 }
@@ -126,6 +128,10 @@ export function useZoomPan(root: RefObject<HTMLElement | null>, layer: RefObject
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = view();
     animateTo(zoomAt(heading(), factor, { x: width / 2, y: height / 2 }, content(), view()));
+  }, [animateTo, content]);
+  const panStep = useCallback((dx: number, dy: number) => {
+    if (!isZoomed(heading())) return;
+    animateTo(panBy(heading(), dx, dy, content(), view()));
   }, [animateTo, content]);
 
   // Another spread, layout or fit: back to the fitted page.
@@ -240,7 +246,7 @@ export function useZoomPan(root: RefObject<HTMLElement | null>, layer: RefObject
   }, []);
   const getScale = useCallback(() => zoom.current.scale, []);
 
-  return useMemo(() => ({ zoomed, cursor, consumeClick, reset, zoomBy, subscribe, getScale }), [zoomed, cursor, consumeClick, reset, zoomBy, subscribe, getScale]);
+  return useMemo(() => ({ zoomed, cursor, consumeClick, reset, zoomBy, panStep, subscribe, getScale }), [zoomed, cursor, consumeClick, reset, zoomBy, panStep, subscribe, getScale]);
 }
 
 /** The zoom level, for the one small thing that shows it (`ZoomBadge`). */

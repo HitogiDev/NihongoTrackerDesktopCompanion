@@ -29,6 +29,7 @@ import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
 import { ClockMenu } from './ClockMenu';
 import { KEY_STEP, useZoomPan } from './useZoomPan';
+import { arrowPan } from './zoom';
 import { ZoomBadge } from './ZoomBadge';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
@@ -512,6 +513,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           else zoom.zoomBy(step);
           return;
         }
+        // Ctrl+arrows move a zoomed page (held down, they keep moving it).
+        const pan = zoom.zoomed && !event.shiftKey ? arrowPan(event.key, { width: window.innerWidth, height: window.innerHeight }) : null;
+        if (pan) {
+          event.preventDefault();
+          zoom.panStep(pan.dx, pan.dy);
+          return;
+        }
       }
       // Ctrl+C with nothing selected copies the block under the pointer: it
       // is selected for the copy (no clipboard permission needed in any
@@ -603,7 +611,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text, zoom.reset, zoom.zoomBy]);
+  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text, zoom.reset, zoom.zoomBy, zoom.panStep, zoom.zoomed]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {

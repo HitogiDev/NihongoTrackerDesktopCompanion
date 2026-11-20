@@ -407,7 +407,8 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   pellizco del touchpad llega como eso mismo: una rueda con Ctrl);
   Ctrl+arrastrar (⌘ en macOS, donde Ctrl+clic es el clic derecho) mueve; ya
   ampliada, la rueda o dos dedos mueven en vez de pasar página; Ctrl+0 / + / -
-  desde el teclado. De 1× a 6×; la página nunca deja ver su borde por dentro
+  desde el teclado, y Ctrl+flechas mueven una página ampliada un 20 % de
+  la ventana, animado (`arrowPan`, `panStep`; sin zoom no hacen nada). De 1× a 6×; la página nunca deja ver su borde por dentro
   y un eje que aún cabe se queda centrado (`clampZoom`). La transformación
   va en una capa que envuelve `PagedView` (páginas y capa de texto escalan
   juntas) y se escribe **directamente en el DOM**, nunca como estado de

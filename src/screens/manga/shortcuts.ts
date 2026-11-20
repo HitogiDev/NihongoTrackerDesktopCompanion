@@ -49,6 +49,7 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'zoom', keys: [], mouse: 'ctrlWheel' },
       { label: 'zoom', keys: [[mod, '+'], [mod, '-']] },
       { label: 'pan', keys: [], mouse: 'ctrlDrag' },
+      { label: 'pan', keys: [[mod, '←'], [mod, '→'], [mod, '↑'], [mod, '↓']] },
       { label: 'resetZoom', keys: [[mod, '0']] },
     ],
   };

@@ -79,6 +79,26 @@ export function wheelFactor(deltaY: number, deltaMode: number): number {
   return Math.exp(-step * 0.0018);
 }
 
+/** How far one Ctrl+arrow moves a zoomed page: a fifth of the window. */
+export const ARROW_PAN = 0.2;
+
+/**
+ * What Ctrl+arrow moves the page by, in window pixels: the arrow says what to
+ * look at, so the page goes the other way (Ctrl+→ shows what is to the
+ * right). `null` for any other key.
+ */
+export function arrowPan(key: string, view: { width: number; height: number }): { dx: number; dy: number } | null {
+  const x = view.width * ARROW_PAN;
+  const y = view.height * ARROW_PAN;
+  switch (key) {
+    case 'ArrowLeft': return { dx: x, dy: 0 };
+    case 'ArrowRight': return { dx: -x, dy: 0 };
+    case 'ArrowUp': return { dx: 0, dy: y };
+    case 'ArrowDown': return { dx: 0, dy: -y };
+    default: return null;
+  }
+}
+
 /** How quickly an animated zoom closes on its target (ms to ~63 %). */
 export const ZOOM_EASE_MS = 70;
 

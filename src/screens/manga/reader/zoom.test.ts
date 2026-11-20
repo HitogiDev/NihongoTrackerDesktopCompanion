@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approach, clampZoom, isZoomed, MAX_SCALE, NO_ZOOM, panBy, wheelFactor, zoomAt, zoomTransform } from './zoom';
+import { approach, arrowPan, clampZoom, isZoomed, MAX_SCALE, NO_ZOOM, panBy, wheelFactor, zoomAt, zoomTransform } from './zoom';
 
 // A portrait page centered in a wide window, at scale 1.
 const view = { width: 1600, height: 900 };
@@ -80,6 +80,21 @@ describe('zoom and pan', () => {
     expect((at15.scale - 1) / (target.scale - 1)).toBeGreaterThan(0.95);
     expect(frames).toBeLessThan(60);
     expect(frames).toBeGreaterThan(5);
+  });
+
+  it('moves the page against the arrow, a fifth of the window, and stops at its edges', () => {
+    expect(arrowPan('ArrowRight', view)).toEqual({ dx: -320, dy: 0 });
+    expect(arrowPan('ArrowLeft', view)).toEqual({ dx: 320, dy: 0 });
+    expect(arrowPan('ArrowDown', view)).toEqual({ dx: 0, dy: -180 });
+    expect(arrowPan('ArrowUp', view)).toEqual({ dx: 0, dy: 180 });
+    expect(arrowPan('PageDown', view)).toBeNull();
+    // Ctrl+→ held down: the page's right edge ends on the window's, no further.
+    let zoomed = zoomAt(NO_ZOOM, 3, { x: 800, y: 450 }, page, view);
+    for (let i = 0; i < 20; i++) {
+      const step = arrowPan('ArrowRight', view)!;
+      zoomed = panBy(zoomed, step.dx, step.dy, page, view);
+    }
+    expect(where(zoomed, page.left + page.width)).toBeCloseTo(view.width);
   });
 
   it('writes no transform when not zoomed', () => {
