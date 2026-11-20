@@ -28,7 +28,7 @@ use super::client::{Client, DavError};
 use super::ranged::RangedFile;
 use super::sync::client_for;
 use crate::db::Db;
-use crate::manga::archive::{self, MAX_ENTRY_BYTES};
+use crate::manga::archive::{self, RemoteIndex, MAX_ENTRY_BYTES};
 use crate::manga::library::LIBRARY_CHANGED;
 use crate::manga::store::{VolumeLocation, FORMAT_REMOTE_ARCHIVE, FORMAT_REMOTE_FOLDER, FORMAT_SUWAYOMI_CHAPTER};
 use crate::manga::suwayomi::graphql::SwError;
@@ -77,7 +77,13 @@ pub struct Remote {
     /// The extensions server, for chapters of series from extensions. Set
     /// once at start.
     pub suwayomi: std::sync::OnceLock<Arc<crate::manga::suwayomi::Service>>,
+    /// The directories of the last remote archives read, most recent first
+    /// (`archive_index`).
+    indexes: Mutex<Vec<(String, Arc<RemoteIndex>)>>,
 }
+
+/// How many remote archives keep their directory in memory.
+const INDEXES: usize = 4;
 
 impl From<SwError> for DavError {
     fn from(error: SwError) -> Self {
@@ -113,6 +119,7 @@ impl Remote {
             app,
             downloads: Mutex::new(HashMap::new()),
             suwayomi: std::sync::OnceLock::new(),
+            indexes: Mutex::new(Vec::new()),
         }
     }
 
@@ -172,6 +179,7 @@ impl Remote {
     pub fn remove_offline(&self, volume_ids: &[String]) {
         for id in volume_ids {
             if let Some(dir) = self.offline_dir(id) {
+                archive::close_under(&dir);
                 let _ = std::fs::remove_dir_all(dir);
             }
             let _ = self.db.delete_manga_offline(id);
@@ -237,13 +245,105 @@ impl Remote {
         Ok(pages)
     }
 
+    /// Where a page of a remote archive, read by ranges, is kept in the cache:
+    /// the page itself, so showing it again costs no request.
+    fn archive_page_key(location: &VolumeLocation, name: &str) -> String {
+        let base = Self::archive_key(location);
+        let entry = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, name.as_bytes());
+        format!("{}-p{}.img", base.trim_end_matches(".cbz"), entry.simple())
+    }
+
+    /// What the central directory of a remote archive says, read the first
+    /// time (by blocks, through the cache) and then kept in memory.
+    fn archive_index(&self, location: &VolumeLocation) -> Result<Arc<RemoteIndex>, DavError> {
+        let key = Self::archive_key(location);
+        {
+            let mut indexes = self.indexes.lock().unwrap();
+            if let Some(at) = indexes.iter().position(|(other, _)| *other == key) {
+                let entry = indexes.remove(at);
+                let index = entry.1.clone();
+                indexes.insert(0, entry);
+                return Ok(index);
+            }
+        }
+        let index = Arc::new(self.with_ranged(location, |file| {
+            file.record();
+            let len = file.len();
+            zip::ZipArchive::new(&mut *file)?;
+            RemoteIndex::build(len, file.take_recorded())
+        })?);
+        let mut indexes = self.indexes.lock().unwrap();
+        indexes.retain(|(other, _)| *other != key);
+        indexes.insert(0, (key, index.clone()));
+        indexes.truncate(INDEXES);
+        Ok(index)
+    }
+
+    /// A page of a remote archive by ranges: from the cache, or one request
+    /// for its local header and data (two only when the local header is
+    /// longer than the room left for it), inflated with `read_page`'s rules.
+    fn archive_page(&self, location: &VolumeLocation, name: &str) -> Result<Vec<u8>, DavError> {
+        let page_key = Self::archive_page_key(location, name);
+        if let Some(bytes) = self.cache.get(&page_key) {
+            return Ok(bytes);
+        }
+        let other = |error: archive::ArchiveError| DavError::Other(error.to_string());
+        let index = self.archive_index(location)?;
+        let bytes = match index.span(name) {
+            Some(span) => {
+                let span = span.map_err(other)?;
+                let client = self.client(&location.source_id)?;
+                let (start, len) = index.window(&span);
+                let fetch = |from: u64, len: u64| {
+                    self.block_on(&location.source_id, client.range(&location.source_ref, from, len, Some(index.len())))
+                };
+                let mut fetched = fetch(start, len)?;
+                if let Some(needed) = RemoteIndex::needed(&span, &fetched) {
+                    let have = fetched.len() as u64;
+                    if needed > have && start + needed <= index.len() {
+                        fetched.extend(fetch(start + have, needed - have)?);
+                    }
+                }
+                index.read(name, start, fetched).map_err(other)?
+            }
+            // An entry the index could not place: block by block, as before.
+            None => self.with_ranged(location, |file| archive::read_page(file, name))?,
+        };
+        self.cache.put(&page_key, &bytes);
+        Ok(bytes)
+    }
+
+    /// The bytes of a page only if they are on this computer already (an
+    /// offline copy, the cache): never a request. For the page strip, which
+    /// makes a thumbnail of what is here and shows the page itself otherwise.
+    pub fn local_page_bytes(&self, location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
+        let name = location.pages.get(page)?;
+        match location.format.as_str() {
+            FORMAT_REMOTE_ARCHIVE => match self.local_archive(location) {
+                Some(path) => archive::read_page_at(&path, name).ok(),
+                None => self.cache.get(&Self::archive_page_key(location, name)),
+            },
+            FORMAT_REMOTE_FOLDER => self
+                .offline_page(&location.id, page, name)
+                .and_then(|path| std::fs::read(path).ok())
+                .or_else(|| {
+                    let path = format!("{}{name}", location.source_ref);
+                    self.cache.get(&key(&location.source_id, &path, location.signature.as_deref(), &extension(&path)))
+                }),
+            FORMAT_SUWAYOMI_CHAPTER => self
+                .offline_chapter_page(location, page)
+                .or_else(|| self.cache.get(&key(&location.source_id, name, location.signature.as_deref(), "img"))),
+            _ => None,
+        }
+    }
+
     /// The bytes of page `page` (0-based) of a remote volume.
     pub fn page_bytes(&self, location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
         let name = location.pages.get(page)?;
         let result = match location.format.as_str() {
             FORMAT_REMOTE_ARCHIVE => match self.local_archive(location) {
                 Some(path) => archive::read_page_at(&path, name).map_err(|e| DavError::Other(e.to_string())),
-                None => self.with_ranged(location, |file| archive::read_page(file, name)),
+                None => self.archive_page(location, name),
             },
             FORMAT_REMOTE_FOLDER => {
                 if let Some(bytes) = self.offline_page(&location.id, page, name).and_then(|path| std::fs::read(path).ok()) {
@@ -482,21 +582,22 @@ impl Remote {
         Ok(pages)
     }
 
+    /// A page of a chapter downloaded for offline reading.
+    fn offline_chapter_page(&self, location: &VolumeLocation, page: usize) -> Option<Vec<u8>> {
+        let entries = std::fs::read_dir(self.offline_dir(&location.id)?.join("pages")).ok()?;
+        let prefix = format!("{page}.");
+        let entry = entries.filter_map(Result::ok).find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))?;
+        std::fs::read(entry.path()).ok()
+    }
+
     /// One page of a chapter: its offline copy, the cache, or the server.
     fn chapter_page(&self, location: &VolumeLocation, page: usize) -> Result<Vec<u8>, DavError> {
         // Being read: the managed server is in use.
         if let Some(service) = self.suwayomi.get() {
             service.touch();
         }
-        if let Some(dir) = self.offline_dir(&location.id) {
-            if let Ok(entries) = std::fs::read_dir(dir.join("pages")) {
-                let prefix = format!("{page}.");
-                if let Some(entry) = entries.filter_map(Result::ok).find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix)) {
-                    if let Ok(bytes) = std::fs::read(entry.path()) {
-                        return Ok(bytes);
-                    }
-                }
-            }
+        if let Some(bytes) = self.offline_chapter_page(location, page) {
+            return Ok(bytes);
         }
         let path = location.pages.get(page).ok_or(DavError::NotFound)?;
         let key = key(&location.source_id, path, location.signature.as_deref(), "img");
@@ -653,6 +754,25 @@ mod tests {
         let text = s.remote.text_path(&location, None).unwrap();
         assert!(std::fs::read_to_string(text).unwrap().contains("テスト"));
         assert!(s.remote.volume_cover(&location).is_some());
+    }
+
+    #[test]
+    fn each_page_by_ranges_is_one_request_and_then_is_here() {
+        let (s, images, _) = setup(true);
+        let location = s.db.manga_volume_location(&s.volume).unwrap().unwrap();
+        s.remote.ensure_index(&location).unwrap();
+        let location = s.db.manga_volume_location(&s.volume).unwrap().unwrap();
+        for page in [1, 0, 3] {
+            let before = s.server.requests.load(Ordering::SeqCst);
+            assert_eq!(s.remote.page_bytes(&location, page).unwrap(), images[page]);
+            assert_eq!(s.server.requests.load(Ordering::SeqCst), before + 1, "page {page}");
+        }
+        // For the strip: what was read is here, what was not is not, and
+        // asking costs nothing.
+        let before = s.server.requests.load(Ordering::SeqCst);
+        assert_eq!(s.remote.local_page_bytes(&location, 1).unwrap(), images[1]);
+        assert!(s.remote.local_page_bytes(&location, 2).is_none());
+        assert_eq!(s.server.requests.load(Ordering::SeqCst), before);
     }
 
     #[test]

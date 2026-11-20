@@ -6,6 +6,10 @@
 //! ```text
 //! manga://localhost/page/<volume id>/<n>    a page, as stored
 //! manga://localhost/thumb/<volume id>/<n>   a small JPEG of it (cached)
+//! manga://localhost/strip/<volume id>/<n>   the reader's page strip: a thumb,
+//!                                           but for a volume on a server only
+//!                                           when its page is here already;
+//!                                           otherwise the page itself
 //! manga://localhost/cover/<series id>       the series' cover (cached)
 //! manga://localhost/ext/<token>             an image of the extensions
 //!                                           server (an icon, a thumbnail)
@@ -39,6 +43,8 @@ pub const SCHEME: &str = "manga";
 pub enum Asset {
     Page { volume: String, page: usize },
     Thumb { volume: String, page: usize },
+    /// A thumbnail for the reader's strip (see the module's notes).
+    Strip { volume: String, page: usize },
     Cover { series: String },
     /// A token from `manga::suwayomi::Service::image_token`.
     Ext { token: String },
@@ -74,6 +80,7 @@ pub fn parse(path: &str) -> Option<Asset> {
     match parts.as_slice() {
         ["page", id, n] if is_opaque_id(id) => Some(Asset::Page { volume: id.to_string(), page: page_number(n)? }),
         ["thumb", id, n] if is_opaque_id(id) => Some(Asset::Thumb { volume: id.to_string(), page: page_number(n)? }),
+        ["strip", id, n] if is_opaque_id(id) => Some(Asset::Strip { volume: id.to_string(), page: page_number(n)? }),
         ["cover", id] if is_opaque_id(id) => Some(Asset::Cover { series: id.to_string() }),
         ["ext", token] if is_opaque_id(token) => Some(Asset::Ext { token: token.to_string() }),
         _ => None,
@@ -239,6 +246,33 @@ pub fn serve(db: &Db, cache_dir: &Path, remote: Option<&Remote>, method: &str, p
     let Some(asset) = parse(path) else { return Reply::status(404) };
 
     let (etag, body) = match &asset {
+        Asset::Strip { volume, page } => {
+            let Ok(Some(location)) = db.manga_volume_location(volume) else { return Reply::status(404) };
+            if *page >= location.pages.len() {
+                return Reply::status(404);
+            }
+            if !is_served_format(&location.format) {
+                // On disk a thumbnail costs no download: the usual one.
+                return serve(db, cache_dir, remote, method, &format!("thumb/{volume}/{page}"), if_none_match);
+            }
+            // On a server, a thumbnail is never a reason to download a page:
+            // one is made only from bytes already here (an offline copy, the
+            // cache). Otherwise the page goes as it is, the same request the
+            // reader makes for it.
+            let target = thumbs::strip_path(cache_dir, volume, *page);
+            let local = if target.is_file() { None } else { remote.and_then(|remote| remote.local_page_bytes(&location, *page)) };
+            let small = target.is_file() || local.is_some();
+            let etag = format!("\"{}-{}{page}\"", location.signature.as_deref().unwrap_or("0"), if small { 's' } else { 'p' });
+            if if_none_match == Some(etag.as_str()) {
+                return Reply { etag: Some(etag), ..Reply::status(304) };
+            }
+            let body = if small {
+                thumbs::cached_at(&target, thumbs::THUMB_WIDTH, &format!("{volume}/{page}"), || local)
+            } else {
+                page_bytes(remote, &location, *page)
+            };
+            (etag, body)
+        }
         Asset::Page { volume, page } | Asset::Thumb { volume, page } => {
             let Ok(Some(location)) = db.manga_volume_location(volume) else { return Reply::status(404) };
             let thumb = matches!(asset, Asset::Thumb { .. });

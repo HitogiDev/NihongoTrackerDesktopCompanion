@@ -228,31 +228,40 @@ pub fn run() {
             if window.label() == manga::reader::LABEL {
                 match event {
                     WindowEvent::Focused(focused) => manga::session::set_focused(window.app_handle(), *focused),
-                    WindowEvent::Destroyed => manga::session::reader_closed(window.app_handle()),
+                    WindowEvent::Destroyed => {
+                        manga::session::reader_closed(window.app_handle());
+                        // The archives it read stay open between pages; on
+                        // Windows an open file keeps its folder from being
+                        // renamed or moved.
+                        manga::archive::close_all();
+                    }
                     _ => {}
                 }
             }
+            // The overlay's settings die with the popup that owns them, or
+            // when closed: either way they are no longer open from it.
+            if window.label() == reading_overlay::SETTINGS_LABEL && matches!(event, WindowEvent::Destroyed) {
+                reading_overlay::settings_closed(window.app_handle());
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // The reader closes for real: it saves its page on the way out
-                // (`onCloseRequested`) and a hidden one would only hold memory.
-                if window.label() == manga::reader::LABEL {
+                // The reader and both settings windows close for real: a
+                // hidden webview keeps its renderer process (tens of MB) and
+                // they hold nothing worth keeping. The reader saves its page
+                // on the way out (`onCloseRequested`).
+                if matches!(window.label(), manga::reader::LABEL | "settings" | reading_overlay::SETTINGS_LABEL) {
                     return;
                 }
-                if matches!(window.label(), "settings" | "texthooker" | reading_overlay::SETTINGS_LABEL) {
+                // The texthooker hides: it keeps its lines and its clock.
+                if window.label() == "texthooker" {
                     api.prevent_close();
                     let _ = window.hide();
-                    if window.label() == "texthooker" {
-                        let app = window.app_handle().clone();
-                        tauri::async_runtime::spawn(async move {
-                            let state = app.state::<AppState>();
-                            if state.tracker.read().await.vn.is_none() {
-                                let _ = state.hooker_tx.send(HookerCommand::Disconnect);
-                            }
-                        });
-                    }
-                    if window.label() == reading_overlay::SETTINGS_LABEL {
-                        reading_overlay::settings_closed(window.app_handle());
-                    }
+                    let app = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state = app.state::<AppState>();
+                        if state.tracker.read().await.vn.is_none() {
+                            let _ = state.hooker_tx.send(HookerCommand::Disconnect);
+                        }
+                    });
                     return;
                 }
                 // Closing the session overlay switches it off; the webview goes

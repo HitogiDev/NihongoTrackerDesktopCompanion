@@ -240,7 +240,15 @@ pub struct Tracking {
     auto_start: bool,
     auto_start_delay: Duration,
     clock_emitted: Option<Option<MangaClock>>,
+    /// Lines of the pages `step` credited, still to be stored. The tick takes
+    /// them and stores them off its thread (`store_lines`), after letting go
+    /// of the lock: the count itself (`manga_page_read`) is already final.
+    pub unsaved_lines: Vec<crate::db::TextLine>,
 }
+
+/// A session whose clock alone moved is sent again only after this many
+/// seconds: the windows advance it themselves in between (`useMangaSession`).
+pub const SESSION_RESYNC_SECS: u64 = 15;
 
 /// One tick's worth of what the watcher observed.
 #[derive(Debug, Clone, Copy)]
@@ -322,9 +330,10 @@ impl Tracking {
             self.inactive = Duration::ZERO;
             session.inactive_secs = 0;
             if let Some(pages) = open.dwell(input.elapsed, input.dwell) {
-                let credited = credit_pages(db, open, &pages);
+                let (credited, lines) = count_pages(db, open, &pages);
                 session.pages_read += credited.pages;
                 session.chars_read += credited.chars;
+                self.unsaved_lines.extend(lines);
             }
         } else {
             self.inactive += input.elapsed;
@@ -389,6 +398,9 @@ impl Tracking {
             session.elapsed_secs = secs.min(MAX_EDITED_SECS);
         }
         self.sync_session();
+        // A time typed by hand always goes out, however close it is to the
+        // last one sent (`changed` holds back a clock that only advanced).
+        self.emitted = None;
         true
     }
 
@@ -443,14 +455,33 @@ impl Tracking {
         Some(clock)
     }
 
-    /// The session, if it changed since the last time this was asked.
+    /// The session, if it changed since the last time this was asked. One
+    /// whose clocks (`elapsed_secs`, `inactive_secs`) only went forward, by
+    /// less than `SESSION_RESYNC_SECS`, has not changed: the windows count
+    /// a running clock on their own and are set right every so often.
     fn changed(&mut self) -> Option<Option<MangaSession>> {
         if self.emitted.as_ref() == Some(&self.session) {
             return None;
         }
+        if let (Some(Some(last)), Some(now)) = (&self.emitted, &self.session) {
+            if only_clocks_advanced(last, now) {
+                return None;
+            }
+        }
         self.emitted = Some(self.session.clone());
         self.emitted.clone()
     }
+}
+
+/// `now` is `last` with its clocks a little further on, and nothing else
+/// different.
+fn only_clocks_advanced(last: &MangaSession, now: &MangaSession) -> bool {
+    let near = |before: u64, after: u64| after >= before && after - before < SESSION_RESYNC_SECS;
+    if !near(last.elapsed_secs, now.elapsed_secs) || !near(last.inactive_secs, now.inactive_secs) {
+        return false;
+    }
+    let same = MangaSession { elapsed_secs: last.elapsed_secs, inactive_secs: last.inactive_secs, ..now.clone() };
+    same == *last
 }
 
 /// Kana and kanji on a page, the way the site counts them.
@@ -505,22 +536,36 @@ fn block_line(volume_id: &str, page: i64, index: usize, block: &super::mokuro::M
     })
 }
 
-/// Stores the blocks of a page as lines. Ones already stored stay as they are.
-pub fn insert_page_lines(db: &Db, volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) {
-    let Some(text) = text else { return };
-    for (index, block) in text.blocks.iter().enumerate() {
-        if let Some(line) = block_line(volume_id, page, index, block, content_id) {
-            if let Err(error) = db.insert_line(&line) {
-                log::warn!("manga line {} not stored: {error}", line.id);
-            }
+/// The blocks of a page as lines (the ones with Japanese in them).
+fn page_lines(volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) -> Vec<crate::db::TextLine> {
+    let Some(text) = text else { return Vec::new() };
+    text.blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| block_line(volume_id, page, index, block, content_id))
+        .collect()
+}
+
+/// Stores lines. Ones already stored stay as they are.
+pub fn store_lines(db: &Db, lines: &[crate::db::TextLine]) {
+    for line in lines {
+        if let Err(error) = db.insert_line(line) {
+            log::warn!("manga line {} not stored: {error}", line.id);
         }
     }
 }
 
-/// Records `pages` of the open volume as read, and their blocks as lines.
+/// Stores the blocks of a page as lines. Ones already stored stay as they are.
+pub fn insert_page_lines(db: &Db, volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) {
+    store_lines(db, &page_lines(volume_id, page, text, content_id));
+}
+
+/// Records `pages` of the open volume as read, and returns what they add
+/// with the lines of their blocks, for the caller to store (`store_lines`).
 /// Pages read before add nothing.
-pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
+pub fn count_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> (Credited, Vec<crate::db::TextLine>) {
     let mut credited = Credited::default();
+    let mut lines = Vec::new();
     let content = content_id(open.media_id.as_deref(), &open.series_id);
     for &page in pages {
         let chars = page_chars(open.page_text(page));
@@ -528,12 +573,21 @@ pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
             Ok(true) => {
                 credited.pages += 1;
                 credited.chars += chars;
-                insert_page_lines(db, &open.volume_id, page, open.page_text(page), &content);
+                lines.extend(page_lines(&open.volume_id, page, open.page_text(page), &content));
             }
             Ok(false) => {}
             Err(error) => log::warn!("manga page {}/{page} not recorded: {error}", open.volume_id),
         }
     }
+    (credited, lines)
+}
+
+/// Records `pages` of the open volume as read, and their blocks as lines.
+/// Pages read before add nothing.
+#[cfg(test)]
+pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
+    let (credited, lines) = count_pages(db, open, pages);
+    store_lines(db, &lines);
     credited
 }
 
@@ -780,11 +834,18 @@ pub fn tick(app: &AppHandle, settings: &Settings, elapsed: Duration, idle_secs: 
         auto_start: settings.manga_auto_start,
         auto_start_delay: Duration::from_secs(settings.manga_auto_start_delay_secs.min(3600)),
     };
-    let (session, changed, clock, finished) = {
+    let (session, changed, clock, finished, lines) = {
         let mut tracking = state.manga.tracking.lock().unwrap();
         let finished = tracking.step(&state.db, input, crate::db::now_iso);
-        (tracking.session.clone(), tracking.changed(), tracking.clock_changed(), finished)
+        let lines = std::mem::take(&mut tracking.unsaved_lines);
+        (tracking.session.clone(), tracking.changed(), tracking.clock_changed(), finished, lines)
     };
+    // The page is already counted; its lines (one insert per block) are
+    // stored off the tick.
+    if !lines.is_empty() {
+        let db = state.db.clone();
+        tauri::async_runtime::spawn_blocking(move || store_lines(&db, &lines));
+    }
     if let Some(finished) = finished {
         log_session(app, &finished, settings);
     }
@@ -1241,6 +1302,59 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_clock_that_only_runs_is_sent_every_so_often_and_anything_else_at_once() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None, None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert!(tracking.changed().unwrap().is_some());
+        for _ in 1..SESSION_RESYNC_SECS {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+            assert_eq!(tracking.changed(), None, "the windows count it themselves");
+        }
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        let sent = tracking.changed().unwrap().unwrap();
+        assert_eq!(sent.elapsed_secs, 1 + SESSION_RESYNC_SECS, "set right after a while");
+        // A pause goes out at once…
+        tracking.step(&db, input(SECOND, false, 0), || "t".into());
+        assert!(!tracking.changed().unwrap().unwrap().counting);
+        // …and so does a page on screen, or a time typed by hand.
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        tracking.changed();
+        tracking.open.as_mut().unwrap().show(&[1]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert_eq!(tracking.changed().unwrap().unwrap().page, 1);
+        let at = tracking.session.as_ref().unwrap().elapsed_secs;
+        tracking.set_elapsed(at + 2, || "t".into());
+        assert_eq!(tracking.changed().unwrap().unwrap().elapsed_secs, at + 2);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_credited_page_counts_at_once_and_leaves_its_lines_to_be_stored() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![Some(page(&["あいう", "ABC"]))]);
+        tracking.open.as_mut().unwrap().show(&[0]);
+        for _ in 0..3 {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        }
+        let session = tracking.session.clone().unwrap();
+        assert_eq!((session.pages_read, session.chars_read), (1, 3));
+        assert_eq!(db.manga_read_totals("v1").unwrap(), (1, 3));
+        let lines = std::mem::take(&mut tracking.unsaved_lines);
+        assert_eq!(lines.iter().map(|line| line.id.as_str()).collect::<Vec<_>>(), ["manga:v1:0:0"]);
+        assert!(db.line_by_id("manga:v1:0:0").unwrap().is_none(), "not stored inside the step");
+        store_lines(&db, &lines);
+        assert_eq!(db.line_by_id("manga:v1:0:0").unwrap().unwrap().text, "あいう");
+        // Read again: nothing more to count or store.
+        tracking.step(&db, input(10 * SECOND, true, 0), || "t".into());
+        assert!(tracking.unsaved_lines.is_empty());
+        assert_eq!(tracking.session.as_ref().unwrap().pages_read, 1);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn ten_minutes_with_the_clock_stopped_end_the_session() {
         let (db, path) = temp_db();
         let mut tracking = reading(vec![None]);
@@ -1330,6 +1444,8 @@ pub(crate) mod tests {
         for _ in 0..3 {
             tracking.step(&db, input(SECOND, true, 0), || "t".into());
         }
+        // As the tick does, after the step.
+        store_lines(&db, &std::mem::take(&mut tracking.unsaved_lines));
         let lines = db.lines_for("manga:s1", 10).unwrap();
         let ids: Vec<&str> = lines.iter().map(|line| line.id.as_str()).collect();
         assert_eq!(ids, ["manga:v1:0:0", "manga:v1:0:2"], "a block without Japanese is not a line");
@@ -1341,6 +1457,7 @@ pub(crate) mod tests {
         for _ in 0..3 {
             tracking.step(&db, input(SECOND, true, 0), || "t".into());
         }
+        assert!(tracking.unsaved_lines.is_empty());
         assert_eq!(db.lines_for("manga:s1", 10).unwrap().len(), 2);
         assert_eq!(tracking.session.as_ref().unwrap().pages_read, 1);
         drop(db);

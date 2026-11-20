@@ -5,9 +5,13 @@
 //! downloaded because the server has no ranges, `.mokuro` files, covers and
 //! the pages of image folders. Keys carry the remote file's signature, so a
 //! file that changes on the server is simply a new key and the old one ages
-//! out. Reading a file marks it used (its modification time); when the total
-//! passes the limit the oldest go. Downloads "for offline reading" are not
-//! here: they live in `app_data_dir` and are never evicted.
+//! out. Reading a file marks it used (its modification time), unless it was
+//! marked less than `TOUCH_AFTER` ago: the order of files used within the
+//! same minute is only roughly kept, and a block read over and over costs
+//! one open instead of two. When the total passes the limit the oldest go,
+//! down to `LOW_WATER` of it, so the next writes do not scan the folder again
+//! at once. Downloads "for offline reading" are not here: they live in
+//! `app_data_dir` and are never evicted.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,6 +20,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The default limit, 2 GB.
 pub const DEFAULT_LIMIT_MB: u64 = 2048;
+/// A file used again this soon after it was marked is not marked again.
+pub const TOUCH_AFTER: Duration = Duration::from_secs(60);
+/// Evicting goes down to this share of the limit (per cent).
+const LOW_WATER: u64 = 90;
 
 pub struct Cache {
     root: PathBuf,
@@ -25,6 +33,10 @@ pub struct Cache {
     /// The last access time handed out, so two accesses in the same instant
     /// still have an order.
     clock: AtomicU64,
+    touch_after: Duration,
+    /// Folder scans, for the tests.
+    #[cfg(test)]
+    scans: AtomicU64,
 }
 
 /// Keys are ours (uuids and suffixes): never a path.
@@ -34,7 +46,22 @@ fn valid_key(key: &str) -> bool {
 
 impl Cache {
     pub fn new(root: PathBuf, limit_bytes: u64) -> Self {
-        Cache { root, limit: AtomicU64::new(limit_bytes), used: Mutex::new(None), clock: AtomicU64::new(0) }
+        Cache {
+            root,
+            limit: AtomicU64::new(limit_bytes),
+            used: Mutex::new(None),
+            clock: AtomicU64::new(0),
+            touch_after: TOUCH_AFTER,
+            #[cfg(test)]
+            scans: AtomicU64::new(0),
+        }
+    }
+
+    /// Marks every use, however recent (exact LRU order, for the tests).
+    #[cfg(test)]
+    fn exact(mut self) -> Self {
+        self.touch_after = Duration::ZERO;
+        self
     }
 
     pub fn root(&self) -> &Path {
@@ -74,21 +101,39 @@ impl Cache {
         }
     }
 
-    /// A cached file's bytes, marking it used.
+    /// Marked longer ago than `touch_after` (or never, as far as we know).
+    fn stale(&self, modified: Option<SystemTime>) -> bool {
+        if self.touch_after.is_zero() {
+            return true;
+        }
+        modified.is_none_or(|modified| SystemTime::now().duration_since(modified).map_or(false, |age| age >= self.touch_after))
+    }
+
+    /// A cached file's bytes, marking it used. One open does both.
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
+        use std::io::Read;
         let path = self.path(key)?;
-        let bytes = std::fs::read(&path).ok()?;
-        self.touch(&path);
+        let mut file = std::fs::File::options().read(true).write(true).open(&path).ok()?;
+        let meta = file.metadata().ok()?;
+        if !meta.is_file() {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(meta.len() as usize);
+        file.read_to_end(&mut bytes).ok()?;
+        if self.stale(meta.modified().ok()) {
+            let _ = file.set_modified(self.now());
+        }
         Some(bytes)
     }
 
     /// A cached file's path, marking it used.
     pub fn file(&self, key: &str) -> Option<PathBuf> {
         let path = self.path(key)?;
-        path.is_file().then(|| {
+        let meta = std::fs::metadata(&path).ok().filter(|meta| meta.is_file())?;
+        if self.stale(meta.modified().ok()) {
             self.touch(&path);
-            path
-        })
+        }
+        Some(path)
     }
 
     /// Stores bytes under a key (written aside and renamed, so a reader never
@@ -144,6 +189,8 @@ impl Cache {
 
     /// Every cached file with its size and last use.
     fn scan(&self) -> Vec<(PathBuf, u64, SystemTime)> {
+        #[cfg(test)]
+        self.scans.fetch_add(1, Ordering::Relaxed);
         let mut files = Vec::new();
         let Ok(buckets) = std::fs::read_dir(&self.root) else { return files };
         for bucket in buckets.filter_map(Result::ok) {
@@ -161,17 +208,20 @@ impl Cache {
         files
     }
 
-    /// Deletes the least recently used files until the cache fits its limit,
-    /// never `keep` (what was just stored for someone waiting on it).
+    /// Once the cache is over its limit, deletes the least recently used
+    /// files until it is down to `LOW_WATER` of it: the room left means the
+    /// next writes add up for a while before another scan. Never `keep`
+    /// (what was just stored for someone waiting on it).
     fn evict(&self, keep: Option<&Path>) {
         let mut used = self.used.lock().unwrap();
         let mut files = self.scan();
         let mut total: u64 = files.iter().map(|(_, size, _)| size).sum();
         let limit = self.limit();
         if total > limit {
+            let target = limit / 100 * LOW_WATER + limit % 100 * LOW_WATER / 100;
             files.sort_by_key(|(_, _, used)| *used);
             for (path, size, _) in files {
-                if total <= limit {
+                if total <= target {
                     break;
                 }
                 if Some(path.as_path()) == keep {
@@ -216,17 +266,24 @@ mod tests {
     #[test]
     fn the_least_recently_used_go_first_when_over_the_limit() {
         let root = temp();
-        let cache = Cache::new(root.clone(), 300);
-        cache.put("aa-1", &[1; 100]);
-        cache.put("bb-2", &[2; 100]);
-        cache.put("cc-3", &[3; 100]);
-        assert_eq!(cache.usage(), 300);
-        // Reading `aa-1` makes `bb-2` the oldest.
-        assert_eq!(cache.get("aa-1").unwrap(), vec![1; 100]);
-        cache.put("dd-4", &[4; 100]);
-        assert!(cache.get("bb-2").is_none(), "least recently used");
-        assert!(cache.get("aa-1").is_some() && cache.get("cc-3").is_some() && cache.get("dd-4").is_some());
-        assert_eq!(cache.usage(), 300);
+        let cache = Cache::new(root.clone(), 1_000).exact();
+        for n in 0..10u8 {
+            cache.put(&format!("k{n}-x"), &[n; 100]);
+        }
+        assert_eq!(cache.usage(), 1_000);
+        // Reading `k0-x` makes `k1-x` the oldest.
+        assert_eq!(cache.get("k0-x").unwrap(), vec![0; 100]);
+        let scans = cache.scans.load(Ordering::Relaxed);
+        cache.put("ka-x", &[10; 100]);
+        // Over the limit: down to 90 % of it, the two oldest.
+        assert_eq!(cache.usage(), 900);
+        assert_eq!(cache.scans.load(Ordering::Relaxed), scans + 1);
+        assert!(cache.get("k1-x").is_none() && cache.get("k2-x").is_none(), "least recently used");
+        assert!(cache.get("k0-x").is_some() && cache.get("k3-x").is_some() && cache.get("ka-x").is_some());
+        // The room left takes the next write without another scan.
+        cache.put("kb-x", &[11; 100]);
+        assert_eq!(cache.usage(), 1_000);
+        assert_eq!(cache.scans.load(Ordering::Relaxed), scans + 1, "no scan until over the limit again");
 
         // Lowering the limit evicts at once; a file larger than the limit
         // is still kept for whoever is waiting on it.
@@ -239,6 +296,24 @@ mod tests {
         cache.clear();
         assert_eq!(cache.usage(), 0);
         assert!(cache.get("ee-5").is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_file_used_again_soon_is_not_marked_again() {
+        let root = temp();
+        let cache = Cache::new(root.clone(), 1_000);
+        cache.put("aa-1", &[1; 10]);
+        let path = cache.path("aa-1").unwrap();
+        let old = SystemTime::now() - 2 * TOUCH_AFTER;
+        std::fs::File::options().write(true).open(&path).unwrap().set_modified(old).unwrap();
+        // Long ago: marked now.
+        assert_eq!(cache.get("aa-1").unwrap(), vec![1; 10]);
+        let marked = std::fs::metadata(&path).unwrap().modified().unwrap();
+        assert!(marked > old + TOUCH_AFTER);
+        // Just now: left as it is.
+        assert!(cache.get("aa-1").is_some() && cache.file("aa-1").is_some());
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), marked);
         let _ = std::fs::remove_dir_all(root);
     }
 

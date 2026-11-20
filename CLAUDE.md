@@ -116,6 +116,15 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   destruye. El overlay de lectura y su popup se crean la primera vez que se
   quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
   hijas del popup y morirían con él.
+- Ajustes (`settings`), los ajustes del overlay de lectura y el lector de
+  manga **se cierran de verdad** al pulsar la X: oculta, una webview conserva
+  su renderer (entre 70 y 90 MB medidos) y no guardan nada que merezca
+  conservarlas. `settings_closed` va en `WindowEvent::Destroyed`, que también
+  llega cuando muere con el popup. Un campo numérico con un guardado
+  pendiente lo hace al desmontarse (`NumberSetting`). Solo el texthooker se
+  oculta (guarda líneas y cronómetro), y `main` se oculta en la bandeja.
+  **Solo los ajustes del overlay de lectura** van siempre encima, para verse
+  sobre su diccionario; Ajustes es una ventana normal.
 - El estado del overlay de lectura (`reading_overlay::Runtime`, en `AppState`)
   existe aunque sus ventanas no: la última línea y el hook nativo de la obra
   (`OverlayState::hook`, por `content_id`, venga de donde venga la selección)
@@ -298,7 +307,8 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
-  `page/<volumen>/<n>`, `thumb/<volumen>/<n>`, `cover/<serie>`. Solo ids
+  `page/<volumen>/<n>`, `thumb/<volumen>/<n>`, `strip/<volumen>/<n>` (la
+  tira de páginas del lector), `cover/<serie>`. Solo ids
   opacos; el archivo sale de la base de datos, nunca de la URL. `parse` solo
   decodifica `%2F` (lo que hace `convertFileSrc`) y rechaza cualquier otro
   carácter: no añadas formas que acepten rutas. Las páginas de una carpeta se
@@ -308,7 +318,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 - **CBZ desconfiado** (`archive.rs`): nombres con `..`, absolutos o con `:`
   no son páginas; una entrada que infla más de 50:1 (por encima de 2 MB) es
   una bomba; toda lectura corta a 64 MB diga lo que diga la cabecera. Orden
-  natural (`natural_cmp`, carpeta a carpeta) sin `__MACOSX` ni ocultos.
+  natural (`natural_cmp`, carpeta a carpeta) sin `__MACOSX` ni ocultos. Un
+  CBZ en disco (local, o remoto bajado entero) se queda abierto con su
+  directorio leído entre página y página (`read_page_at`, los últimos 4, por
+  ruta + tamaño + fecha: uno que cambia se reabre); borrar una copia sin
+  conexión los suelta antes (`close_under`).
 - **Detección** (`library.rs`): carpeta con imágenes = tomo, `.cbz`/`.zip` =
   tomo, `<Vol>.mokuro` junto a `<Vol>.cbz` o a `<Vol>/` = texto, la carpeta que
   lo contiene = serie. `<Vol>.webp` y `cover.*` son portadas, no páginas. Los
@@ -324,7 +338,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `cover-<serie>-<versión>/`: cachear una versión nueva borra las viejas
   (`thumbs::drop_other_covers`) y el reescaneo, la sincronización WebDAV y
   quitar una fuente barren las de series que ya no están
-  (`sweep_library_covers`).
+  (`sweep_library_covers`). Las portadas miden `COVER_WIDTH` = 320 px (se
+  pintan a 136–200 px; a 480 cada una decodificada ocupaba más del doble y la
+  rejilla monta 120). Cambiar el ancho deja archivos `<n>-<ancho>.jpg` viejos:
+  añade el anterior a `OLD_COVER_WIDTHS` y `sweep_library_covers` los borra
+  una vez (`kv:manga:covers:width`).
 - `.mokuro` (`mokuro.rs`) se lee con serde tolerante: campos de más se ignoran,
   de menos toman su valor por defecto. Las páginas se casan por final de ruta,
   luego por nombre sin extensión y, si no casa nada pero el número coincide,
@@ -374,12 +392,18 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`preloadPages`) son `manga_preload_pages` páginas por delante (4; Ajustes →
   Lector de manga → Avanzado, hasta 50) más la doble página anterior, en los
   dos modos; las que salen de esa ventana se sueltan. La tira de miniaturas
-  usa `manga://thumb` y `content-visibility`, salvo en un tomo de servidor
-  (`isServedFormat`): ahí la miniatura obligaría a bajar la página entera para
-  encogerla, así que enseña la página tal cual (la misma petición que el
-  lector precarga). La rueda la mueve en horizontal (listener nativo no
-  pasivo). La rejilla de la biblioteca monta las series de 120 en 120
-  (`GRID_BATCH`).
+  usa `manga://strip` y `content-visibility`. En disco es la miniatura de
+  siempre; en un tomo de servidor (`is_served_format`) **nunca se baja una
+  página solo para encogerla**: si sus bytes ya están aquí (copia sin
+  conexión o caché, `Remote::local_page_bytes`, que nunca pide nada) se hace
+  la miniatura (`thumbs::strip_path`, aparte de `thumb`, cuya 0 es la portada
+  sidecar; ETag `s`), y si no va la página tal cual (ETag `p`, la misma
+  petición que el lector precarga). La rueda la mueve en horizontal (listener
+  nativo no pasivo). La rejilla de la biblioteca monta las series de 120 en
+  120 (`GRID_BATCH`).
+- La sesión (`useMangaSession`) solo la lee `ClockMenu`, no `ReaderView`: su
+  reloj cambia cada segundo y no debe repintar las páginas ni volver a
+  registrar los atajos.
 - **Portadas en orden** (`screens/manga/coverQueue.ts`): una tarjeta de la
   rejilla no pide su portada hasta estar cerca de la pantalla (un único
   IntersectionObserver, 240 px de margen) y entonces espera turno en una cola
@@ -478,7 +502,10 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`session::tick`, sin red): una página cuenta tras
   `manga_page_dwell_secs` (3 s) en pantalla, con `count_japanese` de sus
   bloques, y **una sola vez** (`manga_page_read`, `INSERT OR IGNORE`). Sin
-  texto cuenta la página pero no caracteres.
+  texto cuenta la página pero no caracteres. Esa marca es lo único que se
+  escribe dentro del tick (decide la cuenta); las líneas de la página las
+  deja `step` en `Tracking::unsaved_lines` y `tick` las guarda en
+  `spawn_blocking` tras soltar el lock (`store_lines`).
 - **Cronómetro**: corre cuando está **armado** y el usuario está presente
   (con foco si `manga_pause_on_unfocus`, de `Runtime::reader_focused` y
   `WindowEvent::Focused` en `lib.rs`; sin inactividad,
@@ -508,7 +535,12 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   sesión (`MangaSession`, `pause` = `unfocused`/`idle`/`stopped`) viaja en
   `TrackerSnapshot.manga` y por `manga://session`; la pintan la barra del
   lector y la tarjeta del Dashboard. La sesión no existe hasta el primer tick
-  con el reloj en marcha.
+  con el reloj en marcha. `manga://session` no sale cada segundo: si solo
+  avanzaron `elapsed_secs`/`inactive_secs`, sale cada `SESSION_RESYNC_SECS`
+  (15 s); cualquier otro cambio, y un tiempo editado a mano, al momento
+  (`Tracking::changed`). Entre medias `useMangaSession` cuenta solo
+  (`sessionAt`) mientras `counting`. El Dashboard no lo necesita: lee el
+  snapshot del tracker.
 - **Log** al cerrar el lector (`WindowEvent::Destroyed`), al pasar a otro tomo,
   al salir de la app (`RunEvent::Exit`) o tras `manga_idle_log_minutes` (10)
   con el reloj parado; al volver empieza otra sesión. `log_payload` es puro y
@@ -567,7 +599,16 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   desaloja), caché, servidor. Un CBZ remoto se lee con `ranged.rs`: un
   `Read + Seek` por bloques de 512 KB pedidos con `Range` (comprobando
   `Content-Range` y el tamaño listado), así que `archive.rs` funciona igual que
-  en disco y solo baja el directorio central y la entrada pedida. El índice
+  en disco y solo baja el directorio central. Las páginas no van por bloques:
+  `archive::RemoteIndex` guarda en memoria (los últimos 4 tomos,
+  `Remote::archive_index`) lo que el directorio dice de cada entrada (dónde
+  empieza su cabecera local, tamaños), sacado del propio crate `zip` (un
+  lector que, solo al indexar, contesta con una cabecera local vacía donde no
+  hay bytes), y una página es **una** petición: cabecera + datos + 64 KB de
+  margen (una segunda solo si la cabecera local es más larga). Los límites
+  (bomba, 64 MB, nombres) se miran antes de pedir y otra vez al inflar con
+  `read_page` sobre esos bytes. La página inflada se guarda en la caché
+  (`<tomo>-p<entrada>`): enseñarla otra vez no pide nada. El índice
   (`pages_json`) se lee al abrir el tomo (`reader::open`); si el servidor
   responde 200 a un `Range`, se corta la respuesta y el error es
   `needs-download`: la UI lo descarga entero con progreso (`manga://download`)
@@ -576,7 +617,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`manga_prepare_series`) se bajan sus `.mokuro`. La miniatura 0 de un tomo
   remoto es su portada sidecar, sin abrir el CBZ.
 - **Caché** (`cache.rs`): `app_cache_dir/manga/webdav/`, LRU por fecha de
-  modificación (cada lectura la toca), límite `manga_webdav_cache_mb` (2 GB),
+  modificación (una lectura la toca si la marca tiene más de 60 s,
+  `TOUCH_AFTER`: dentro del mismo minuto el orden es aproximado, y leer y
+  marcar es una sola apertura). Al pasar el límite se borra hasta el 90 %
+  (`LOW_WATER`), para no recorrer la carpeta en cada escritura. Límite
+  `manga_webdav_cache_mb` (2 GB),
   "vaciar" en Ajustes → Lector de manga. Las claves llevan la firma del
   archivo remoto: uno que cambia es otra clave y el viejo envejece solo.
 - Todo es bloqueante y va en hilos de `spawn_blocking` (el protocolo, los

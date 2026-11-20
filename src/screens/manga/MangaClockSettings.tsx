@@ -38,7 +38,15 @@ export function NumberSetting({ label, hint, value, min, max, step = 1, onSave }
   useEffect(() => {
     if (!editing.current) setDraft(String(value));
   }, [value]);
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  // A save still waiting when the field goes (the Settings window closes for
+  // real now) is made at once rather than lost.
+  const pending = useRef<() => void>(() => undefined);
+  useEffect(() => () => {
+    if (timer.current === null) return;
+    window.clearTimeout(timer.current);
+    timer.current = null;
+    pending.current();
+  }, []);
 
   const commit = (text: string) => {
     if (timer.current !== null) window.clearTimeout(timer.current);
@@ -70,6 +78,10 @@ export function NumberSetting({ label, hint, value, min, max, step = 1, onSave }
               const text = e.target.value;
               setDraft(text);
               if (timer.current !== null) window.clearTimeout(timer.current);
+              pending.current = () => {
+                const next = boundedNumber(text, min, max);
+                if (next !== null && next !== value) onSave(next);
+              };
               timer.current = window.setTimeout(() => commit(text), SAVE_DELAY_MS);
             }}
             onBlur={(e) => {

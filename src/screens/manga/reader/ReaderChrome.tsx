@@ -222,16 +222,9 @@ function VolumeButton({ volume, label, icon: Icon, onOpen }: {
   );
 }
 
-export function BottomBar({ visible, volumeId, fullPages, page, shown, pageLabel, pageCount, direction, previousVolume, nextVolume, onPreviousVolume, onNextVolume, onSeek, onHover, onFocusWithin }: {
+export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount, direction, previousVolume, nextVolume, onPreviousVolume, onNextVolume, onSeek, onHover, onFocusWithin }: {
   visible: boolean;
   volumeId: string;
-  /**
-   * The strip shows the pages themselves, not `manga://thumb`: for a volume
-   * on a server a thumbnail means fetching the whole page and shrinking it,
-   * so the page is used as it is (and is the same request the reader makes
-   * and preloads).
-   */
-  fullPages: boolean;
   page: number;
   /** Every page on screen (two in a spread). */
   shown: number[];
@@ -303,8 +296,10 @@ export function BottomBar({ visible, volumeId, fullPages, page, shown, pageLabel
         <div className="overflow-hidden">
           <ol ref={list} className="flex gap-2 overflow-x-auto px-4 pb-1 pt-3" dir={rtl ? 'rtl' : 'ltr'} aria-label={t('pages')}>
             {strip ? Array.from({ length: pageCount }, (_, index) => (
-              // Thumbnails (`manga://thumb`, 240 px wide), never pages; the
-              // ones scrolled away skip layout and paint.
+              // Thumbnails (`manga://strip`, 240 px wide). A page of a volume
+              // on a server that is not here yet comes as it is: it is never
+              // downloaded only to be shrunk. The ones scrolled away skip
+              // layout and paint.
               <li key={index} className="shrink-0 [contain-intrinsic-size:auto_4rem_auto_7.5rem] [content-visibility:auto]">
                 <button
                   ref={index === page ? current : undefined}
@@ -316,7 +311,7 @@ export function BottomBar({ visible, volumeId, fullPages, page, shown, pageLabel
                     ? 'block overflow-hidden rounded-field ring-2 ring-primary focus-visible:-outline-offset-2'
                     : 'block overflow-hidden rounded-field opacity-70 ring-1 ring-base-content/10 motion-safe:transition hover:opacity-100 focus-visible:opacity-100 focus-visible:-outline-offset-2'}
                 >
-                  <img src={fullPages ? mangaUrl.page(volumeId, index) : mangaUrl.thumb(volumeId, index)} alt="" loading="lazy" decoding="async" draggable={false} className="h-24 w-auto min-w-16 bg-base-300 object-cover" />
+                  <img src={mangaUrl.strip(volumeId, index)} alt="" loading="lazy" decoding="async" draggable={false} className="h-24 w-auto min-w-16 bg-base-300 object-cover" />
                   <span className="block bg-base-200 py-0.5 text-center text-[10px] tabular-nums text-base-content/70">{index + 1}</span>
                 </button>
               </li>

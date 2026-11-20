@@ -11,7 +11,7 @@ import { toast } from '../../../store/useToastStore';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { events, ipc } from '../../../lib/ipc';
-import { isServedFormat, mangaUrl } from '../../../lib/manga';
+import { mangaUrl } from '../../../lib/manga';
 import { inViewTransition, withViewTransition } from '../../../lib/viewTransition';
 import type { EditedBlock, MangaSessionEnded, MokuroPage, OcrPage, ReaderPrefs, ReaderTarget, ReaderVolume, TextLayerMode } from '../../../lib/types';
 import { OcrInstallModal } from '../ocr/OcrInstallModal';
@@ -27,7 +27,6 @@ import { BACKGROUND_CLASS } from './styles';
 import { TextLayer, type HoveredBlock } from './TextLayer';
 import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
-import { useMangaSession } from '../useMangaSession';
 import { ClockMenu } from './ClockMenu';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
@@ -398,9 +397,9 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   // ── counting ───────────────────────────────────────────────────────
   // Rust times the pages and counts them (`manga::session`); the reader only
-  // says which ones are on screen.
-  const session = useMangaSession();
-  const ownSession = session?.volume_id === volume.id ? session : null;
+  // says which ones are on screen. The session itself (its clock changes
+  // every second) is read by `ClockMenu` alone, so the pages do not render
+  // again with it.
   const [tracked, setTracked] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -740,7 +739,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onHover={(hovering) => chrome.pin('top', hovering)}
         onFocusWithin={(inside) => chrome.pin('top-focus', inside)}
         extra={<>
-          <ClockMenu volumeId={volume.id} session={ownSession} onOpenChange={setClockOpen} />
+          <ClockMenu volumeId={volume.id} onOpenChange={setClockOpen} />
           {readingShown ? (
             <span className="badge badge-soft badge-primary gap-1.5" role="status">
               <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
@@ -833,7 +832,6 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       <BottomBar
         visible={chrome.visible || settingsOpen}
         volumeId={volume.id}
-        fullPages={isServedFormat(volume.format)}
         page={page}
         shown={vertical ? [page] : spread}
         pageLabel={pageLabel}

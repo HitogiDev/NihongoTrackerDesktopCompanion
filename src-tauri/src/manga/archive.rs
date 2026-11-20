@@ -6,9 +6,12 @@
 //! inflates far beyond its compressed size is a bomb, and every read stops at a
 //! hard limit whatever the header claims.
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use super::{is_image_name, natural_cmp};
 
@@ -127,16 +130,33 @@ pub fn list_pages_at(path: &Path) -> Result<Vec<String>, ArchiveError> {
     list_pages(BufReader::new(File::open(path)?))
 }
 
-/// One page, inflated in a stream that stops at the limit whatever the header
-/// says, so a lying entry costs at most `MAX_ENTRY_BYTES`.
-pub fn read_page<R: Read + Seek>(reader: R, name: &str) -> Result<Vec<u8>, ArchiveError> {
+/// Only a name that `list_pages` would list can be read.
+fn check_name(name: &str) -> Result<(), ArchiveError> {
     if safe_entry_name(name).as_deref() != Some(name) || is_junk(name) || !is_image_name(name) {
         return Err(ArchiveError::NotFound);
     }
-    let mut archive = zip::ZipArchive::new(reader)?;
+    Ok(())
+}
+
+/// The archive's central directory, read and checked.
+fn open<R: Read + Seek>(reader: R) -> Result<zip::ZipArchive<R>, ArchiveError> {
+    let archive = zip::ZipArchive::new(reader)?;
     if archive.len() > MAX_ENTRIES {
         return Err(ArchiveError::TooManyEntries);
     }
+    Ok(archive)
+}
+
+/// One page, inflated in a stream that stops at the limit whatever the header
+/// says, so a lying entry costs at most `MAX_ENTRY_BYTES`.
+pub fn read_page<R: Read + Seek>(reader: R, name: &str) -> Result<Vec<u8>, ArchiveError> {
+    check_name(name)?;
+    read_entry(&mut open(reader)?, name)
+}
+
+/// [`read_page`] on an archive already open.
+fn read_entry<R: Read + Seek>(archive: &mut zip::ZipArchive<R>, name: &str) -> Result<Vec<u8>, ArchiveError> {
+    check_name(name)?;
     let entry = match archive.by_name(name) {
         Ok(entry) => entry,
         Err(zip::result::ZipError::FileNotFound) => return Err(ArchiveError::NotFound),
@@ -160,8 +180,220 @@ pub fn read_page<R: Read + Seek>(reader: R, name: &str) -> Result<Vec<u8>, Archi
     Ok(bytes)
 }
 
+// ── archives on disk, kept open ─────────────────────────────────────────
+
+/// How many archives on disk stay open between pages.
+const OPEN_ARCHIVES: usize = 4;
+
+/// An archive on disk with its central directory already read, and the
+/// version of the file it was read from (size and modification time).
+struct OpenArchive {
+    path: PathBuf,
+    version: (u64, Option<SystemTime>),
+    archive: zip::ZipArchive<BufReader<File>>,
+}
+
+/// The last archives read, most recent first: turning a page does not open
+/// the file and parse its directory again. A file that changes (another
+/// size or time) is opened afresh, and its old entry goes.
+static OPEN: Mutex<Vec<OpenArchive>> = Mutex::new(Vec::new());
+
+/// A page of an archive on disk (a local CBZ, or a remote one downloaded
+/// whole), reading the file's directory only the first time.
 pub fn read_page_at(path: &Path, name: &str) -> Result<Vec<u8>, ArchiveError> {
-    read_page(BufReader::new(File::open(path)?), name)
+    check_name(name)?;
+    let meta = std::fs::metadata(path)?;
+    let version = (meta.len(), meta.modified().ok());
+    let kept = {
+        let mut open = OPEN.lock().unwrap();
+        open.iter().position(|entry| entry.path == path && entry.version == version).map(|at| open.remove(at))
+    };
+    let mut entry = match kept {
+        Some(entry) => entry,
+        None => OpenArchive { path: path.to_path_buf(), version, archive: open(BufReader::new(File::open(path)?))? },
+    };
+    let result = read_entry(&mut entry.archive, name);
+    // Only an archive that answered sensibly is kept: a read error may mean
+    // the file changed under it.
+    if matches!(result, Ok(_) | Err(ArchiveError::NotFound | ArchiveError::TooLarge | ArchiveError::Bomb)) {
+        let mut open = OPEN.lock().unwrap();
+        open.retain(|other| other.path != entry.path);
+        open.insert(0, entry);
+        open.truncate(OPEN_ARCHIVES);
+    }
+    result
+}
+
+/// Lets go of the archives kept open under `dir` (before deleting it).
+pub fn close_under(dir: &Path) {
+    OPEN.lock().unwrap().retain(|entry| !entry.path.starts_with(dir));
+}
+
+/// Lets go of every archive kept open, when the reader closes: on Windows an
+/// open file keeps the folder it is in from being renamed or moved, and
+/// nothing needs them until the next volume is read.
+pub fn close_all() {
+    OPEN.lock().unwrap().clear();
+}
+
+// ── archives on a server ────────────────────────────────────────────────
+
+/// Bytes of an archive that are only known in places (blocks around its
+/// central directory, one entry), as `Read + Seek` for the zip reader. Every
+/// part is the file's real bytes at its offset. A read anywhere else fails,
+/// or, while indexing (`blank`), finds a local header with no name and no
+/// extra field: all the zip reader needs to hand out what the central
+/// directory says of an entry without fetching it.
+struct Sparse {
+    len: u64,
+    parts: Vec<(u64, Arc<[u8]>)>,
+    pos: u64,
+    blank: bool,
+}
+
+/// A local header's signature and nothing else.
+const BLANK_HEADER: [u8; 30] = {
+    let mut header = [0u8; 30];
+    header[0] = b'P';
+    header[1] = b'K';
+    header[2] = 3;
+    header[3] = 4;
+    header
+};
+
+impl Read for Sparse {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos >= self.len || buf.is_empty() {
+            return Ok(0);
+        }
+        let pos = self.pos;
+        let found = self.parts.iter().find(|(start, bytes)| pos >= *start && pos - start < bytes.len() as u64);
+        let n = match found {
+            Some((start, bytes)) => {
+                let offset = (pos - start) as usize;
+                let n = buf.len().min(bytes.len() - offset);
+                buf[..n].copy_from_slice(&bytes[offset..offset + n]);
+                n
+            }
+            None if self.blank => {
+                let n = buf.len().min(BLANK_HEADER.len());
+                buf[..n].copy_from_slice(&BLANK_HEADER[..n]);
+                n
+            }
+            None => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "not fetched")),
+        };
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl Seek for Sparse {
+    fn seek(&mut self, to: std::io::SeekFrom) -> std::io::Result<u64> {
+        let target = match to {
+            std::io::SeekFrom::Start(at) => Some(at),
+            std::io::SeekFrom::End(delta) => self.len.checked_add_signed(delta),
+            std::io::SeekFrom::Current(delta) => self.pos.checked_add_signed(delta),
+        };
+        self.pos = target.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek before the start"))?;
+        Ok(self.pos)
+    }
+}
+
+/// Where an entry is in the archive, as its central directory says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntrySpan {
+    pub header_start: u64,
+    pub compressed_size: u64,
+    pub size: u64,
+    name_len: u64,
+}
+
+/// Room after an entry's data for a local header longer than the central
+/// one: an extra field is at most 64 KB.
+const LOCAL_MARGIN: u64 = 64 * 1024;
+
+/// What a remote archive's central directory says of its entries, kept so a
+/// page is one request for its local header and data: no directory read
+/// again, no blocks of 512 KB that a page straddles.
+pub struct RemoteIndex {
+    len: u64,
+    /// The blocks the directory was read from, for the zip reader to read it
+    /// again from memory with each page.
+    parts: Vec<(u64, Arc<[u8]>)>,
+    entries: HashMap<String, EntrySpan>,
+}
+
+impl RemoteIndex {
+    /// From the blocks that reading the directory of an archive of `len`
+    /// bytes touched (`RangedFile::record`). No request: everything comes from
+    /// those bytes.
+    pub fn build(len: u64, parts: Vec<(u64, Arc<[u8]>)>) -> Result<Self, ArchiveError> {
+        let mut archive = open(Sparse { len, parts: parts.clone(), pos: 0, blank: true })?;
+        let mut entries = HashMap::new();
+        for index in 0..archive.len() {
+            // An entry the reader cannot place is left out: its page is read
+            // the slow way.
+            let Ok(entry) = archive.by_index_raw(index) else { continue };
+            if entry.is_dir() || entry.encrypted() {
+                continue;
+            }
+            entries.insert(entry.name().to_string(), EntrySpan {
+                header_start: entry.header_start(),
+                compressed_size: entry.compressed_size(),
+                size: entry.size(),
+                name_len: entry.name_raw().len() as u64,
+            });
+        }
+        Ok(RemoteIndex { len, parts, entries })
+    }
+
+    pub fn len(&self) -> u64 {
+        self.len
+    }
+
+    /// Where a page is, if it can be one: the same limits `read_page`
+    /// enforces, before anything is fetched.
+    pub fn span(&self, name: &str) -> Option<Result<EntrySpan, ArchiveError>> {
+        if check_name(name).is_err() {
+            return Some(Err(ArchiveError::NotFound));
+        }
+        let span = *self.entries.get(name)?;
+        Some(if span.size > MAX_ENTRY_BYTES || span.compressed_size > MAX_ENTRY_BYTES {
+            Err(ArchiveError::TooLarge)
+        } else if span.size > inflate_limit(span.compressed_size) {
+            Err(ArchiveError::Bomb)
+        } else {
+            Ok(span)
+        })
+    }
+
+    /// The bytes to fetch for an entry: its local header (as long as the
+    /// central one, plus room for a longer extra field) and its data.
+    pub fn window(&self, span: &EntrySpan) -> (u64, u64) {
+        let want = 30 + span.name_len + span.compressed_size + LOCAL_MARGIN;
+        (span.header_start, want.min(self.len.saturating_sub(span.header_start)))
+    }
+
+    /// How many bytes from the header's start the entry really takes, from
+    /// its local header (name and extra field lengths at 26 and 28), when
+    /// `fetched` starts with one.
+    pub fn needed(span: &EntrySpan, fetched: &[u8]) -> Option<u64> {
+        if fetched.len() < 30 || fetched[..4] != BLANK_HEADER[..4] {
+            return None;
+        }
+        let name = u16::from_le_bytes([fetched[26], fetched[27]]) as u64;
+        let extra = u16::from_le_bytes([fetched[28], fetched[29]]) as u64;
+        Some(30 + name + extra + span.compressed_size)
+    }
+
+    /// Reads a page from the bytes fetched for it (`at` = where they start),
+    /// with every rule of `read_page`.
+    pub fn read(&self, name: &str, at: u64, fetched: Vec<u8>) -> Result<Vec<u8>, ArchiveError> {
+        let mut parts = Vec::with_capacity(self.parts.len() + 1);
+        parts.push((at, Arc::from(fetched)));
+        parts.extend(self.parts.iter().cloned());
+        read_page(Sparse { len: self.len, parts, pos: 0, blank: false }, name)
+    }
 }
 
 #[cfg(test)]
@@ -305,6 +537,69 @@ mod tests {
         let bytes = archive(&[("blank.png", &blank)], zip::CompressionMethod::Deflated);
         assert_eq!(list_pages(Cursor::new(bytes.clone())).unwrap(), ["blank.png"]);
         assert_eq!(read_page(Cursor::new(bytes), "blank.png").unwrap().len(), blank.len());
+    }
+
+    #[test]
+    fn a_remote_page_is_read_from_its_own_bytes_with_the_same_rules() {
+        use crate::manga::webdav::{cache::Cache, ranged::RangedFile};
+        // Pages that do not compress, deflated, over several blocks.
+        let noise = |seed: u64, len: usize| {
+            let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (0..len)
+                .map(|_| {
+                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    (state >> 33) as u8
+                })
+                .collect::<Vec<u8>>()
+        };
+        let pages: Vec<(String, Vec<u8>)> = (1..=6).map(|n| (format!("{n:03}.png"), noise(n, 300_000))).collect();
+        let zeros = vec![0u8; 8 * 1024 * 1024];
+        let mut entries: Vec<(&str, &[u8])> = pages.iter().map(|(name, data)| (name.as_str(), data.as_slice())).collect();
+        entries.push(("bomb.png", &zeros));
+        let bytes = archive(&entries, zip::CompressionMethod::Deflated);
+        let len = bytes.len() as u64;
+
+        let cache = Cache::new(std::env::temp_dir().join(format!("ntdc-index-{}", uuid::Uuid::new_v4())), u64::MAX);
+        let index = {
+            let mut file = RangedFile::new(len, &cache, "ix".into(), Box::new(|start, len| Ok(bytes[start as usize..(start + len) as usize].to_vec())));
+            file.record();
+            zip::ZipArchive::new(&mut file).unwrap();
+            RemoteIndex::build(len, file.take_recorded()).unwrap()
+        };
+        for (name, data) in &pages {
+            let span = index.span(name).unwrap().unwrap();
+            let (start, take) = index.window(&span);
+            let fetched = bytes[start as usize..(start + take) as usize].to_vec();
+            assert!(RemoteIndex::needed(&span, &fetched).unwrap() <= take, "one request is enough");
+            assert_eq!(&index.read(name, start, fetched).unwrap(), data);
+            assert_eq!(&read_page(Cursor::new(bytes.clone()), name).unwrap(), data, "the same as before");
+        }
+        assert!(matches!(index.span("bomb.png"), Some(Err(ArchiveError::Bomb))), "refused before fetching");
+        assert!(matches!(index.span("../evil.png"), Some(Err(ArchiveError::NotFound))));
+        assert!(index.span("missing.png").is_none());
+        // Bytes cut short are an error, never a wrong page.
+        let span = index.span("003.png").unwrap().unwrap();
+        let cut = (span.header_start + 30 + 7 + span.compressed_size - 1) as usize;
+        assert!(index.read("003.png", span.header_start, bytes[span.header_start as usize..cut].to_vec()).is_err());
+        let _ = std::fs::remove_dir_all(cache.root());
+    }
+
+    #[test]
+    fn an_archive_on_disk_stays_open_until_it_changes() {
+        let dir = std::env::temp_dir().join(format!("ntdc-open-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v.cbz");
+        std::fs::write(&path, archive(&[("1.png", b"one")], zip::CompressionMethod::Stored)).unwrap();
+        assert_eq!(read_page_at(&path, "1.png").unwrap(), b"one");
+        assert!(matches!(read_page_at(&path, "2.png"), Err(ArchiveError::NotFound)));
+        assert_eq!(read_page_at(&path, "1.png").unwrap(), b"one");
+        // Rewritten (another size): read afresh, the old one let go.
+        std::fs::write(&path, archive(&[("1.png", b"two!!")], zip::CompressionMethod::Stored)).unwrap();
+        assert_eq!(read_page_at(&path, "1.png").unwrap(), b"two!!");
+        assert!(OPEN.lock().unwrap().iter().filter(|entry| entry.path == path).count() <= 1);
+        close_under(&dir);
+        assert!(!OPEN.lock().unwrap().iter().any(|entry| entry.path == path));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

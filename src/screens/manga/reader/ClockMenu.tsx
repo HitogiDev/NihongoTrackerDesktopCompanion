@@ -5,10 +5,11 @@ import { Check, Flag, Pause, PencilLine, Play, Timer } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { events, ipc } from '../../../lib/ipc';
 import { formatClock } from '../../../lib/format';
-import type { MangaClock, MangaSession } from '../../../lib/types';
+import type { MangaClock } from '../../../lib/types';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../store/useToastStore';
 import { MangaClockSettings } from '../MangaClockSettings';
+import { useMangaSession } from '../useMangaSession';
 import { SessionIndicator } from './SessionIndicator';
 import { parseClockInput } from './clockTime';
 
@@ -98,13 +99,17 @@ function useStatusText(clock: MangaClock | null) {
  * menu: start or stop the clock, end the session and log it now, and how
  * the clock runs (the same settings as Settings → Manga reader). Before
  * the first tick of reading there is no session yet, only the clock.
+ *
+ * It follows the session itself, not the reader that holds it: the
+ * session's clock changes every second and only this button shows it.
  */
-export function ClockMenu({ volumeId, session, onOpenChange }: {
+export function ClockMenu({ volumeId, onOpenChange }: {
   volumeId: string;
-  session: MangaSession | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation('mangaReader');
+  const anySession = useMangaSession();
+  const session = anySession?.volume_id === volumeId ? anySession : null;
   const settings = useAppStore((s) => s.settings);
   const clock = useMangaClock(volumeId);
   const status = useStatusText(clock);
