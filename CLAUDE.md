@@ -401,6 +401,35 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   petición que el lector precarga). La rueda la mueve en horizontal (listener
   nativo no pasivo). La rejilla de la biblioteca monta las series de 120 en
   120 (`GRID_BATCH`).
+- **Zoom y pan** (solo en los modos paginados; en la tira vertical Ctrl+rueda
+  no hace nada): `reader/useZoomPan.ts` sobre la matemática pura de
+  `reader/zoom.ts` (con tests). Ctrl+rueda acerca alrededor del puntero (un
+  pellizco del touchpad llega como eso mismo: una rueda con Ctrl);
+  Ctrl+arrastrar (⌘ en macOS, donde Ctrl+clic es el clic derecho) mueve; ya
+  ampliada, la rueda o dos dedos mueven en vez de pasar página; Ctrl+0 / + / -
+  desde el teclado. De 1× a 6×; la página nunca deja ver su borde por dentro
+  y un eje que aún cabe se queda centrado (`clampZoom`). La transformación
+  va en una capa que envuelve `PagedView` (páginas y capa de texto escalan
+  juntas) y se escribe **directamente en el DOM**, nunca como estado de
+  React: cada evento de rueda repintaría el lector. Solo `zoomed` y el cursor
+  son estado, y el porcentaje lo pinta `ZoomBadge` suscrito aparte. Los
+  listeners son nativos y no pasivos en la raíz del lector (antes que los de
+  React): así se puede impedir el zoom del webview y que la rueda pase además
+  la página. Pasar página, cambiar de disposición o de ajuste vuelve a la
+  página entera. Un Ctrl+clic nunca pasa página (`consumeClick`).
+  El zoom se **anima** hacia su objetivo (`approach`, ~70 ms de constante;
+  cada paso nuevo parte del objetivo, no del fotograma), el pan no (sigue al
+  dedo; antes remata la animación, `settle`). Medido en WebView2 (Chromium
+  157) con un touchpad de precisión en Windows: el pellizco **no** llega
+  como pellizco sino como Ctrl+rueda de ±100 cada 140–700 ms, y dos dedos
+  llegan como rueda de **un solo eje por gesto** (ni un evento con `deltaX`
+  y `deltaY` a la vez), la emulación de Windows para apps sin gestos nativos.
+  Lo del eje no se arregla desde la página (el otro eje no llega); Ctrl+
+  arrastrar sí mueve en diagonal. Para medir otro equipo:
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` al
+  lanzar `npm run tauri dev` y un listener de `wheel` por CDP.
+  `EditLayer` convierte el puntero a píxeles de la página dibujada (no de
+  pantalla) e ignora Ctrl+arrastrar.
 - La sesión (`useMangaSession`) solo la lee `ClockMenu`, no `ReaderView`: su
   reloj cambia cada segundo y no debe repintar las páginas ni volver a
   registrar los atajos.

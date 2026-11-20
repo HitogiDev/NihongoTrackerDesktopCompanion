@@ -156,7 +156,10 @@
       "palette": "Paleta de comandos",
       "quickLog": "Registrar a mano",
       "texthooker": "Texthooker",
-      "settings": "Ajustes"
+      "settings": "Ajustes",
+      "zoom": "Acercar o alejar",
+      "pan": "Mover una página ampliada",
+      "resetZoom": "Volver a la página entera"
     },
     "mouse": {
       "clickSidesRtl": "Clic en el tercio izquierdo o derecho",
@@ -165,7 +168,9 @@
       "doubleClickMiddle": "Doble clic en el centro",
       "doubleClick": "Doble clic en la página",
       "hoverModifier": "Mayús o Alt sobre el texto",
-      "drag": "Arrastrar sobre la página"
+      "drag": "Arrastrar sobre la página",
+      "ctrlWheel": "Ctrl + rueda, o pellizcar",
+      "ctrlDrag": "Ctrl + arrastrar, o desplazar ya ampliada"
     },
     "key": {
       "Space": "Espacio",
@@ -203,5 +208,9 @@
     "previous": "Tomo anterior: {{volume}}",
     "next": "Tomo siguiente: {{volume}}",
     "none": "No hay tomo en esta dirección"
+  },
+  "zoom": {
+    "level": "{{percent}} %",
+    "reset": "Ajustar"
   }
 }

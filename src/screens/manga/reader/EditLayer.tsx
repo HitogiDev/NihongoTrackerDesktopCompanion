@@ -40,9 +40,16 @@ export function EditLayer({ pageIndex, blocks, size, imageWidth, selected, onSel
   const surface = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Rect | null>(null);
 
+  // In the page's drawn pixels (`size`), not the screen's: a zoomed page
+  // (`useZoomPan`) is bigger on screen than it is drawn.
   const point = (event: ReactPointerEvent) => {
     const bounds = surface.current!.getBoundingClientRect();
-    return { x: Math.min(Math.max(0, event.clientX - bounds.left), bounds.width), y: Math.min(Math.max(0, event.clientY - bounds.top), bounds.height) };
+    const kx = bounds.width > 0 ? size.width / bounds.width : 1;
+    const ky = bounds.height > 0 ? size.height / bounds.height : 1;
+    return {
+      x: Math.min(Math.max(0, (event.clientX - bounds.left) * kx), size.width),
+      y: Math.min(Math.max(0, (event.clientY - bounds.top) * ky), size.height),
+    };
   };
 
   return (
@@ -52,7 +59,8 @@ export function EditLayer({ pageIndex, blocks, size, imageWidth, selected, onSel
       className="manga-edit-layer absolute inset-0 cursor-crosshair"
       aria-label={t('edit.layer', { page: pageIndex + 1 })}
       onPointerDown={(event) => {
-        if (event.button !== 0 || (event.target as HTMLElement).closest('[data-edit-block]')) return;
+        // Ctrl+drag pans a zoomed page (`useZoomPan`): it draws nothing.
+        if (event.button !== 0 || event.ctrlKey || (event.target as HTMLElement).closest('[data-edit-block]')) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         const { x, y } = point(event);
         setDrag({ x1: x, y1: y, x2: x, y2: y });

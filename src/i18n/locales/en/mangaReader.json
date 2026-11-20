@@ -156,7 +156,10 @@
       "palette": "Command palette",
       "quickLog": "Log by hand",
       "texthooker": "Texthooker",
-      "settings": "Settings"
+      "settings": "Settings",
+      "zoom": "Zoom in or out",
+      "pan": "Move a zoomed page",
+      "resetZoom": "Back to the whole page"
     },
     "mouse": {
       "clickSidesRtl": "Click the left or right third",
@@ -165,7 +168,9 @@
       "doubleClickMiddle": "Double-click the middle",
       "doubleClick": "Double-click the page",
       "hoverModifier": "Shift or Alt over the text",
-      "drag": "Drag over the page"
+      "drag": "Drag over the page",
+      "ctrlWheel": "Ctrl + wheel, or pinch",
+      "ctrlDrag": "Ctrl + drag, or scroll once zoomed"
     },
     "key": {
       "Space": "Space",
@@ -203,5 +208,9 @@
     "previous": "Previous volume: {{volume}}",
     "next": "Next volume: {{volume}}",
     "none": "No volume in this direction"
+  },
+  "zoom": {
+    "level": "{{percent}} %",
+    "reset": "Fit"
   }
 }

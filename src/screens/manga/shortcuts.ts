@@ -45,6 +45,11 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'turnByClick', keys: [], mouse: rtl ? 'clickSidesRtl' : 'clickSidesLtr' },
       { label: 'turnByWheel', keys: [], mouse: 'wheel' },
       { label: 'hideControls', keys: [], mouse: 'doubleClickMiddle' },
+      // useZoomPan and the reader's onKey.
+      { label: 'zoom', keys: [], mouse: 'ctrlWheel' },
+      { label: 'zoom', keys: [[mod, '+'], [mod, '-']] },
+      { label: 'pan', keys: [], mouse: 'ctrlDrag' },
+      { label: 'resetZoom', keys: [[mod, '0']] },
     ],
   };
   const strip: ShortcutGroup = {

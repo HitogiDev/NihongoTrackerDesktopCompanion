@@ -28,6 +28,8 @@ import { TextLayer, type HoveredBlock } from './TextLayer';
 import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
 import { ClockMenu } from './ClockMenu';
+import { KEY_STEP, useZoomPan } from './useZoomPan';
+import { ZoomBadge } from './ZoomBadge';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
 
@@ -266,6 +268,14 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [ocrPending, setOcrPending] = useState<Set<number>>(() => new Set());
   const asked = useRef(new Set<number>());
   const shownPages = useMemo(() => (atEnd ? [] : vertical ? [page] : spread), [atEnd, vertical, page, spread]);
+
+  // ── zoom and pan (paged layouts) ───────────────────────────────────
+  const readerRoot = useRef<HTMLDivElement>(null);
+  const zoomLayer = useRef<HTMLDivElement>(null);
+  const zoom = useZoomPan(readerRoot, zoomLayer, {
+    enabled: !vertical && !atEnd,
+    resetKey: `${volume.id}:${spread.join('-')}:${prefs.layout}:${prefs.fit}`,
+  });
   const textLoaded = textQuery.isSuccess;
   const missing = useCallback((index: number) => textLoaded && index >= 0 && index < count && !text[index], [count, text, textLoaded]);
   const readPages = useCallback((visible: number[], ahead: number[]) => {
@@ -493,6 +503,16 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       if (shortcutsOpen) return;
       const element = event.target as HTMLElement | null;
       if (element?.closest('input, textarea, select, [role="dialog"] button')) return;
+      // Ctrl+0 / Ctrl+= / Ctrl+-: zoom of the paged reader.
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !vertical) {
+        const step = event.key === '0' ? 0 : event.key === '=' || event.key === '+' ? KEY_STEP : event.key === '-' ? 1 / KEY_STEP : null;
+        if (step !== null) {
+          event.preventDefault();
+          if (step === 0) zoom.reset();
+          else zoom.zoomBy(step);
+          return;
+        }
+      }
       // Ctrl+C with nothing selected copies the block under the pointer: it
       // is selected for the copy (no clipboard permission needed in any
       // webview) and the `copy` handler below writes its lines joined.
@@ -583,7 +603,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
+  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text, zoom.reset, zoom.zoomBy]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
@@ -615,6 +635,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   };
 
   const onClick = (event: ReactMouseEvent) => {
+    // A Ctrl+click or the end of a Ctrl+drag belongs to the pan.
+    if (zoom.consumeClick()) return;
     if (closedDictionary.current) {
       closedDictionary.current = false;
       return;
@@ -635,7 +657,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   // until the next one: a single click would bring them back at the next
   // move of the mouse.
   const onDoubleClick = (event: ReactMouseEvent) => {
-    if (!onPage(event) || settingsOpen) return;
+    if (!onPage(event) || settingsOpen || event.ctrlKey) return;
     if (!vertical && clickAction(event.clientX, window.innerWidth, prefs.direction) !== 'middle') return;
     // A double click also selects the word under it.
     window.getSelection()?.removeAllRanges();
@@ -694,7 +716,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
+      ref={readerRoot}
+      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${zoom.cursor === 'grabbing' ? 'cursor-grabbing' : zoom.cursor === 'grab' ? 'cursor-grab' : chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
       onPointerDownCapture={onPointerDownCapture}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -714,17 +737,21 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           overlay={overlay}
         />
       ) : (
-        <PagedView
-          volumeId={volume.id}
-          spread={spread}
-          direction={prefs.direction}
-          fit={prefs.fit}
-          viewport={viewport}
-          sizeOf={sizeOf}
-          onNaturalSize={rememberSize}
-          overlay={overlay}
-        />
+        // The zoom's layer: the pages and their text scale together.
+        <div ref={zoomLayer} className="absolute inset-0">
+          <PagedView
+            volumeId={volume.id}
+            spread={spread}
+            direction={prefs.direction}
+            fit={prefs.fit}
+            viewport={viewport}
+            sizeOf={sizeOf}
+            onNaturalSize={rememberSize}
+            overlay={overlay}
+          />
+        </div>
       )}
+      {zoom.zoomed && (chrome.visible || settingsOpen) ? <ZoomBadge zoom={zoom} /> : null}
 
       <TopBar
         visible={chrome.visible || settingsOpen || clockOpen}
