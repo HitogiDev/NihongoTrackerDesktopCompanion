@@ -76,6 +76,24 @@ pub enum TextLayerMode {
     Hidden,
 }
 
+/// How a page turn looks in the paged layouts.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum PageTransition {
+    /// The page folds back from the edge it is turned by.
+    Curl,
+    #[default]
+    Slide,
+    None,
+}
+
+/// A swipe turns the page once it has gone this far, in % of the window's
+/// width, unless set otherwise.
+pub const DEFAULT_SWIPE_THRESHOLD: u32 = 15;
+/// The most a swipe can be asked to travel (% of the width).
+pub const MAX_SWIPE_THRESHOLD: u32 = 90;
+
 /// Everything the reader lets the user choose.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -89,6 +107,10 @@ pub struct ReaderPrefs {
     pub fit: PageFit,
     pub background: ReaderBackground,
     pub text_layer: TextLayerMode,
+    pub transition: PageTransition,
+    /// How far a swipe travels before it turns the page, in % of the window's
+    /// width; 0 turns swiping off.
+    pub swipe_threshold: u32,
 }
 
 impl Default for ReaderPrefs {
@@ -100,6 +122,8 @@ impl Default for ReaderPrefs {
             fit: PageFit::default(),
             background: ReaderBackground::default(),
             text_layer: TextLayerMode::default(),
+            transition: PageTransition::default(),
+            swipe_threshold: DEFAULT_SWIPE_THRESHOLD,
         }
     }
 }
@@ -125,6 +149,7 @@ pub fn prefs(db: &Db, series_id: &str) -> ReaderPrefs {
         prefs.direction = series.direction;
         prefs.cover_alone = series.cover_alone;
     }
+    prefs.swipe_threshold = prefs.swipe_threshold.min(MAX_SWIPE_THRESHOLD);
     prefs
 }
 
@@ -240,6 +265,12 @@ mod tests {
         assert_eq!(prefs(&db, "x"), ReaderPrefs::default());
         db.set_kv(GLOBAL_KEY, r#"{"background":"gray"}"#).unwrap();
         assert_eq!(prefs(&db, "x").background, ReaderBackground::Gray);
+        // Saved before turns could be animated or swiped: the defaults.
+        assert_eq!(prefs(&db, "x").transition, PageTransition::Slide);
+        assert_eq!(prefs(&db, "x").swipe_threshold, DEFAULT_SWIPE_THRESHOLD);
+        db.set_kv(GLOBAL_KEY, r#"{"transition":"curl","swipe_threshold":500}"#).unwrap();
+        assert_eq!(prefs(&db, "x").transition, PageTransition::Curl);
+        assert_eq!(prefs(&db, "x").swipe_threshold, MAX_SWIPE_THRESHOLD);
         drop(db);
         let _ = std::fs::remove_file(path);
     }

@@ -344,6 +344,12 @@ CREATE TABLE IF NOT EXISTS manga_shelf (
     series_id TEXT PRIMARY KEY,
     added_at TEXT NOT NULL
 );
+-- Series taken off "Continue reading" by hand. Until they are read again:
+-- progress newer than `hidden_at` puts them back. No foreign key, as above.
+CREATE TABLE IF NOT EXISTS manga_continue_hidden (
+    series_id TEXT PRIMARY KEY,
+    hidden_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manga_page_read (
     volume_id TEXT NOT NULL,
     page INTEGER NOT NULL,

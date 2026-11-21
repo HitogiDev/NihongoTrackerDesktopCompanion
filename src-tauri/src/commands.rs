@@ -1803,6 +1803,26 @@ pub fn manga_set_in_library(app: AppHandle, state: State<'_, AppState>, series_i
     Ok(())
 }
 
+/// The clipboard's text, for "Paste" in the app's own text menu: the webview
+/// cannot read the clipboard without asking, and its native menu brings
+/// "Inspect" along. `None` when there is no text on it.
+#[tauri::command]
+pub async fn clipboard_text() -> Option<String> {
+    tokio::task::spawn_blocking(|| arboard::Clipboard::new().ok()?.get_text().ok())
+        .await
+        .ok()
+        .flatten()
+}
+
+/// Takes a series off "Continue reading" until it is read again. Its
+/// progress stays.
+#[tauri::command]
+pub fn manga_hide_continue(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+    state.db.hide_manga_continue(&series_id).map_err(err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
 /// Series the user opened (a series page): looked up before the rest, even
 /// outside "My library".
 #[tauri::command]

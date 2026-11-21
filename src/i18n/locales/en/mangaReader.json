@@ -20,7 +20,10 @@
     "direction": "Direction",
     "fit": "Fit",
     "background": "Background",
-    "textLayer": "Text"
+    "textLayer": "Text",
+    "transition": "Page turn",
+    "swipe": "Swipe to turn (% of width)",
+    "swipeOff": "0 = off"
   },
   "layout": {
     "single": "Single",
@@ -42,6 +45,11 @@
     "black": "Black",
     "gray": "Gray",
     "paper": "Paper"
+  },
+  "transition": {
+    "curl": "Curl",
+    "slide": "Slide",
+    "none": "None"
   },
   "text": {
     "hover": "On hover",
@@ -159,7 +167,8 @@
       "settings": "Settings",
       "zoom": "Zoom in or out",
       "pan": "Move a zoomed page",
-      "resetZoom": "Back to the whole page"
+      "resetZoom": "Back to the whole page",
+      "swipe": "Turn the page"
     },
     "mouse": {
       "clickSidesRtl": "Click the left or right third",
@@ -170,7 +179,8 @@
       "hoverModifier": "Shift or Alt over the text",
       "drag": "Drag over the page",
       "ctrlWheel": "Ctrl + wheel, or pinch",
-      "ctrlDrag": "Ctrl + drag, or scroll once zoomed"
+      "ctrlDrag": "Ctrl + drag, or scroll once zoomed",
+      "swipe": "Swipe sideways (finger, mouse or two fingers on the touchpad)"
     },
     "key": {
       "Space": "Space",

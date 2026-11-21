@@ -147,8 +147,17 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   sidebar en Windows 11 (`data-vibrancy` en `<html>`; sin él no cambia nada).
 - Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas
   cargan el mismo bundle.
-- En producción `src/lib/desktop.ts` anula los atajos y el menú contextual del
-  navegador. Los atajos de la app (Ctrl/⌘+1…7, `,`, `L`, `T`) viven en `Sidebar`.
+- `src/lib/desktop.ts` anula **siempre** el menú contextual del webview,
+  también en campos de texto (en desarrollo trae "Inspeccionar"; Mayús+clic
+  derecho lo deja salir solo en desarrollo), y en producción sus atajos. El
+  clic derecho es el menú de la app: `useContextMenu` en lo que tiene uno
+  (`components/ContextMenu.tsx`: flechas, Esc, tecla de menú o Mayús+F10) y
+  `TextMenu` (montado una vez en `main.tsx`, para todas las ventanas) en
+  campos, `contenteditable` y `.selectable`: Cortar, Copiar, Pegar y
+  Seleccionar todo, con `execCommand` para que el campo reciba su `input` y
+  Ctrl+Z lo deshaga. Pegar lee el portapapeles por Rust (`clipboard_text`,
+  arboard): el webview pediría permiso. Los atajos de la app
+  (Ctrl/⌘+1…7, `,`, `L`, `T`) viven en `Sidebar`.
 
 ### Actualizaciones
 
@@ -431,6 +440,42 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   lanzar `npm run tauri dev` y un listener de `wheel` por CDP.
   `EditLayer` convierte el puntero a píxeles de la página dibujada (no de
   pantalla) e ignora Ctrl+arrastrar.
+- **Paso de página y swipe** (solo en los modos paginados): la transición
+  (`ReaderPrefs.transition`: curl, slide o none) y la distancia del swipe
+  (`swipe_threshold`, % del ancho de la ventana, 0 = sin swipe) son globales.
+  La matemática es pura y con tests (`reader/turn.ts`: qué borde se coge
+  —en RTL, adelante es coger el borde izquierdo y llevarlo a la derecha—,
+  `spreadBoxes` y el curl). El curl gira **una hoja**, cogida por la
+  esquina más cercana a donde se pulsó (de arriba o de abajo; un clic, una
+  tecla o el touchpad, la de abajo), que sigue a la mano en las dos
+  direcciones: el pliegue es la mediatriz entre la esquina y donde está
+  ahora (`foldAt`), y la esquina no se aleja del lomo más que el ancho de la
+  hoja (`constrainCorner`). En doble página la hoja es la del lado que se
+  pasa, su lomo es el centro y **su reverso es la página nueva del otro
+  lado** (`backOf`: espejo sobre el lomo y luego sobre el pliegue, una
+  rotación, así que se lee al derecho), que acaba exactamente donde se
+  queda; debajo aparece la nueva de su lado. Si alguna de las dos dobles
+  páginas tiene una sola página, se dobla todo el pliego sobre su borde
+  lejano, y su reverso es papel blanco con la misma página al revés y
+  tenue (la hoja reflejada sobre el pliegue, al 20 %), como se transparenta.
+  Las sombras se apagan al acercarse la hoja al lomo (y al empezar): si no,
+  siguen ahí el último fotograma y desaparecen de golpe. Al soltar un curl,
+  la esquina sigue desde donde quedó (`released`, `progress` de 0 a 1 desde
+  ahí): el progreso de un swipe largo ya pasa de 1 y el resto duraría 0 ms. Un único
+  `TurnController` (fuera de React, como el zoom) dice qué giro hay en
+  pantalla; solo lo pinta `TurnLayer` dentro de `PagedView`, con imágenes y
+  sin capa de texto, opaco por encima de la vista, que debajo ya enseña la
+  doble página nueva en el mismo sitio. Un clic, una tecla o la rueda giran
+  cuando `PagedView` cambia de páginas (tras el `decode()`); un cambio de
+  tomo, disposición o ajuste (`turnKey`) no gira. `useSwipe`: dedo, lápiz o
+  ratón arrastrado de lado (el ratón no si empieza sobre un bloque de texto
+  seleccionable; la barra superior, que sale con cualquier movimiento justo
+  encima de las esquinas de arriba, también vale fuera de sus controles,
+  `data-reader-topbar`) y dos dedos en el touchpad (rueda horizontal: gira al pasar
+  el umbral, o se recoge 180 ms después del último evento); el giro sigue al
+  dedo y soltarlo antes del umbral devuelve la página. El clic que cierra un
+  swipe no pasa página (`consumeClick`). Ampliada, editando o en la tira no
+  hay swipe. Con `prefers-reduced-motion`, sin animación.
 - La sesión (`useMangaSession`) solo la lee `ClockMenu`, no `ReaderView`: su
   reloj cambia cada segundo y no debe repintar las páginas ni volver a
   registrar los atajos.
@@ -452,6 +497,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `MangaSeries.in_library_at`; se cambia con `manga_set_in_library` (el
   marcador de la portada en Todas, que es hermano del enlace y no va dentro,
   y el botón de la ficha). Añadir una serie desde Extensiones también la mete.
+  Clic derecho en una portada: "Seguir leyendo" ofrece ir a la serie,
+  añadirla o quitarla de Mi biblioteca y quitarla de Seguir leyendo
+  (`manga_hide_continue`, tabla `manga_continue_hidden` sin clave foránea:
+  vuelve sola en cuanto se lee de nuevo, porque cuenta si el progreso es más
+  nuevo que `hidden_at`); las de las rejillas, añadir o quitar de Mi biblioteca.
   El origen (Local/WebDAV/Extensiones) es un filtro más del panel, solo si hay
   más de uno; Extensiones (tienda y explorar) se abre desde el engranaje.
 - **Cabecera de la pantalla Manga**: atajos, recargar (no en Extensiones), el

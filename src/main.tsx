@@ -12,6 +12,7 @@ import { detectLanguage } from './i18n/languages';
 import './index.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { installDesktopBehavior } from './lib/desktop';
+import { TextMenu } from './components/TextMenu';
 
 if (getCurrentWindow().label.startsWith('reading-overlay')) {
   document.documentElement.setAttribute('data-reading-overlay', '');
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <HashRouter>
         <Suspense fallback={null}>
           <App />
+          <TextMenu />
         </Suspense>
       </HashRouter>
     </QueryClientProvider>

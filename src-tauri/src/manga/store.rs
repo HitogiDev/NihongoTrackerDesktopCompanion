@@ -893,10 +893,28 @@ impl Db {
         })
     }
 
+    /// Takes a series off "Continue reading" until it is read again.
+    pub fn hide_manga_continue(&self, series_id: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO manga_continue_hidden (series_id, hidden_at) VALUES (?1, ?2)
+                 ON CONFLICT(series_id) DO UPDATE SET hidden_at = excluded.hidden_at",
+                params![series_id, now_iso()],
+            )
+            .map(|_| ())
+        })
+    }
+
     /// The last volume read in each series, newest first. A series whose last
     /// volume was finished offers the next one instead; a finished series
-    /// leaves the shelf.
+    /// leaves the shelf, and so does one taken off it by hand
+    /// (`hide_manga_continue`) until it is read again.
     pub fn manga_continue_reading(&self, limit: usize) -> Result<Vec<MangaContinue>> {
+        let hidden: std::collections::HashMap<String, String> = self.with(|c| {
+            let mut stmt = c.prepare("SELECT series_id, hidden_at FROM manga_continue_hidden")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })?;
         let latest: Vec<(String, String, String, String, i64, i64, bool, String, i64)> = self.with(|c| {
             let mut stmt = c.prepare(
                 "SELECT s.id, s.title, v.id, v.title, p.page, v.page_count, p.finished, p.updated_at, v.position
@@ -914,6 +932,10 @@ impl Db {
         let mut shelf = Vec::new();
         for (series_id, series_title, volume_id, volume_title, page, page_count, finished, updated_at, position) in latest {
             if !seen.insert(series_id.clone()) {
+                continue;
+            }
+            // RFC 3339 in UTC: the strings sort as the times do.
+            if hidden.get(&series_id).is_some_and(|at| at.as_str() >= updated_at.as_str()) {
                 continue;
             }
             if !finished {
@@ -1138,6 +1160,15 @@ pub(crate) mod tests {
         let shelf = db.manga_continue_reading(10).unwrap();
         let ids: Vec<_> = shelf.iter().map(|item| (item.volume_id.as_str(), item.page, item.up_next)).collect();
         assert_eq!(ids, [("a2", 0, true), ("b1", 4, false)]);
+
+        // Taken off by hand: gone, until it is read again.
+        db.hide_manga_continue("s2").unwrap();
+        let ids: Vec<_> = db.manga_continue_reading(10).unwrap().into_iter().map(|item| item.volume_id).collect();
+        assert_eq!(ids, ["a2"]);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        db.set_manga_progress("b1", 5, false).unwrap();
+        let ids: Vec<_> = db.manga_continue_reading(10).unwrap().into_iter().map(|item| item.volume_id).collect();
+        assert_eq!(ids, ["b1", "a2"]);
         drop(db);
         let _ = std::fs::remove_file(path);
     }

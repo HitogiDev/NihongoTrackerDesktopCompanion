@@ -79,5 +79,12 @@
     "placeholder": "Título en romaji, inglés o japonés…",
     "noResults": "Sin resultados.",
     "adult": "18+"
+  },
+  "textMenu": {
+    "label": "Texto",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar",
+    "selectAll": "Seleccionar todo"
   }
 }

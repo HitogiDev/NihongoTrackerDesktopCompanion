@@ -67,6 +67,7 @@ import type { ReaderTarget } from './bindings/ReaderTarget';
 import type { ReaderVolume } from './bindings/ReaderVolume';
 import type { ReadingDirection } from './bindings/ReadingDirection';
 import type { TextLayerMode } from './bindings/TextLayerMode';
+import type { PageTransition } from './bindings/PageTransition';
 import type { ReadingOverlaySettings } from './bindings/ReadingOverlaySettings';
 import type { ReadingOverlayState } from './bindings/ReadingOverlayState';
 import type { Settings } from './bindings/Settings';
@@ -150,6 +151,7 @@ export type {
   ReaderVolume,
   ReadingDirection,
   TextLayerMode,
+  PageTransition,
   ReadingOverlaySettings,
   ReadingOverlayState,
   Settings,

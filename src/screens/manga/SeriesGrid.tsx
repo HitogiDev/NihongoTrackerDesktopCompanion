@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BookmarkCheck, BookmarkPlus, Play, ScanText } from 'lucide-react';
+import { BookmarkCheck, BookmarkMinus, BookmarkPlus, EyeOff, LibraryBig, Play, ScanText } from 'lucide-react';
+import { useContextMenu, type ContextMenuItem } from '../../components/ContextMenu';
 import { mangaUrl, readPercent } from '../../lib/manga';
 import { ipc } from '../../lib/ipc';
 import { toast } from '../../store/useToastStore';
@@ -82,9 +83,12 @@ export function SeriesCard({ series, position, suggested = false, toggle = false
 }) {
   const { t } = useTranslation('manga');
   const navigate = useNavigate();
+  const library = useLibraryToggle();
+  const context = useContextMenu(t('menu.card', { title: series.title }), () => [libraryItem(t, series, library.toggle)]);
   const percent = series.page_count > 0 ? Math.round((series.pages_read / series.page_count) * 100) : 0;
   return (
-    <li className="group/card relative">
+    <li className="group/card relative" onContextMenu={context.onContextMenu}>
+      {context.menu}
       {toggle ? <LibraryToggle series={series} /> : null}
       <Link
         to={`/manga/${series.id}`}
@@ -107,6 +111,21 @@ export function SeriesCard({ series, position, suggested = false, toggle = false
       </Link>
     </li>
   );
+}
+
+/** "Add to my library" or "Remove from my library", as the series is. */
+function libraryItem(
+  t: (key: string) => string,
+  series: Pick<MangaSeries, 'id' | 'title' | 'in_library_at'>,
+  toggle: (series: Pick<MangaSeries, 'id' | 'title' | 'in_library_at'>) => Promise<void>,
+): ContextMenuItem {
+  const inLibrary = Boolean(series.in_library_at);
+  return {
+    id: 'library',
+    label: inLibrary ? t('library.remove') : t('library.add'),
+    icon: inLibrary ? BookmarkMinus : BookmarkPlus,
+    onSelect: () => void toggle(series),
+  };
 }
 
 /** Cards mounted at first, and added each time the end of the grid shows. */
@@ -159,14 +178,41 @@ export function SeriesGridSkeleton({ count = 10 }: { count?: number }) {
 }
 
 /** The "continue reading" shelf: bigger covers that open the reader directly. */
-export function ContinueShelf({ items }: { items: MangaContinue[] }) {
-  const { t } = useTranslation('manga');
+export function ContinueShelf({ items, inLibrary }: {
+  items: MangaContinue[];
+  /** When the series is in "My library": the date it was added. */
+  inLibrary: (seriesId: string) => string | null;
+}) {
   return (
     <ul className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-3 pt-1">
-      {items.map((item) => {
-        const percent = readPercent(item.page, Number(item.page_count));
-        return (
-          <li key={item.volume_id} className="w-48 shrink-0 snap-start xl:w-52">
+      {items.map((item) => <ShelfItem key={item.volume_id} item={item} inLibraryAt={inLibrary(item.series_id)} />)}
+    </ul>
+  );
+}
+
+function ShelfItem({ item, inLibraryAt }: { item: MangaContinue; inLibraryAt: string | null }) {
+  const { t } = useTranslation('manga');
+  const navigate = useNavigate();
+  const library = useLibraryToggle();
+  const series = { id: item.series_id, title: item.series_title, in_library_at: inLibraryAt };
+  const context = useContextMenu(t('menu.card', { title: item.series_title }), () => [
+    { id: 'series', label: t('shelf.goToSeries'), icon: LibraryBig, onSelect: () => navigate(`/manga/${item.series_id}`) },
+    libraryItem(t, series, library.toggle),
+    {
+      id: 'hide',
+      label: t('shelf.hide'),
+      icon: EyeOff,
+      onSelect: () => {
+        ipc.mangaHideContinue(item.series_id)
+          .then(() => toast.success(t('shelf.hidden', { title: item.series_title })))
+          .catch((error) => toast.error(t('shelf.hideFailed', { message: String(error) })));
+      },
+    },
+  ]);
+  const percent = readPercent(item.page, Number(item.page_count));
+  return (
+          <li className="w-48 shrink-0 snap-start xl:w-52" onContextMenu={context.onContextMenu}>
+            {context.menu}
             <button
               type="button"
               className="group block w-full rounded-box text-left focus-visible:outline-offset-4"
@@ -192,9 +238,6 @@ export function ContinueShelf({ items }: { items: MangaContinue[] }) {
               </p>
             </button>
           </li>
-        );
-      })}
-    </ul>
   );
 }
 

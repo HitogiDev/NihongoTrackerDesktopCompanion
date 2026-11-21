@@ -20,7 +20,10 @@
     "direction": "Dirección",
     "fit": "Ajuste",
     "background": "Fondo",
-    "textLayer": "Texto"
+    "textLayer": "Texto",
+    "transition": "Paso de página",
+    "swipe": "Deslizar para pasar (% del ancho)",
+    "swipeOff": "0 = desactivado"
   },
   "layout": {
     "single": "Una",
@@ -42,6 +45,11 @@
     "black": "Negro",
     "gray": "Gris",
     "paper": "Papel"
+  },
+  "transition": {
+    "curl": "Doblar",
+    "slide": "Deslizar",
+    "none": "Ninguno"
   },
   "text": {
     "hover": "Al pasar",
@@ -159,7 +167,8 @@
       "settings": "Ajustes",
       "zoom": "Acercar o alejar",
       "pan": "Mover una página ampliada",
-      "resetZoom": "Volver a la página entera"
+      "resetZoom": "Volver a la página entera",
+      "swipe": "Pasar página"
     },
     "mouse": {
       "clickSidesRtl": "Clic en el tercio izquierdo o derecho",
@@ -170,7 +179,8 @@
       "hoverModifier": "Mayús o Alt sobre el texto",
       "drag": "Arrastrar sobre la página",
       "ctrlWheel": "Ctrl + rueda, o pellizcar",
-      "ctrlDrag": "Ctrl + arrastrar, o desplazar ya ampliada"
+      "ctrlDrag": "Ctrl + arrastrar, o desplazar ya ampliada",
+      "swipe": "Deslizar de lado (dedo, ratón o dos dedos en el touchpad)"
     },
     "key": {
       "Space": "Espacio",

@@ -44,6 +44,8 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'firstLast', keys: [['Home'], ['End']] },
       { label: 'turnByClick', keys: [], mouse: rtl ? 'clickSidesRtl' : 'clickSidesLtr' },
       { label: 'turnByWheel', keys: [], mouse: 'wheel' },
+      // useSwipe.
+      { label: 'swipe', keys: [], mouse: 'swipe' },
       { label: 'hideControls', keys: [], mouse: 'doubleClickMiddle' },
       // useZoomPan and the reader's onKey.
       { label: 'zoom', keys: [], mouse: 'ctrlWheel' },

@@ -79,5 +79,12 @@
     "placeholder": "Title in romaji, English or Japanese…",
     "noResults": "No results.",
     "adult": "18+"
+  },
+  "textMenu": {
+    "label": "Text",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select all"
   }
 }

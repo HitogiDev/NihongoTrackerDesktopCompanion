@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { mangaUrl } from '../../../lib/manga';
-import type { MangaVolume, PageFit, ReaderBackground, ReaderLayout, ReaderPrefs, ReadingDirection, TextLayerMode } from '../../../lib/types';
+import type { MangaVolume, PageFit, PageTransition, ReaderBackground, ReaderLayout, ReaderPrefs, ReadingDirection, TextLayerMode } from '../../../lib/types';
+import { NumberSetting } from '../MangaClockSettings';
 import { BACKGROUND_CLASS } from './styles';
 
 const BAR = 'pointer-events-auto absolute inset-x-0 z-30 border-base-300/60 bg-base-100/85 text-base-content shadow-sm backdrop-blur-md motion-safe:transition motion-safe:duration-200 motion-safe:ease-out';
@@ -135,6 +136,31 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
           ))}
         </div>
       </div>
+      {prefs.layout !== 'vertical' ? (
+        <>
+          <Segmented<PageTransition>
+            label={t('settings.transition')}
+            value={prefs.transition}
+            onChange={(transition) => onChange({ transition })}
+            options={[
+              { value: 'curl', label: t('transition.curl') },
+              { value: 'slide', label: t('transition.slide') },
+              { value: 'none', label: t('transition.none') },
+            ]}
+          />
+          {/* NumberSetting pads itself for the settings lists. */}
+          <div className="-mx-3 -mt-3 -mb-1">
+            <NumberSetting
+              label={t('settings.swipe')}
+              hint={t('settings.swipeOff')}
+              value={prefs.swipe_threshold}
+              min={0}
+              max={90}
+              onSave={(swipe_threshold) => onChange({ swipe_threshold })}
+            />
+          </div>
+        </>
+      ) : null}
       {hasText ? (
         <Segmented<TextLayerMode>
           label={t('settings.textLayer')}
@@ -182,7 +208,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
 }) {
   const { t } = useTranslation('mangaReader');
   return (
-    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)} {...keyboardFocus(onFocusWithin)}>
+    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome data-reader-topbar onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)} {...keyboardFocus(onFocusWithin)}>
       <div className="flex h-12 items-center gap-2 px-2">
         <Button appearance="ghost" size="sm" shape="square" aria-label={t('close')} title={t('close')} onClick={onClose}>
           <X className="h-4 w-4" />
@@ -198,7 +224,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
         <Button appearance="ghost" size="sm" shape="square" aria-label={fullscreen ? t('exitFullscreen') : t('fullscreen')} title={`${fullscreen ? t('exitFullscreen') : t('fullscreen')} (F)`} onClick={onFullscreen}>
           {fullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
         </Button>
-        <Button appearance="ghost" size="sm" shape="square" className={settingsOpen ? 'btn-active' : ''} aria-label={t('settings.title')} aria-expanded={settingsOpen} title={t('settings.title')} onClick={onSettings}>
+        <Button appearance="ghost" size="sm" shape="square" className={settingsOpen ? 'btn-active' : ''} aria-label={t('settings.title')} data-settings-toggle aria-expanded={settingsOpen} title={t('settings.title')} onClick={onSettings}>
           <Settings2 className="h-4 w-4" />
         </Button>
       </div>

@@ -30,6 +30,8 @@ import { useAutoHide } from './useAutoHide';
 import { ClockMenu } from './ClockMenu';
 import { KEY_STEP, useZoomPan } from './useZoomPan';
 import { arrowPan } from './zoom';
+import { createTurnController } from './turnController';
+import { useSwipe } from './useSwipe';
 import { ZoomBadge } from './ZoomBadge';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
@@ -462,6 +464,22 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     if (atEnd) setAtEnd(false);
     else goSpread(spreadIndex - 1);
   }, [atEnd, goSpread, spreadIndex]);
+  // ── page turns: transition and swipe ───────────────────────────────
+  const turns = useMemo(createTurnController, []);
+  const swipe = useSwipe(readerRoot, {
+    enabled: !vertical && !editing,
+    threshold: prefs.swipe_threshold,
+    transition: prefs.transition,
+    direction: prefs.direction,
+    textSelectable: prefs.text_layer === 'hover' || prefs.text_layer === 'always',
+    isZoomed: () => zoom.getScale() > 1.01,
+    current: () => (atEnd ? [] : spread),
+    // The end card has no pages to turn to: that turn just happens.
+    neighbour: (forward) => (atEnd ? null : spreads[spreadIndex + (forward ? 1 : -1)] ?? null),
+    onTurn: (forward) => (forward ? goNext() : goPrevious()),
+    turns,
+  });
+
   const seek = useCallback((target: number) => {
     setAtEnd(false);
     setPage(target);
@@ -499,6 +517,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       if (isSheetKey(event)) {
         event.preventDefault();
         setShortcutsOpen((open) => !open);
+        setSettingsOpen(false);
         return;
       }
       if (shortcutsOpen) return;
@@ -637,7 +656,25 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   // The dictionary closes on a press outside it (DictionaryPopup); the click
   // that follows only closed it, it does not turn the page.
   const closedDictionary = useRef(false);
+  // The layout panel closes on a press anywhere else, like the clock menu
+  // (its own button toggles it). A click on the page that closes it does not
+  // also turn the page.
+  const settingsPanel = useRef<HTMLDivElement>(null);
+  const closedSettings = useRef(false);
+  const outsideSettings = (target: EventTarget | null) => {
+    const element = target as Element | null;
+    return !settingsPanel.current?.contains(element) && !element?.closest?.('[data-settings-toggle]');
+  };
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const outside = (event: PointerEvent) => {
+      if (outsideSettings(event.target)) setSettingsOpen(false);
+    };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [settingsOpen]);
   const onPointerDownCapture = (event: ReactPointerEvent) => {
+    closedSettings.current = settingsOpen && outsideSettings(event.target);
     closedDictionary.current = Boolean(dictionary.dictionaryRequest)
       && !(event.target as HTMLElement).closest('[role="dialog"]');
   };
@@ -645,15 +682,17 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const onClick = (event: ReactMouseEvent) => {
     // A Ctrl+click or the end of a Ctrl+drag belongs to the pan.
     if (zoom.consumeClick()) return;
+    // The end of a swipe: it turned the page already, or put it back.
+    if (swipe.consumeClick()) return;
     if (closedDictionary.current) {
       closedDictionary.current = false;
       return;
     }
-    if (!onPage(event)) return;
-    if (settingsOpen) {
-      setSettingsOpen(false);
+    if (closedSettings.current) {
+      closedSettings.current = false;
       return;
     }
+    if (!onPage(event)) return;
     if (window.getSelection()?.toString()) return;
     if (vertical) return;
     const action = clickAction(event.clientX, window.innerWidth, prefs.direction);
@@ -726,6 +765,8 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     <div
       ref={readerRoot}
       className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${zoom.cursor === 'grabbing' ? 'cursor-grabbing' : zoom.cursor === 'grab' ? 'cursor-grab' : chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
+      // A finger sideways is a swipe (useSwipe), not the webview's own gesture.
+      style={vertical ? undefined : { touchAction: prefs.fit === 'height' ? 'none' : 'pan-y' }}
       onPointerDownCapture={onPointerDownCapture}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -756,6 +797,10 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
             sizeOf={sizeOf}
             onNaturalSize={rememberSize}
             overlay={overlay}
+            transition={prefs.transition}
+            turns={turns}
+            turnKey={`${volume.id}:${prefs.layout}:${prefs.cover_alone}:${prefs.fit}`}
+            backgroundClass={BACKGROUND_CLASS[prefs.background]}
           />
         </div>
       )}
@@ -857,7 +902,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         />
       ) : null}
       <OcrInstallModal />
-      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /> : null}
+      {settingsOpen ? <div ref={settingsPanel}><SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /></div> : null}
       <ShortcutsSheet
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
