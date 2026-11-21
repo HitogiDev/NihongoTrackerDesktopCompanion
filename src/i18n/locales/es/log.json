@@ -3,10 +3,8 @@
   "submit": "Registrar",
   "type": "Tipo",
   "mediaTitle": "Obra o actividad",
-  "mediaTitleHint": "Busca una obra o escribe un título.",
   "mediaTitlePlaceholder": "¿Qué leíste o viste?",
   "comment": "Comentario (opcional)",
-  "commentHint": "Añade una nota sobre esta sesión.",
   "commentPlaceholder": "¿Cómo te fue? ¿Qué parte completaste?",
   "linked": "Obra vinculada",
   "unlink": "Desvincular",
@@ -22,5 +20,5 @@
   },
   "search": "Buscar obra",
   "date": "Fecha",
-  "dateHint": "Cuándo fue, en tu hora local."
+  "dateHint": "Hora local."
 }

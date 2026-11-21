@@ -27,6 +27,9 @@ pub struct RangedFile<'a> {
     /// Names this file's blocks in the cache (its path and signature).
     key: String,
     current: Option<(u64, Vec<u8>)>,
+    /// Every block loaded while recording (`record`): what reading the
+    /// archive's directory touched, for `archive::RemoteIndex`.
+    recorded: Option<Vec<(u64, Arc<[u8]>)>>,
     /// What went wrong under an `io::Error`, for the caller to tell a server
     /// without ranges from a broken archive.
     pub error: Arc<Mutex<Option<DavError>>>,
@@ -34,7 +37,21 @@ pub struct RangedFile<'a> {
 
 impl<'a> RangedFile<'a> {
     pub fn new(len: u64, cache: &'a Cache, key: String, fetch: Fetch<'a>) -> Self {
-        RangedFile { fetch, len, pos: 0, cache, key, current: None, error: Arc::new(Mutex::new(None)) }
+        RangedFile { fetch, len, pos: 0, cache, key, current: None, recorded: None, error: Arc::new(Mutex::new(None)) }
+    }
+
+    pub fn len(&self) -> u64 {
+        self.len
+    }
+
+    /// From now on, remembers every block loaded (`take_recorded`).
+    pub fn record(&mut self) {
+        self.recorded = Some(self.current.iter().map(|(index, bytes)| (index * BLOCK, Arc::from(bytes.as_slice()))).collect());
+    }
+
+    /// The blocks loaded since `record`, by offset.
+    pub fn take_recorded(&mut self) -> Vec<(u64, Arc<[u8]>)> {
+        self.recorded.take().unwrap_or_default()
     }
 
     fn block(&mut self, index: u64) -> io::Result<&[u8]> {
@@ -58,6 +75,11 @@ impl<'a> RangedFile<'a> {
                     }
                 }
             };
+            if let Some(recorded) = self.recorded.as_mut() {
+                if !recorded.iter().any(|(at, _)| *at == index * BLOCK) {
+                    recorded.push((index * BLOCK, std::sync::Arc::from(bytes.as_slice())));
+                }
+            }
             self.current = Some((index, bytes));
         }
         Ok(&self.current.as_ref().expect("block").1)

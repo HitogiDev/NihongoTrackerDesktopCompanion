@@ -8,7 +8,7 @@
     "install": "Instalar y reiniciar",
     "installing": "Actualizando… {{percent}} %",
     "download": "Descargar de GitHub",
-    "manualHint": "Esta copia la instaló tu gestor de paquetes, así que no puede reemplazarse sola. Descarga el paquete nuevo desde GitHub.",
+    "manualHint": "Instalada por tu gestor de paquetes: descarga el paquete nuevo desde GitHub.",
     "check": "Comprobar ahora",
     "checking": "Comprobando…",
     "notes": "Novedades",
@@ -16,7 +16,7 @@
     "checkFailed": "No se pudo buscar actualizaciones: {{message}}",
     "installFailed": "No se pudo instalar la actualización: {{message}}",
     "auto": "Buscar actualizaciones automáticamente",
-    "autoHint": "Al arrancar y cada 6 horas. No se instala nada hasta que lo confirmes."
+    "autoHint": "No se instala nada hasta que confirmas."
   },
   "openInWeb": "Abrir en NihongoTracker",
   "cancel": "Cancelar",
@@ -31,7 +31,11 @@
   "retry": "Reintentar",
   "add": "Añadir",
   "back": "Volver",
-  "patreonTiers": { "consumer": "Consumidor", "donator": "Donante", "enthusiast": "Entusiasta" },
+  "patreonTiers": {
+    "consumer": "Consumidor",
+    "donator": "Donante",
+    "enthusiast": "Entusiasta"
+  },
   "none": "—",
   "minutesShort": "{{count}} min",
   "pagesShort": "{{count}} pág.",
@@ -75,5 +79,12 @@
     "placeholder": "Título en romaji, inglés o japonés…",
     "noResults": "Sin resultados.",
     "adult": "18+"
+  },
+  "textMenu": {
+    "label": "Texto",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar",
+    "selectAll": "Seleccionar todo"
   }
 }

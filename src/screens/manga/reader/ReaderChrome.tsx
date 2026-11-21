@@ -10,13 +10,15 @@ import {
   Rows3,
   Settings2,
   Shrink,
+  SkipBack,
   SkipForward,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { mangaUrl } from '../../../lib/manga';
-import type { MangaVolume, PageFit, ReaderBackground, ReaderLayout, ReaderPrefs, ReadingDirection, TextLayerMode } from '../../../lib/types';
+import type { MangaVolume, PageFit, PageTransition, ReaderBackground, ReaderLayout, ReaderPrefs, ReadingDirection, TextLayerMode } from '../../../lib/types';
+import { NumberSetting } from '../MangaClockSettings';
 import { BACKGROUND_CLASS } from './styles';
 
 const BAR = 'pointer-events-auto absolute inset-x-0 z-30 border-base-300/60 bg-base-100/85 text-base-content shadow-sm backdrop-blur-md motion-safe:transition motion-safe:duration-200 motion-safe:ease-out';
@@ -134,6 +136,31 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
           ))}
         </div>
       </div>
+      {prefs.layout !== 'vertical' ? (
+        <>
+          <Segmented<PageTransition>
+            label={t('settings.transition')}
+            value={prefs.transition}
+            onChange={(transition) => onChange({ transition })}
+            options={[
+              { value: 'curl', label: t('transition.curl') },
+              { value: 'slide', label: t('transition.slide') },
+              { value: 'none', label: t('transition.none') },
+            ]}
+          />
+          {/* NumberSetting pads itself for the settings lists. */}
+          <div className="-mx-3 -mt-3 -mb-1">
+            <NumberSetting
+              label={t('settings.swipe')}
+              hint={t('settings.swipeOff')}
+              value={prefs.swipe_threshold}
+              min={0}
+              max={90}
+              onSave={(swipe_threshold) => onChange({ swipe_threshold })}
+            />
+          </div>
+        </>
+      ) : null}
       {hasText ? (
         <Segmented<TextLayerMode>
           label={t('settings.textLayer')}
@@ -141,6 +168,7 @@ export function SettingsPanel({ prefs, onChange, hasText, onShortcuts }: {
           onChange={(text_layer) => onChange({ text_layer })}
           options={[
             { value: 'hover', label: t('text.hover') },
+            { value: 'invisible', label: t('text.invisible') },
             { value: 'always', label: t('text.always') },
             { value: 'hidden', label: t('text.hidden') },
           ]}
@@ -180,7 +208,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
 }) {
   const { t } = useTranslation('mangaReader');
   return (
-    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)} {...keyboardFocus(onFocusWithin)}>
+    <header className={`${BAR} ${visible ? TOP_SHOWN : TOP_HIDDEN}`} data-reader-chrome data-reader-topbar onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)} {...keyboardFocus(onFocusWithin)}>
       <div className="flex h-12 items-center gap-2 px-2">
         <Button appearance="ghost" size="sm" shape="square" aria-label={t('close')} title={t('close')} onClick={onClose}>
           <X className="h-4 w-4" />
@@ -196,7 +224,7 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
         <Button appearance="ghost" size="sm" shape="square" aria-label={fullscreen ? t('exitFullscreen') : t('fullscreen')} title={`${fullscreen ? t('exitFullscreen') : t('fullscreen')} (F)`} onClick={onFullscreen}>
           {fullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
         </Button>
-        <Button appearance="ghost" size="sm" shape="square" className={settingsOpen ? 'btn-active' : ''} aria-label={t('settings.title')} aria-expanded={settingsOpen} title={t('settings.title')} onClick={onSettings}>
+        <Button appearance="ghost" size="sm" shape="square" className={settingsOpen ? 'btn-active' : ''} aria-label={t('settings.title')} data-settings-toggle aria-expanded={settingsOpen} title={t('settings.title')} onClick={onSettings}>
           <Settings2 className="h-4 w-4" />
         </Button>
       </div>
@@ -204,7 +232,23 @@ export function TopBar({ visible, title, subtitle, fullscreen, onClose, onFullsc
   );
 }
 
-export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount, direction, onSeek, onHover, onFocusWithin }: {
+/** A button to the volume before or after, disabled when there is none. */
+function VolumeButton({ volume, label, icon: Icon, onOpen }: {
+  volume: MangaVolume | null;
+  label: (title: string) => string;
+  icon: LucideIcon;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation('mangaReader');
+  const text = volume ? label(volume.title) : t('volumeNav.none');
+  return (
+    <Button appearance="ghost" size="sm" shape="square" disabled={!volume} aria-label={text} title={text} onClick={onOpen}>
+      <Icon className="h-4 w-4" />
+    </Button>
+  );
+}
+
+export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount, direction, previousVolume, nextVolume, onPreviousVolume, onNextVolume, onSeek, onHover, onFocusWithin }: {
   visible: boolean;
   volumeId: string;
   page: number;
@@ -213,6 +257,11 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
   pageLabel: string;
   pageCount: number;
   direction: ReadingDirection;
+  /** The volumes before and after this one in the series. */
+  previousVolume: MangaVolume | null;
+  nextVolume: MangaVolume | null;
+  onPreviousVolume: () => void;
+  onNextVolume: () => void;
   onSeek: (page: number) => void;
   onHover: (hovering: boolean) => void;
   onFocusWithin: (inside: boolean) => void;
@@ -221,10 +270,45 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
   const [strip, setStrip] = useState(false);
   const current = useRef<HTMLButtonElement | null>(null);
   const rtl = direction === 'rtl';
+  // On the side the slider fills towards: a right-to-left book's next
+  // volume is on the left, like its next page.
+  const previous = (
+    <VolumeButton
+      volume={previousVolume}
+      label={(title) => t('volumeNav.previous', { volume: title })}
+      icon={rtl ? SkipForward : SkipBack}
+      onOpen={onPreviousVolume}
+    />
+  );
+  const next = (
+    <VolumeButton
+      volume={nextVolume}
+      label={(title) => t('volumeNav.next', { volume: title })}
+      icon={rtl ? SkipBack : SkipForward}
+      onOpen={onNextVolume}
+    />
+  );
 
   useEffect(() => {
     if (strip) current.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [strip, page]);
+
+  // A mouse wheel only scrolls up and down: over the strip it scrolls it
+  // sideways, forward in the book's direction. Native and not passive, so
+  // the page under it does not get the wheel too.
+  const list = useRef<HTMLOListElement | null>(null);
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? element.clientWidth : 1;
+      element.scrollBy({ left: event.deltaY * unit * (rtl ? -1 : 1) });
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [rtl]);
 
   return (
     <footer
@@ -236,10 +320,12 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
     >
       <div className={strip ? 'grid grid-rows-[1fr] motion-safe:transition-[grid-template-rows] motion-safe:duration-200' : 'grid grid-rows-[0fr] motion-safe:transition-[grid-template-rows] motion-safe:duration-200'}>
         <div className="overflow-hidden">
-          <ol className="flex gap-2 overflow-x-auto px-4 pb-1 pt-3" dir={rtl ? 'rtl' : 'ltr'} aria-label={t('pages')}>
+          <ol ref={list} className="flex gap-2 overflow-x-auto px-4 pb-1 pt-3" dir={rtl ? 'rtl' : 'ltr'} aria-label={t('pages')}>
             {strip ? Array.from({ length: pageCount }, (_, index) => (
-              // Thumbnails (`manga://thumb`, 240 px wide), never pages; the
-              // ones scrolled away skip layout and paint.
+              // Thumbnails (`manga://strip`, 240 px wide). A page of a volume
+              // on a server that is not here yet comes as it is: it is never
+              // downloaded only to be shrunk. The ones scrolled away skip
+              // layout and paint.
               <li key={index} className="shrink-0 [contain-intrinsic-size:auto_4rem_auto_7.5rem] [content-visibility:auto]">
                 <button
                   ref={index === page ? current : undefined}
@@ -251,7 +337,7 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
                     ? 'block overflow-hidden rounded-field ring-2 ring-primary focus-visible:-outline-offset-2'
                     : 'block overflow-hidden rounded-field opacity-70 ring-1 ring-base-content/10 motion-safe:transition hover:opacity-100 focus-visible:opacity-100 focus-visible:-outline-offset-2'}
                 >
-                  <img src={mangaUrl.thumb(volumeId, index)} alt="" loading="lazy" decoding="async" draggable={false} className="h-24 w-auto min-w-16 bg-base-300 object-cover" />
+                  <img src={mangaUrl.strip(volumeId, index)} alt="" loading="lazy" decoding="async" draggable={false} className="h-24 w-auto min-w-16 bg-base-300 object-cover" />
                   <span className="block bg-base-200 py-0.5 text-center text-[10px] tabular-nums text-base-content/70">{index + 1}</span>
                 </button>
               </li>
@@ -261,6 +347,7 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
       </div>
       <div className="flex h-12 items-center gap-3 px-4">
         <span className="w-20 shrink-0 text-xs tabular-nums text-base-content/70">{pageLabel}</span>
+        {rtl ? next : previous}
         <input
           type="range"
           min={0}
@@ -272,6 +359,7 @@ export function BottomBar({ visible, volumeId, page, shown, pageLabel, pageCount
           // A right-to-left book fills from the right, like its pages.
           style={rtl ? { transform: 'scaleX(-1)' } : undefined}
         />
+        {rtl ? previous : next}
         <span className="flex w-20 shrink-0 items-center justify-end gap-1 text-xs text-base-content/55">
           <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
           {rtl ? t('direction.rtlShort') : t('direction.ltrShort')}

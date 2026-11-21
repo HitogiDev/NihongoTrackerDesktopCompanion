@@ -191,7 +191,7 @@ export default function MangaScreen() {
           {!extensions && section === 'library' && !filtering && data && data.continue_reading.length > 0 ? (
             <section className="space-y-3" aria-label={t('shelf.title')}>
               <SectionTitle>{t('shelf.title')}</SectionTitle>
-              <ContinueShelf items={data.continue_reading} />
+              <ContinueShelf items={data.continue_reading} inLibrary={(id) => data.series.find((series) => series.id === id)?.in_library_at ?? null} />
             </section>
           ) : null}
 

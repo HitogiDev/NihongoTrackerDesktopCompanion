@@ -121,8 +121,39 @@ pub const ENDED_EVENT: &str = "manga://session-ended";
 pub enum MangaPause {
     /// The reader window is in the background or minimized.
     Unfocused,
-    /// No input for `afk_timeout_secs`.
+    /// No input for the reader's AFK timeout.
     Idle,
+    /// The user stopped it from the clock menu.
+    Stopped,
+}
+
+/// What the reader's clock is doing, with or without a session (there is
+/// none until it first runs): what its menu shows.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub enum ClockStatus {
+    Running,
+    /// Started, but the user is away or the window is in the background:
+    /// it runs again by itself.
+    Paused,
+    /// Stopped by the user: it only runs again from the menu.
+    Stopped,
+    /// It will start by itself once the user reads (`starts_in_secs`).
+    Waiting,
+    /// Automatic start is off and it has not been started.
+    Off,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
+pub struct MangaClock {
+    pub volume_id: String,
+    pub status: ClockStatus,
+    /// Why it is paused (`Paused`, `Stopped`).
+    pub pause: Option<MangaPause>,
+    /// Waiting with a delay: seconds of reading left before it starts.
+    pub starts_in_secs: Option<u64>,
 }
 
 /// A reading session in the manga reader, as the UI shows it.
@@ -195,7 +226,29 @@ pub struct Tracking {
     inactive: Duration,
     /// The last session sent to the UI, so an unchanged one is not sent again.
     emitted: Option<Option<MangaSession>>,
+    /// The clock has been started (by itself or from the menu): it runs
+    /// whenever the user is `present`.
+    armed: bool,
+    /// The user stopped it: nothing starts it again but the menu.
+    stopped: bool,
+    /// Reading time towards an automatic start.
+    warmup: Duration,
+    /// From the last tick: the user is reading (focused, if that is asked
+    /// for, and not away), why not, and the automatic start settings.
+    present: bool,
+    pause: Option<MangaPause>,
+    auto_start: bool,
+    auto_start_delay: Duration,
+    clock_emitted: Option<Option<MangaClock>>,
+    /// Lines of the pages `step` credited, still to be stored. The tick takes
+    /// them and stores them off its thread (`store_lines`), after letting go
+    /// of the lock: the count itself (`manga_page_read`) is already final.
+    pub unsaved_lines: Vec<crate::db::TextLine>,
 }
+
+/// A session whose clock alone moved is sent again only after this many
+/// seconds: the windows advance it themselves in between (`useMangaSession`).
+pub const SESSION_RESYNC_SECS: u64 = 15;
 
 /// One tick's worth of what the watcher observed.
 #[derive(Debug, Clone, Copy)]
@@ -204,11 +257,16 @@ pub struct TickInput {
     /// The reader window has the focus.
     pub focused: bool,
     pub idle_secs: u64,
-    /// `afk_timeout_secs`; 0 never pauses.
+    /// The reader's AFK timeout; 0 never pauses.
     pub afk_secs: u64,
     pub dwell: Duration,
     /// End the session after this long with the clock stopped; zero never does.
     pub idle_log: Duration,
+    /// Losing the focus pauses the clock (`manga_pause_on_unfocus`).
+    pub pause_on_unfocus: bool,
+    /// The clock starts by itself after this much reading (`manga_auto_start`).
+    pub auto_start: bool,
+    pub auto_start_delay: Duration,
 }
 
 impl Tracking {
@@ -219,7 +277,38 @@ impl Tracking {
     pub fn step(&mut self, db: &Db, input: TickInput, now: impl FnOnce() -> String) -> Option<MangaSession> {
         let Some(open) = self.open.as_mut() else { return self.finish() };
         let away = input.afk_secs > 0 && input.idle_secs >= input.afk_secs;
-        let counting = input.focused && !away;
+        let unfocused = !input.focused && input.pause_on_unfocus;
+        let present = !unfocused && !away;
+        self.present = present;
+        // Turning the automatic start on is asking for it: a clock the user
+        // had stopped is no longer held back.
+        if input.auto_start && !self.auto_start {
+            self.stopped = false;
+        }
+        self.auto_start = input.auto_start;
+        self.auto_start_delay = input.auto_start_delay;
+        // Started by itself after enough reading, unless the user stopped it.
+        if !self.armed && !self.stopped && input.auto_start && present {
+            self.warmup += input.elapsed;
+            if self.warmup >= input.auto_start_delay {
+                self.armed = true;
+                self.warmup = Duration::ZERO;
+            }
+        } else if !self.armed && !present {
+            self.warmup = Duration::ZERO;
+        }
+        let counting = self.armed && present;
+        self.pause = if counting {
+            None
+        } else if self.stopped {
+            Some(MangaPause::Stopped)
+        } else if unfocused {
+            Some(MangaPause::Unfocused)
+        } else if away {
+            Some(MangaPause::Idle)
+        } else {
+            None
+        };
         if self.session.is_none() {
             if !counting {
                 return None;
@@ -230,11 +319,7 @@ impl Tracking {
         }
         let session = self.session.as_mut().expect("started above");
         session.counting = counting;
-        session.pause = match (counting, input.focused) {
-            (true, _) => None,
-            (false, false) => Some(MangaPause::Unfocused),
-            (false, true) => Some(MangaPause::Idle),
-        };
+        session.pause = if counting { None } else { self.pause.or(Some(MangaPause::Stopped)) };
         if let Some(&first) = open.visible.first() {
             session.page = first;
         }
@@ -245,9 +330,10 @@ impl Tracking {
             self.inactive = Duration::ZERO;
             session.inactive_secs = 0;
             if let Some(pages) = open.dwell(input.elapsed, input.dwell) {
-                let credited = credit_pages(db, open, &pages);
+                let (credited, lines) = count_pages(db, open, &pages);
                 session.pages_read += credited.pages;
                 session.chars_read += credited.chars;
+                self.unsaved_lines.extend(lines);
             }
         } else {
             self.inactive += input.elapsed;
@@ -259,21 +345,143 @@ impl Tracking {
         None
     }
 
-    /// Ends the session: it is the caller's to log.
+    /// Ends the session: it is the caller's to log. The clock goes back to
+    /// waiting for an automatic start (or the menu).
     pub fn finish(&mut self) -> Option<MangaSession> {
         self.elapsed = Duration::ZERO;
         self.inactive = Duration::ZERO;
+        self.armed = false;
+        self.stopped = false;
+        self.warmup = Duration::ZERO;
         self.session.take()
     }
 
-    /// The session, if it changed since the last time this was asked.
+    /// Started from the menu: it runs whenever the user is reading, whatever
+    /// the automatic start says.
+    pub fn start_clock(&mut self) {
+        self.armed = true;
+        self.stopped = false;
+        self.warmup = Duration::ZERO;
+        self.sync_session();
+    }
+
+    /// Stopped from the menu: it stays stopped until started again. The
+    /// session stays open (and is logged after `manga_idle_log_minutes`).
+    pub fn stop_clock(&mut self) {
+        self.armed = false;
+        self.stopped = true;
+        self.warmup = Duration::ZERO;
+        self.sync_session();
+    }
+
+    /// "Finish and log" from the menu: the session ends now. The next one
+    /// starts like any other: by itself once the user reads on (after the
+    /// delay), or from the menu when the automatic start is off.
+    pub fn finish_now(&mut self) -> Option<MangaSession> {
+        let session = self.finish();
+        self.sync_session();
+        session
+    }
+
+    /// The time edited by hand in the clock menu: the session's clock shows
+    /// and logs `secs` from now on (capped at a day). With no session yet
+    /// (the clock has not run), one starts with that time, so time read
+    /// before opening the reader can be added. `false` with no volume open.
+    pub fn set_elapsed(&mut self, secs: u64, now: impl FnOnce() -> String) -> bool {
+        let Some(open) = self.open.as_ref() else { return false };
+        if self.session.is_none() {
+            self.session = Some(MangaSession::start(open, now()));
+            self.inactive = Duration::ZERO;
+        }
+        self.elapsed = Duration::ZERO;
+        if let Some(session) = self.session.as_mut() {
+            session.elapsed_secs = secs.min(MAX_EDITED_SECS);
+        }
+        self.sync_session();
+        // A time typed by hand always goes out, however close it is to the
+        // last one sent (`changed` holds back a clock that only advanced).
+        self.emitted = None;
+        true
+    }
+
+    /// The session's running/paused state after a menu action, without
+    /// waiting for the next tick.
+    fn sync_session(&mut self) {
+        let counting = self.armed && self.present;
+        self.pause = if counting {
+            None
+        } else if self.stopped {
+            Some(MangaPause::Stopped)
+        } else {
+            self.pause.filter(|pause| *pause != MangaPause::Stopped)
+        };
+        if let Some(session) = self.session.as_mut() {
+            session.counting = counting;
+            session.pause = if counting { None } else { self.pause.or(Some(MangaPause::Stopped)) };
+        }
+    }
+
+    /// What the clock is doing, while a volume is open.
+    pub fn clock(&self) -> Option<MangaClock> {
+        let open = self.open.as_ref()?;
+        let status = if self.armed && self.present {
+            ClockStatus::Running
+        } else if self.armed {
+            ClockStatus::Paused
+        } else if self.stopped {
+            ClockStatus::Stopped
+        } else if self.auto_start {
+            ClockStatus::Waiting
+        } else {
+            ClockStatus::Off
+        };
+        let starts_in_secs = (status == ClockStatus::Waiting && !self.auto_start_delay.is_zero())
+            .then(|| self.auto_start_delay.saturating_sub(self.warmup).as_secs_f64().ceil() as u64);
+        Some(MangaClock {
+            volume_id: open.volume_id.clone(),
+            status,
+            pause: if status == ClockStatus::Running { None } else { self.pause },
+            starts_in_secs,
+        })
+    }
+
+    /// The clock, if it changed since the last time this was asked.
+    fn clock_changed(&mut self) -> Option<Option<MangaClock>> {
+        let clock = self.clock();
+        if self.clock_emitted.as_ref() == Some(&clock) {
+            return None;
+        }
+        self.clock_emitted = Some(clock.clone());
+        Some(clock)
+    }
+
+    /// The session, if it changed since the last time this was asked. One
+    /// whose clocks (`elapsed_secs`, `inactive_secs`) only went forward, by
+    /// less than `SESSION_RESYNC_SECS`, has not changed: the windows count
+    /// a running clock on their own and are set right every so often.
     fn changed(&mut self) -> Option<Option<MangaSession>> {
         if self.emitted.as_ref() == Some(&self.session) {
             return None;
         }
+        if let (Some(Some(last)), Some(now)) = (&self.emitted, &self.session) {
+            if only_clocks_advanced(last, now) {
+                return None;
+            }
+        }
         self.emitted = Some(self.session.clone());
         self.emitted.clone()
     }
+}
+
+/// `now` is `last` with its clocks a little further on, and nothing else
+/// different.
+fn only_clocks_advanced(last: &MangaSession, now: &MangaSession) -> bool {
+    let near = |before: u64, after: u64| after >= before && after - before < SESSION_RESYNC_SECS;
+    if !near(last.elapsed_secs, now.elapsed_secs) || !near(last.inactive_secs, now.inactive_secs) {
+        return false;
+    }
+    let same = MangaSession { elapsed_secs: last.elapsed_secs, inactive_secs: last.inactive_secs, ..now.clone() };
+    same == *last
 }
 
 /// Kana and kanji on a page, the way the site counts them.
@@ -328,22 +536,36 @@ fn block_line(volume_id: &str, page: i64, index: usize, block: &super::mokuro::M
     })
 }
 
-/// Stores the blocks of a page as lines. Ones already stored stay as they are.
-pub fn insert_page_lines(db: &Db, volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) {
-    let Some(text) = text else { return };
-    for (index, block) in text.blocks.iter().enumerate() {
-        if let Some(line) = block_line(volume_id, page, index, block, content_id) {
-            if let Err(error) = db.insert_line(&line) {
-                log::warn!("manga line {} not stored: {error}", line.id);
-            }
+/// The blocks of a page as lines (the ones with Japanese in them).
+fn page_lines(volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) -> Vec<crate::db::TextLine> {
+    let Some(text) = text else { return Vec::new() };
+    text.blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| block_line(volume_id, page, index, block, content_id))
+        .collect()
+}
+
+/// Stores lines. Ones already stored stay as they are.
+pub fn store_lines(db: &Db, lines: &[crate::db::TextLine]) {
+    for line in lines {
+        if let Err(error) = db.insert_line(line) {
+            log::warn!("manga line {} not stored: {error}", line.id);
         }
     }
 }
 
-/// Records `pages` of the open volume as read, and their blocks as lines.
+/// Stores the blocks of a page as lines. Ones already stored stay as they are.
+pub fn insert_page_lines(db: &Db, volume_id: &str, page: i64, text: Option<&MokuroPage>, content_id: &str) {
+    store_lines(db, &page_lines(volume_id, page, text, content_id));
+}
+
+/// Records `pages` of the open volume as read, and returns what they add
+/// with the lines of their blocks, for the caller to store (`store_lines`).
 /// Pages read before add nothing.
-pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
+pub fn count_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> (Credited, Vec<crate::db::TextLine>) {
     let mut credited = Credited::default();
+    let mut lines = Vec::new();
     let content = content_id(open.media_id.as_deref(), &open.series_id);
     for &page in pages {
         let chars = page_chars(open.page_text(page));
@@ -351,12 +573,21 @@ pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
             Ok(true) => {
                 credited.pages += 1;
                 credited.chars += chars;
-                insert_page_lines(db, &open.volume_id, page, open.page_text(page), &content);
+                lines.extend(page_lines(&open.volume_id, page, open.page_text(page), &content));
             }
             Ok(false) => {}
             Err(error) => log::warn!("manga page {}/{page} not recorded: {error}", open.volume_id),
         }
     }
+    (credited, lines)
+}
+
+/// Records `pages` of the open volume as read, and their blocks as lines.
+/// Pages read before add nothing.
+#[cfg(test)]
+pub fn credit_pages(db: &Db, open: &OpenVolume, pages: &[i64]) -> Credited {
+    let (credited, lines) = count_pages(db, open, pages);
+    store_lines(db, &lines);
     credited
 }
 
@@ -596,22 +827,107 @@ pub fn tick(app: &AppHandle, settings: &Settings, elapsed: Duration, idle_secs: 
         elapsed,
         focused: state.manga.reader_focused.load(std::sync::atomic::Ordering::Acquire),
         idle_secs,
-        afk_secs: settings.afk_timeout_secs,
+        afk_secs: settings.manga_afk_timeout_secs.unwrap_or(settings.afk_timeout_secs),
         dwell: dwell_threshold(settings),
         idle_log: Duration::from_secs(settings.manga_idle_log_minutes.saturating_mul(60)),
+        pause_on_unfocus: settings.manga_pause_on_unfocus,
+        auto_start: settings.manga_auto_start,
+        auto_start_delay: Duration::from_secs(settings.manga_auto_start_delay_secs.min(3600)),
     };
-    let (session, changed, finished) = {
+    let (session, changed, clock, finished, lines) = {
         let mut tracking = state.manga.tracking.lock().unwrap();
         let finished = tracking.step(&state.db, input, crate::db::now_iso);
-        (tracking.session.clone(), tracking.changed(), finished)
+        let lines = std::mem::take(&mut tracking.unsaved_lines);
+        (tracking.session.clone(), tracking.changed(), tracking.clock_changed(), finished, lines)
     };
+    // The page is already counted; its lines (one insert per block) are
+    // stored off the tick.
+    if !lines.is_empty() {
+        let db = state.db.clone();
+        tauri::async_runtime::spawn_blocking(move || store_lines(&db, &lines));
+    }
     if let Some(finished) = finished {
         log_session(app, &finished, settings);
     }
     if let Some(changed) = changed {
         let _ = app.emit(SESSION_EVENT, &changed);
     }
+    if let Some(clock) = clock {
+        let _ = app.emit(CLOCK_EVENT, &clock);
+    }
     session
+}
+
+/// To every window: the reader's clock (or `null` with no volume open)
+/// whenever it changes.
+pub const CLOCK_EVENT: &str = "manga://clock";
+
+/// The most a session's time can be edited to: a day.
+pub const MAX_EDITED_SECS: u64 = 24 * 60 * 60;
+
+/// The session's time, edited by hand in the clock menu.
+pub fn set_elapsed(app: &AppHandle, secs: u64) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let (changed, clock) = {
+        let mut tracking = state.manga.tracking.lock().unwrap();
+        if !tracking.set_elapsed(secs, crate::db::now_iso) {
+            return Err("no volume open".into());
+        }
+        (tracking.changed(), tracking.clock_changed())
+    };
+    if let Some(changed) = changed {
+        let _ = app.emit(SESSION_EVENT, &changed);
+    }
+    if let Some(clock) = clock {
+        let _ = app.emit(CLOCK_EVENT, &clock);
+    }
+    Ok(())
+}
+
+/// What a clock menu action asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClockAction {
+    Start,
+    Stop,
+    /// End the session now and log it, then stay stopped.
+    Finish,
+}
+
+/// Runs a clock menu action and tells the windows at once, without waiting
+/// for the next tick. A finished session is logged like any other.
+pub fn clock_action(app: &AppHandle, action: ClockAction) -> Option<MangaClock> {
+    let state = app.state::<AppState>();
+    let (changed, clock, finished) = {
+        let mut tracking = state.manga.tracking.lock().unwrap();
+        let finished = match action {
+            ClockAction::Start => {
+                tracking.start_clock();
+                None
+            }
+            ClockAction::Stop => {
+                tracking.stop_clock();
+                None
+            }
+            ClockAction::Finish => tracking.finish_now(),
+        };
+        (tracking.changed(), tracking.clock_changed(), finished)
+    };
+    if let Some(session) = finished {
+        log_later(app, session);
+    }
+    if let Some(changed) = changed {
+        let _ = app.emit(SESSION_EVENT, &changed);
+    }
+    if let Some(clock) = &clock {
+        let _ = app.emit(CLOCK_EVENT, clock);
+    }
+    clock_state(app)
+}
+
+/// The clock now, for a window that opens (or reloads) between events.
+pub fn clock_state(app: &AppHandle) -> Option<MangaClock> {
+    app.state::<AppState>().manga.tracking.lock().unwrap().clock()
 }
 
 /// Focus of the reader window, from its window events.
@@ -754,7 +1070,163 @@ pub(crate) mod tests {
     }
 
     fn input(elapsed: Duration, focused: bool, idle_secs: u64) -> TickInput {
-        TickInput { elapsed, focused, idle_secs, afk_secs: 120, dwell: 3 * SECOND, idle_log: 600 * SECOND }
+        TickInput {
+            elapsed,
+            focused,
+            idle_secs,
+            afk_secs: 120,
+            dwell: 3 * SECOND,
+            idle_log: 600 * SECOND,
+            pause_on_unfocus: true,
+            auto_start: true,
+            auto_start_delay: Duration::ZERO,
+        }
+    }
+
+    fn status(tracking: &Tracking) -> ClockStatus {
+        tracking.clock().unwrap().status
+    }
+
+    #[test]
+    fn the_clock_starts_by_itself_after_the_delay_without_counting_it() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        let delayed = TickInput { auto_start_delay: 5 * SECOND, ..input(SECOND, true, 0) };
+        for _ in 0..3 {
+            tracking.step(&db, delayed, || "t".into());
+        }
+        assert!(tracking.session.is_none());
+        assert_eq!(tracking.clock().unwrap().starts_in_secs, Some(2));
+        assert_eq!(status(&tracking), ClockStatus::Waiting);
+        // Looking away resets the countdown: it is reading time.
+        tracking.step(&db, TickInput { focused: false, ..delayed }, || "t".into());
+        assert_eq!(tracking.clock().unwrap().starts_in_secs, Some(5));
+        for _ in 0..6 {
+            tracking.step(&db, delayed, || "t".into());
+        }
+        // Five ticks to start (the fifth counts), one more running.
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 2);
+        assert_eq!(status(&tracking), ClockStatus::Running);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn without_automatic_start_only_the_menu_starts_it() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        let manual = TickInput { auto_start: false, ..input(SECOND, true, 0) };
+        tracking.step(&db, manual, || "t".into());
+        assert!(tracking.session.is_none());
+        assert_eq!(status(&tracking), ClockStatus::Off);
+        tracking.start_clock();
+        assert_eq!(status(&tracking), ClockStatus::Running);
+        tracking.step(&db, manual, || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 1);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_stopped_clock_stays_stopped_until_started_again() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        tracking.stop_clock();
+        let session = tracking.session.clone().unwrap();
+        assert_eq!((session.counting, session.pause), (false, Some(MangaPause::Stopped)));
+        for _ in 0..3 {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        }
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 1, "reading does not start it");
+        assert_eq!(status(&tracking), ClockStatus::Stopped);
+        tracking.start_clock();
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 2);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn after_finishing_from_the_menu_the_next_session_starts_like_any_other() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t1".into());
+        assert_eq!(tracking.finish_now().unwrap().elapsed_secs, 1);
+        assert!(tracking.session.is_none());
+        // Automatic start: reading on starts the next one.
+        tracking.step(&db, input(SECOND, true, 0), || "t2".into());
+        let session = tracking.session.as_ref().unwrap();
+        assert_eq!((session.started_at.as_str(), session.elapsed_secs), ("t2", 1));
+        // Without it, the next one waits for the menu.
+        tracking.finish_now();
+        let manual = TickInput { auto_start: false, ..input(SECOND, true, 0) };
+        tracking.step(&db, manual, || "t3".into());
+        assert!(tracking.session.is_none());
+        assert_eq!(status(&tracking), ClockStatus::Off);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn the_time_can_be_edited_and_keeps_counting_from_there() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        assert!(!Tracking::default().set_elapsed(60, || "t".into()), "no volume, nothing to edit");
+        // Before the clock has run: a session starts with that time.
+        let manual = TickInput { auto_start: false, ..input(SECOND, true, 0) };
+        tracking.step(&db, manual, || "t".into());
+        assert!(tracking.set_elapsed(600, || "t0".into()));
+        let session = tracking.session.clone().unwrap();
+        assert_eq!((session.elapsed_secs, session.counting, session.started_at.as_str()), (600, false, "t0"));
+        tracking.start_clock();
+        tracking.step(&db, manual, || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 601);
+        // Down too, and never past a day.
+        tracking.set_elapsed(5, || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 5);
+        tracking.set_elapsed(u64::MAX, || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, MAX_EDITED_SECS);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn turning_the_automatic_start_on_wakes_a_stopped_clock() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        let manual = TickInput { auto_start: false, ..input(SECOND, true, 0) };
+        tracking.step(&db, manual, || "t".into());
+        tracking.start_clock();
+        tracking.step(&db, manual, || "t".into());
+        tracking.stop_clock();
+        tracking.step(&db, manual, || "t".into());
+        assert_eq!(status(&tracking), ClockStatus::Stopped);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert_eq!(status(&tracking), ClockStatus::Running);
+        // While it stays on, a stop holds.
+        tracking.stop_clock();
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert_eq!(status(&tracking), ClockStatus::Stopped);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn the_focus_can_be_left_out_and_a_pause_resumes_by_itself() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None]);
+        let anywhere = TickInput { pause_on_unfocus: false, ..input(SECOND, false, 0) };
+        tracking.step(&db, anywhere, || "t".into());
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 1, "counts in the background");
+        tracking.step(&db, TickInput { idle_secs: 130, ..anywhere }, || "t".into());
+        assert_eq!(status(&tracking), ClockStatus::Paused);
+        assert_eq!(tracking.clock().unwrap().pause, Some(MangaPause::Idle));
+        tracking.step(&db, anywhere, || "t".into());
+        assert_eq!(status(&tracking), ClockStatus::Running);
+        assert_eq!(tracking.session.as_ref().unwrap().elapsed_secs, 2);
+        drop(db);
+        let _ = std::fs::remove_file(path);
     }
 
     fn reading(text: Vec<Option<MokuroPage>>) -> Tracking {
@@ -825,6 +1297,59 @@ pub(crate) mod tests {
         assert!(tracking.changed().unwrap().is_some());
         tracking.step(&db, input(Duration::from_millis(10), true, 0), || "t".into());
         assert_eq!(tracking.changed(), None, "under a second: nothing visible changed");
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_clock_that_only_runs_is_sent_every_so_often_and_anything_else_at_once() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![None, None]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert!(tracking.changed().unwrap().is_some());
+        for _ in 1..SESSION_RESYNC_SECS {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+            assert_eq!(tracking.changed(), None, "the windows count it themselves");
+        }
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        let sent = tracking.changed().unwrap().unwrap();
+        assert_eq!(sent.elapsed_secs, 1 + SESSION_RESYNC_SECS, "set right after a while");
+        // A pause goes out at once…
+        tracking.step(&db, input(SECOND, false, 0), || "t".into());
+        assert!(!tracking.changed().unwrap().unwrap().counting);
+        // …and so does a page on screen, or a time typed by hand.
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        tracking.changed();
+        tracking.open.as_mut().unwrap().show(&[1]);
+        tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        assert_eq!(tracking.changed().unwrap().unwrap().page, 1);
+        let at = tracking.session.as_ref().unwrap().elapsed_secs;
+        tracking.set_elapsed(at + 2, || "t".into());
+        assert_eq!(tracking.changed().unwrap().unwrap().elapsed_secs, at + 2);
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_credited_page_counts_at_once_and_leaves_its_lines_to_be_stored() {
+        let (db, path) = temp_db();
+        let mut tracking = reading(vec![Some(page(&["あいう", "ABC"]))]);
+        tracking.open.as_mut().unwrap().show(&[0]);
+        for _ in 0..3 {
+            tracking.step(&db, input(SECOND, true, 0), || "t".into());
+        }
+        let session = tracking.session.clone().unwrap();
+        assert_eq!((session.pages_read, session.chars_read), (1, 3));
+        assert_eq!(db.manga_read_totals("v1").unwrap(), (1, 3));
+        let lines = std::mem::take(&mut tracking.unsaved_lines);
+        assert_eq!(lines.iter().map(|line| line.id.as_str()).collect::<Vec<_>>(), ["manga:v1:0:0"]);
+        assert!(db.line_by_id("manga:v1:0:0").unwrap().is_none(), "not stored inside the step");
+        store_lines(&db, &lines);
+        assert_eq!(db.line_by_id("manga:v1:0:0").unwrap().unwrap().text, "あいう");
+        // Read again: nothing more to count or store.
+        tracking.step(&db, input(10 * SECOND, true, 0), || "t".into());
+        assert!(tracking.unsaved_lines.is_empty());
+        assert_eq!(tracking.session.as_ref().unwrap().pages_read, 1);
         drop(db);
         let _ = std::fs::remove_file(path);
     }
@@ -919,6 +1444,8 @@ pub(crate) mod tests {
         for _ in 0..3 {
             tracking.step(&db, input(SECOND, true, 0), || "t".into());
         }
+        // As the tick does, after the step.
+        store_lines(&db, &std::mem::take(&mut tracking.unsaved_lines));
         let lines = db.lines_for("manga:s1", 10).unwrap();
         let ids: Vec<&str> = lines.iter().map(|line| line.id.as_str()).collect();
         assert_eq!(ids, ["manga:v1:0:0", "manga:v1:0:2"], "a block without Japanese is not a line");
@@ -930,6 +1457,7 @@ pub(crate) mod tests {
         for _ in 0..3 {
             tracking.step(&db, input(SECOND, true, 0), || "t".into());
         }
+        assert!(tracking.unsaved_lines.is_empty());
         assert_eq!(db.lines_for("manga:s1", 10).unwrap().len(), 2);
         assert_eq!(tracking.session.as_ref().unwrap().pages_read, 1);
         drop(db);

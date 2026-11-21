@@ -53,7 +53,7 @@ base64 = "0.22"
 chrono-tz = "0.10"
 discord-rich-presence = "1.1.0"
 # Manga volumes packed as CBZ/ZIP (see `manga::archive`).
-zip = { version = "2.4", default-features = false, features = ["deflate"] }
+zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
 # Manga thumbnails and covers (`manga::thumbs`), and the X11 screenshots of
 # `platform::linux_impl`. Only the formats pages come in.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }

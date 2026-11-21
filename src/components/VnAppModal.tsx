@@ -196,7 +196,6 @@ export function VnAppModal({
 
           <Toggle
             label={t('modal.enabled')}
-            description={t('modal.enabledHint')}
             checked={draft.enabled}
             onChange={(enabled) => setDraft({ ...draft, enabled })}
           />

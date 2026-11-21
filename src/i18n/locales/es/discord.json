@@ -1,7 +1,6 @@
 {
   "title": "Discord Rich Presence",
   "enable": "Mostrar mi inmersión en Discord",
-  "enableHint": "Apagado hasta que tú lo enciendas. Mientras esté apagado no se publica nada ni se abre ninguna conexión.",
   "configured": "Usa la aplicación de Discord de NihongoTracker Companion y su imagen incluida.",
   "appId": "Application ID",
   "appIdHint": "Crea una aplicación en el Discord Developer Portal, sube tus iconos en Rich Presence → Art Assets y pega aquí su ID.",
@@ -10,14 +9,11 @@
   "connected": "Conectado a Discord.",
   "disconnected": "Sin conexión. Puede que Discord esté cerrado; se reintenta solo.",
   "genericMode": "Solo actividad, nunca el título",
-  "genericModeHint": "Publica siempre \"Inmersión en japonés\", sin título ni portada, sea lo que sea.",
   "idlePresence": "Mantener la presencia con la VN en segundo plano",
-  "idlePresenceHint": "Cuando una novela visual detectada no está en foco (o estás AFK), muestra \"Inactivo en <título>\" en vez de vaciarse. Desactívalo para limpiarla como antes.",
+  "idlePresenceHint": "Muestra «Inactivo en <título>».",
   "profileButton": "Añadir el botón \"Ver perfil\"",
-  "profileButtonHint": "Enlaza a tu perfil público de NihongoTracker.",
   "preview": {
     "title": "Lo que ven los demás",
-    "hint": "No es una maqueta: es exactamente la presencia que se publicaría ahora mismo.",
     "off": "Rich Presence está apagado. No se publica nada.",
     "idle": "No hay nada en marcha, así que la presencia está vacía.",
     "blocked": "\"{{label}}\" está en tu lista negra: no se publica absolutamente nada.",
@@ -31,7 +27,7 @@
   },
   "blacklist": {
     "title": "No mostrar nunca",
-    "hint": "Una obra o un programa de esta lista no publica nada en absoluto, ni siquiera una actividad genérica.",
+    "hint": "Con estas no se publica nada, ni siquiera la actividad genérica.",
     "addMedia": "Añadir una obra",
     "processPlaceholder": "juego.exe o mpv",
     "empty": "Todavía no hay nada oculto.",

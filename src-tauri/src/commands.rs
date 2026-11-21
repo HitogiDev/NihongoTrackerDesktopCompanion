@@ -158,7 +158,7 @@ pub async fn save_settings(
     if shortcuts_changed { crate::reading_overlay::apply_shortcuts(&app, &settings); }
     if topmost_changed {
         for label in [crate::reading_overlay::LABEL, crate::reading_overlay::POPUP_LABEL,
-            crate::reading_overlay::SETTINGS_LABEL, "settings"] {
+            crate::reading_overlay::SETTINGS_LABEL] {
             if let Some(window) = app.get_webview_window(label) {
                 window.set_always_on_top(settings.reading_overlay.always_on_top).map_err(err)?;
             }
@@ -1153,6 +1153,11 @@ pub(crate) async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdRes
     };
 
     if let Some(window) = app.get_webview_window(label) {
+        // A Settings window built by an older version (hidden, not closed)
+        // may still be on top.
+        if kind == "settings" {
+            let _ = window.set_always_on_top(false);
+        }
         window.show().map_err(err)?;
         window.unminimize().map_err(err)?;
         window.set_focus().map_err(err)?;
@@ -1170,7 +1175,9 @@ pub(crate) async fn open_aux_window_inner(app: &AppHandle, kind: &str) -> CmdRes
         .resizable(true)
         .center();
     let builder = crate::window_chrome::themed(builder, &settings.theme);
-    let builder = if matches!(kind, "settings" | "reading-overlay-settings") {
+    // Only the reading overlay's own settings sit above its dictionary
+    // popup. The app's Settings is an ordinary window: never on top.
+    let builder = if kind == crate::reading_overlay::SETTINGS_LABEL {
         let builder = builder.always_on_top(settings.reading_overlay.always_on_top);
         if let Some(popup) = app.get_webview_window(crate::reading_overlay::POPUP_LABEL) {
             // Owned settings stay above the dictionary without changing the overlay's visibility.
@@ -1796,6 +1803,26 @@ pub fn manga_set_in_library(app: AppHandle, state: State<'_, AppState>, series_i
     Ok(())
 }
 
+/// The clipboard's text, for "Paste" in the app's own text menu: the webview
+/// cannot read the clipboard without asking, and its native menu brings
+/// "Inspect" along. `None` when there is no text on it.
+#[tauri::command]
+pub async fn clipboard_text() -> Option<String> {
+    tokio::task::spawn_blocking(|| arboard::Clipboard::new().ok()?.get_text().ok())
+        .await
+        .ok()
+        .flatten()
+}
+
+/// Takes a series off "Continue reading" until it is read again. Its
+/// progress stays.
+#[tauri::command]
+pub fn manga_hide_continue(app: AppHandle, state: State<'_, AppState>, series_id: String) -> CmdResult<()> {
+    state.db.hide_manga_continue(&series_id).map_err(err)?;
+    let _ = app.emit(crate::manga::library::LIBRARY_CHANGED, ());
+    Ok(())
+}
+
 /// Series the user opened (a series page): looked up before the rest, even
 /// outside "My library".
 #[tauri::command]
@@ -1815,6 +1842,25 @@ pub fn manga_suggest_priority(state: State<'_, AppState>, series_ids: Vec<String
 #[tauri::command]
 pub async fn manga_open_reader(app: AppHandle, volume_id: String, page: Option<i64>) -> CmdResult<()> {
     crate::manga::reader::open(&app, &volume_id, page).await
+}
+
+/// The reader's clock menu: `start`, `stop`, or `finish` (end the session now
+/// and log it). Returns the clock as it is after.
+#[tauri::command]
+pub fn manga_clock_action(app: AppHandle, action: crate::manga::session::ClockAction) -> Option<crate::manga::session::MangaClock> {
+    crate::manga::session::clock_action(&app, action)
+}
+
+/// The session's time, edited by hand in the clock menu (seconds).
+#[tauri::command]
+pub fn manga_clock_set_elapsed(app: AppHandle, secs: u64) -> CmdResult<()> {
+    crate::manga::session::set_elapsed(&app, secs)
+}
+
+/// The reader's clock now (`null` with no volume open).
+#[tauri::command]
+pub fn manga_clock_state(app: AppHandle) -> Option<crate::manga::session::MangaClock> {
+    crate::manga::session::clock_state(&app)
 }
 
 /// What the reader window should show. Peeked, not taken: a reload of the

@@ -3,10 +3,8 @@
   "submit": "Log",
   "type": "Type",
   "mediaTitle": "Work or activity",
-  "mediaTitleHint": "Search for a work or enter a title.",
   "mediaTitlePlaceholder": "What did you read or watch?",
   "comment": "Comment (optional)",
-  "commentHint": "Add a note about this session.",
   "commentPlaceholder": "How was it? What did you cover?",
   "linked": "Linked media",
   "unlink": "Unlink",
@@ -22,5 +20,5 @@
   },
   "search": "Search media",
   "date": "Date",
-  "dateHint": "When it happened, in your local time."
+  "dateHint": "Local time."
 }

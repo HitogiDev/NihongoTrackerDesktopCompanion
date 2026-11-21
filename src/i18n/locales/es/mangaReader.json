@@ -20,7 +20,10 @@
     "direction": "Dirección",
     "fit": "Ajuste",
     "background": "Fondo",
-    "textLayer": "Texto"
+    "textLayer": "Texto",
+    "transition": "Paso de página",
+    "swipe": "Deslizar para pasar (% del ancho)",
+    "swipeOff": "0 = desactivado"
   },
   "layout": {
     "single": "Una",
@@ -43,8 +46,14 @@
     "gray": "Gris",
     "paper": "Papel"
   },
+  "transition": {
+    "curl": "Doblar",
+    "slide": "Deslizar",
+    "none": "Ninguno"
+  },
   "text": {
     "hover": "Al pasar",
+    "invisible": "Solo búsqueda",
     "always": "Siempre",
     "hidden": "Oculto",
     "toggle": "Texto: {{mode}}",
@@ -69,7 +78,8 @@
     "pagesHint": "Páginas leídas por primera vez en esta sesión",
     "chars": "{{count, number}} car.",
     "endedPending": "Sesión de {{title}} terminada: confírmala en Pendientes",
-    "endedLogged": "Sesión de {{title}} registrada"
+    "endedLogged": "Sesión de {{title}} registrada",
+    "pausedStopped": "En pausa: detenido por ti"
   },
   "mine": {
     "done": "Minado, con la viñeta como imagen",
@@ -128,11 +138,11 @@
       "firstLast": "Primera o última página",
       "turnByClick": "Pasar página",
       "turnByWheel": "Pasar página (ajuste al alto)",
-      "showControls": "Mostrar u ocultar los controles",
+      "hideControls": "Ocultar los controles hasta el siguiente doble clic",
       "scrollStep": "Desplazar un poco",
       "scrollScreen": "Bajar una pantalla",
       "scrollScreenBack": "Subir una pantalla",
-      "textLayer": "Capa de texto: al pasar, siempre, oculta",
+      "textLayer": "Capa de texto: al pasar, solo búsqueda, siempre, oculta",
       "lookUp": "Buscar una palabra",
       "nextBlock": "Bloque siguiente o anterior",
       "blockArrows": "Moverse entre bloques (con uno enfocado)",
@@ -154,16 +164,23 @@
       "palette": "Paleta de comandos",
       "quickLog": "Registrar a mano",
       "texthooker": "Texthooker",
-      "settings": "Ajustes"
+      "settings": "Ajustes",
+      "zoom": "Acercar o alejar",
+      "pan": "Mover una página ampliada",
+      "resetZoom": "Volver a la página entera",
+      "swipe": "Pasar página"
     },
     "mouse": {
       "clickSidesRtl": "Clic en el tercio izquierdo o derecho",
       "clickSidesLtr": "Clic en el tercio izquierdo o derecho",
       "wheel": "Rueda del ratón",
-      "clickMiddle": "Clic en el centro",
-      "click": "Clic en la página",
+      "doubleClickMiddle": "Doble clic en el centro",
+      "doubleClick": "Doble clic en la página",
       "hoverModifier": "Mayús o Alt sobre el texto",
-      "drag": "Arrastrar sobre la página"
+      "drag": "Arrastrar sobre la página",
+      "ctrlWheel": "Ctrl + rueda, o pellizcar",
+      "ctrlDrag": "Ctrl + arrastrar, o desplazar ya ampliada",
+      "swipe": "Deslizar de lado (dedo, ratón o dos dedos en el touchpad)"
     },
     "key": {
       "Space": "Espacio",
@@ -178,5 +195,32 @@
       "Delete": "Supr",
       "Backspace": "Retroceso"
     }
+  },
+  "clock": {
+    "title": "Cronómetro de lectura",
+    "menu": "Cronómetro de lectura: {{status}}",
+    "running": "Contando",
+    "stopped": "Detenido: inícialo para volver a contar",
+    "waiting": "Arranca cuando leas",
+    "startsIn": "Arranca tras {{count}} s leyendo",
+    "off": "Sin iniciar: el arranque automático está desactivado",
+    "start": "Iniciar",
+    "stop": "Detener",
+    "finish": "Terminar y registrar",
+    "finishHint": "Termina la sesión ahora y la registra.",
+    "editTime": "Editar el tiempo",
+    "saveTime": "Guardar",
+    "cancelTime": "Cancelar",
+    "timeHint": "h:mm:ss, mm:ss o minutos",
+    "timeInvalid": "No es un tiempo: usa h:mm:ss, mm:ss o minutos, hasta 24 h."
+  },
+  "volumeNav": {
+    "previous": "Tomo anterior: {{volume}}",
+    "next": "Tomo siguiente: {{volume}}",
+    "none": "No hay tomo en esta dirección"
+  },
+  "zoom": {
+    "level": "{{percent}} %",
+    "reset": "Ajustar"
   }
 }

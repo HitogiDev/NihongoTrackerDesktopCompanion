@@ -44,7 +44,15 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'firstLast', keys: [['Home'], ['End']] },
       { label: 'turnByClick', keys: [], mouse: rtl ? 'clickSidesRtl' : 'clickSidesLtr' },
       { label: 'turnByWheel', keys: [], mouse: 'wheel' },
-      { label: 'showControls', keys: [], mouse: 'clickMiddle' },
+      // useSwipe.
+      { label: 'swipe', keys: [], mouse: 'swipe' },
+      { label: 'hideControls', keys: [], mouse: 'doubleClickMiddle' },
+      // useZoomPan and the reader's onKey.
+      { label: 'zoom', keys: [], mouse: 'ctrlWheel' },
+      { label: 'zoom', keys: [[mod, '+'], [mod, '-']] },
+      { label: 'pan', keys: [], mouse: 'ctrlDrag' },
+      { label: 'pan', keys: [[mod, '←'], [mod, '→'], [mod, '↑'], [mod, '↓']] },
+      { label: 'resetZoom', keys: [[mod, '0']] },
     ],
   };
   const strip: ShortcutGroup = {
@@ -55,7 +63,7 @@ export function readerShortcuts(direction: ReadingDirection, layout: ReaderLayou
       { label: 'scrollScreen', keys: [['Space'], ['PgDn']] },
       { label: 'scrollScreenBack', keys: [['Shift', 'Space'], ['PgUp']] },
       { label: 'firstLast', keys: [['Home'], ['End']] },
-      { label: 'showControls', keys: [], mouse: 'click' },
+      { label: 'hideControls', keys: [], mouse: 'doubleClick' },
     ],
   };
   const text: ShortcutGroup = {

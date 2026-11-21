@@ -17,6 +17,7 @@ import type {
   MediaMatch,
   MangaLibrary,
   MangaLinkSuggestion,
+  MangaClock,
   MangaSession,
   MangaSeriesDetail,
   MangaSource,
@@ -287,10 +288,17 @@ export const ipc = {
   mangaDismissSuggestion: (seriesId: string) => invoke<void>('manga_dismiss_suggestion', { seriesId }),
   mangaSuggestPriority: (seriesIds: string[]) => invoke<void>('manga_suggest_priority', { seriesIds }),
   mangaSetInLibrary: (seriesIds: string[], inLibrary: boolean) => invoke<void>('manga_set_in_library', { seriesIds, inLibrary }),
+  mangaHideContinue: (seriesId: string) => invoke<void>('manga_hide_continue', { seriesId }),
+  clipboardText: () => invoke<string | null>('clipboard_text'),
   mangaLinkSeries: (seriesId: string, mediaId: string | null, mediaTitle?: string, isAdult = false) =>
     invoke<void>('manga_link_series', { seriesId, mediaId, mediaTitle, isAdult }),
   /** Opens (or focuses) the reader window on a volume. */
   mangaOpenReader: (volumeId: string, page?: number) => invoke<void>('manga_open_reader', { volumeId, page }),
+  /** The reader's clock menu: start, stop, or end the session now and log it. */
+  mangaClockAction: (action: 'start' | 'stop' | 'finish') => invoke<MangaClock | null>('manga_clock_action', { action }),
+  mangaClockState: () => invoke<MangaClock | null>('manga_clock_state'),
+  /** The session's time, edited by hand (seconds; a session starts if there is none). */
+  mangaClockSetElapsed: (secs: number) => invoke<void>('manga_clock_set_elapsed', { secs }),
   /** The reader window asks what to show once its page loads. */
   mangaReaderTarget: () => invoke<ReaderTarget | null>('manga_reader_target'),
   mangaReaderVolume: (volumeId: string) => invoke<ReaderVolume | null>('manga_reader_volume', { volumeId }),
@@ -409,6 +417,8 @@ export const events = {
   mangaSession: 'manga://session',
   /** A reading session ended (`MangaSessionEnded`). */
   mangaSessionEnded: 'manga://session-ended',
+  /** The reader's clock (`MangaClock | null`) whenever it changes. */
+  mangaClock: 'manga://clock',
   /** `OcrStatus`: the built-in OCR's engine or a volume run changed. */
   mangaOcrStatus: 'manga://ocr-status',
   /** `OcrPage`: a page got text from the OCR (or could not be read). */

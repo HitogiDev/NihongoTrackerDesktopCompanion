@@ -515,7 +515,7 @@ export function SettingsPanel({
           ) : null}
 
           {roomMode === 'host' && inviteLink ? (
-            <Field label={t('room.inviteLink')} hint={t('room.inviteHint')}>
+            <Field label={t('room.inviteLink')}>
               {(id) => (
                 <div className="flex gap-2">
                   <input

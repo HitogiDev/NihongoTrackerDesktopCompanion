@@ -9,10 +9,26 @@ const SCHEME = 'manga';
 export const mangaUrl = {
   page: (volumeId: string, page: number) => convertFileSrc(`page/${volumeId}/${page}`, SCHEME),
   thumb: (volumeId: string, page: number) => convertFileSrc(`thumb/${volumeId}/${page}`, SCHEME),
+  /**
+   * The reader's page strip: a thumbnail, except for a page of a volume on a
+   * server that is not here yet, which comes as it is (no download only to
+   * shrink it).
+   */
+  strip: (volumeId: string, page: number) => convertFileSrc(`strip/${volumeId}/${page}`, SCHEME),
   cover: (seriesId: string) => convertFileSrc(`cover/${seriesId}`, SCHEME),
   /** An image of the extensions server, by the token Rust gave for it. */
   ext: (token: string) => convertFileSrc(`ext/${token}`, SCHEME),
 };
+
+/**
+ * A volume whose pages come from a server (WebDAV or an extension), like
+ * Rust's `store::is_served_format`. A thumbnail of one costs the whole page
+ * from the server, so the reader's strip (`mangaUrl.strip`) only gets one
+ * when the page is here already.
+ */
+export function isServedFormat(format: string): boolean {
+  return format === 'remote-archive' || format === 'remote-folder' || format === 'suwayomi-chapter';
+}
 
 /** The i18n key for an error code Rust sends back, if it is one of ours. */
 export function mangaErrorKey(error: unknown): string | null {

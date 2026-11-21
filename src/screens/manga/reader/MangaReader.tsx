@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
-import { BookX, EyeOff, Loader2, PencilLine, ScanText, Type } from 'lucide-react';
+import { BookX, EyeOff, Loader2, PencilLine, ScanSearch, ScanText, Type } from 'lucide-react';
 import { DictionaryPopup } from '../../../components/DictionaryPopup';
 import { useDictionaryHover } from '../../../hooks/useDictionaryHover';
 import { useAppStore } from '../../../store/useAppStore';
@@ -27,8 +27,12 @@ import { BACKGROUND_CLASS } from './styles';
 import { TextLayer, type HoveredBlock } from './TextLayer';
 import { blockText } from './blockGeometry';
 import { useAutoHide } from './useAutoHide';
-import { useMangaSession } from '../useMangaSession';
-import { SessionIndicator } from './SessionIndicator';
+import { ClockMenu } from './ClockMenu';
+import { KEY_STEP, useZoomPan } from './useZoomPan';
+import { arrowPan } from './zoom';
+import { createTurnController } from './turnController';
+import { useSwipe } from './useSwipe';
+import { ZoomBadge } from './ZoomBadge';
 import { VerticalStrip, type StripHandle } from './VerticalStrip';
 import { openVolume } from '../useMangaLibrary';
 
@@ -38,8 +42,10 @@ const SAVE_DELAY_MS = 600;
 const WHEEL_GAP_MS = 280;
 /** Wider than this (width / height) is a two-page scan that stands alone. */
 const WIDE_RATIO = 1.15;
-const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'always', always: 'hidden', hidden: 'hover' };
-const TEXT_MODE_ICON = { hover: ScanText, always: Type, hidden: EyeOff } as const;
+/** The most pages the reader preloads, whatever the setting says. */
+const MAX_PRELOAD = 50;
+const NEXT_TEXT_MODE: Record<TextLayerMode, TextLayerMode> = { hover: 'invisible', invisible: 'always', always: 'hidden', hidden: 'hover' };
+const TEXT_MODE_ICON = { hover: ScanText, invisible: ScanSearch, always: Type, hidden: EyeOff } as const;
 
 function useViewport(): Size {
   const [size, setSize] = useState<Size>({ width: window.innerWidth, height: window.innerHeight });
@@ -132,7 +138,7 @@ function Reader({ target }: { target: ReaderTarget }) {
 
 function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: number }) {
   const { t, i18n } = useTranslation(['mangaReader', 'mining']);
-  const { series, volume, next: nextVolume } = data;
+  const { series, volume, previous: previousVolume, next: nextVolume } = data;
   const count = Number(volume.page_count);
   const viewport = useViewport();
   const chrome = useAutoHide();
@@ -145,6 +151,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [atEnd, setAtEnd] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [clockOpen, setClockOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [natural, setNatural] = useState<Record<number, Size>>({});
   const vertical = prefs.layout === 'vertical';
@@ -264,6 +271,14 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
   const [ocrPending, setOcrPending] = useState<Set<number>>(() => new Set());
   const asked = useRef(new Set<number>());
   const shownPages = useMemo(() => (atEnd ? [] : vertical ? [page] : spread), [atEnd, vertical, page, spread]);
+
+  // ── zoom and pan (paged layouts) ───────────────────────────────────
+  const readerRoot = useRef<HTMLDivElement>(null);
+  const zoomLayer = useRef<HTMLDivElement>(null);
+  const zoom = useZoomPan(readerRoot, zoomLayer, {
+    enabled: !vertical && !atEnd,
+    resetKey: `${volume.id}:${spread.join('-')}:${prefs.layout}:${prefs.fit}`,
+  });
   const textLoaded = textQuery.isSuccess;
   const missing = useCallback((index: number) => textLoaded && index >= 0 && index < count && !text[index], [count, text, textLoaded]);
   const readPages = useCallback((visible: number[], ahead: number[]) => {
@@ -395,9 +410,9 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   // ── counting ───────────────────────────────────────────────────────
   // Rust times the pages and counts them (`manga::session`); the reader only
-  // says which ones are on screen.
-  const session = useMangaSession();
-  const ownSession = session?.volume_id === volume.id ? session : null;
+  // says which ones are on screen. The session itself (its clock changes
+  // every second) is read by `ClockMenu` alone, so the pages do not render
+  // again with it.
   const [tracked, setTracked] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -449,17 +464,42 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     if (atEnd) setAtEnd(false);
     else goSpread(spreadIndex - 1);
   }, [atEnd, goSpread, spreadIndex]);
+  // ── page turns: transition and swipe ───────────────────────────────
+  const turns = useMemo(createTurnController, []);
+  const swipe = useSwipe(readerRoot, {
+    enabled: !vertical && !editing,
+    threshold: prefs.swipe_threshold,
+    transition: prefs.transition,
+    direction: prefs.direction,
+    textSelectable: prefs.text_layer === 'hover' || prefs.text_layer === 'always',
+    isZoomed: () => zoom.getScale() > 1.01,
+    current: () => (atEnd ? [] : spread),
+    // The end card has no pages to turn to: that turn just happens.
+    neighbour: (forward) => (atEnd ? null : spreads[spreadIndex + (forward ? 1 : -1)] ?? null),
+    onTurn: (forward) => (forward ? goNext() : goPrevious()),
+    turns,
+  });
+
   const seek = useCallback((target: number) => {
     setAtEnd(false);
     setPage(target);
     if (vertical) strip.current?.scrollToPage(target);
   }, [vertical]);
 
-  // Decode the spreads around this one before they are needed.
+  // Load and decode the pages ahead (`manga_preload_pages`) and the spread
+  // before, in either layout. Images that fell out of that window are let
+  // go: the bytes stay in Rust's caches, the decoded pixels do not pile up.
+  const preloadCount = useAppStore((s) => Math.max(0, Math.min(MAX_PRELOAD, Number(s.settings?.manga_preload_pages ?? 4))));
   const preloaded = useRef(new Map<number, HTMLImageElement>());
   useEffect(() => {
-    if (vertical) return;
-    for (const index of preloadPages(spreads, spreadIndex)) {
+    const wanted = vertical
+      ? preloadPages(Array.from({ length: count }, (_, index) => [index]), page, preloadCount)
+      : preloadPages(spreads, spreadIndex, preloadCount);
+    const keep = new Set(wanted);
+    for (const index of preloaded.current.keys()) {
+      if (!keep.has(index)) preloaded.current.delete(index);
+    }
+    for (const index of wanted) {
       if (preloaded.current.has(index)) continue;
       const image = new Image();
       image.decoding = 'async';
@@ -469,7 +509,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         .then(() => rememberSize(index, { width: image.naturalWidth, height: image.naturalHeight }))
         .catch(() => preloaded.current.delete(index));
     }
-  }, [spreads, spreadIndex, vertical, volume.id, rememberSize]);
+  }, [spreads, spreadIndex, vertical, page, count, preloadCount, volume.id, rememberSize]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -477,11 +517,29 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
       if (isSheetKey(event)) {
         event.preventDefault();
         setShortcutsOpen((open) => !open);
+        setSettingsOpen(false);
         return;
       }
       if (shortcutsOpen) return;
       const element = event.target as HTMLElement | null;
       if (element?.closest('input, textarea, select, [role="dialog"] button')) return;
+      // Ctrl+0 / Ctrl+= / Ctrl+-: zoom of the paged reader.
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !vertical) {
+        const step = event.key === '0' ? 0 : event.key === '=' || event.key === '+' ? KEY_STEP : event.key === '-' ? 1 / KEY_STEP : null;
+        if (step !== null) {
+          event.preventDefault();
+          if (step === 0) zoom.reset();
+          else zoom.zoomBy(step);
+          return;
+        }
+        // Ctrl+arrows move a zoomed page (held down, they keep moving it).
+        const pan = zoom.zoomed && !event.shiftKey ? arrowPan(event.key, { width: window.innerWidth, height: window.innerHeight }) : null;
+        if (pan) {
+          event.preventDefault();
+          zoom.panStep(pan.dx, pan.dy);
+          return;
+        }
+      }
       // Ctrl+C with nothing selected copies the block under the pointer: it
       // is selected for the copy (no clipboard permission needed in any
       // webview) and the `copy` handler below writes its lines joined.
@@ -572,7 +630,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text]);
+  }, [shortcutsOpen, focusedBlock, lineContext, count, dictionary, fullscreen, goNext, mineBlock, selectForCopy, goPrevious, goSpread, hasText, prefs.direction, prefs.layout, prefs.text_layer, seek, settingsOpen, spreads.length, t, toggleFullscreen, vertical, editing, selection, drafts, text, zoom.reset, zoom.zoomBy, zoom.panStep, zoom.zoomed]);
 
   const lastWheel = useRef(0);
   const onWheel = (event: ReactWheelEvent) => {
@@ -586,23 +644,77 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
     else goPrevious();
   };
 
+  // A block of text keeps its clicks (to select it), unless the text layer is
+  // invisible: there is nothing to see or select, only the page under it.
+  const onPage = (event: ReactMouseEvent) =>
+    !(event.target as HTMLElement).closest(
+      prefs.text_layer === 'invisible'
+        ? '[data-reader-chrome], [data-edit-layer], dialog, [role="dialog"]'
+        : '[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]',
+    );
+
+  // The dictionary closes on a press outside it (DictionaryPopup); the click
+  // that follows only closed it, it does not turn the page.
+  const closedDictionary = useRef(false);
+  // The layout panel closes on a press anywhere else, like the clock menu
+  // (its own button toggles it). A click on the page that closes it does not
+  // also turn the page.
+  const settingsPanel = useRef<HTMLDivElement>(null);
+  const closedSettings = useRef(false);
+  const outsideSettings = (target: EventTarget | null) => {
+    const element = target as Element | null;
+    return !settingsPanel.current?.contains(element) && !element?.closest?.('[data-settings-toggle]');
+  };
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const outside = (event: PointerEvent) => {
+      if (outsideSettings(event.target)) setSettingsOpen(false);
+    };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [settingsOpen]);
+  const onPointerDownCapture = (event: ReactPointerEvent) => {
+    closedSettings.current = settingsOpen && outsideSettings(event.target);
+    closedDictionary.current = Boolean(dictionary.dictionaryRequest)
+      && !(event.target as HTMLElement).closest('[role="dialog"]');
+  };
+
   const onClick = (event: ReactMouseEvent) => {
-    const element = event.target as HTMLElement;
-    if (element.closest('[data-reader-chrome], [data-text-block], [data-edit-layer], dialog, [role="dialog"]')) return;
-    if (settingsOpen) {
-      setSettingsOpen(false);
+    // A Ctrl+click or the end of a Ctrl+drag belongs to the pan.
+    if (zoom.consumeClick()) return;
+    // The end of a swipe: it turned the page already, or put it back.
+    if (swipe.consumeClick()) return;
+    if (closedDictionary.current) {
+      closedDictionary.current = false;
       return;
     }
+    if (closedSettings.current) {
+      closedSettings.current = false;
+      return;
+    }
+    if (!onPage(event)) return;
     if (window.getSelection()?.toString()) return;
-    const action = vertical ? 'toggle' : clickAction(event.clientX, window.innerWidth, prefs.direction);
+    if (vertical) return;
+    const action = clickAction(event.clientX, window.innerWidth, prefs.direction);
     if (action === 'next') goNext();
     else if (action === 'previous') goPrevious();
-    else chrome.toggle();
+  };
+
+  // A double click in the middle (anywhere on the strip) hides the controls
+  // until the next one: a single click would bring them back at the next
+  // move of the mouse.
+  const onDoubleClick = (event: ReactMouseEvent) => {
+    if (!onPage(event) || settingsOpen || event.ctrlKey) return;
+    if (!vertical && clickAction(event.clientX, window.innerWidth, prefs.direction) !== 'middle') return;
+    // A double click also selects the word under it.
+    window.getSelection()?.removeAllRanges();
+    chrome.toggleLock();
   };
 
   const { pin } = chrome;
   useEffect(() => { pin('settings', settingsOpen); }, [pin, settingsOpen]);
   useEffect(() => { pin('shortcuts', shortcutsOpen); }, [pin, shortcutsOpen]);
+  useEffect(() => { pin('clock', clockOpen); }, [pin, clockOpen]);
   const shortcutGroups = useMemo(() => readerShortcuts(prefs.direction, prefs.layout), [prefs.direction, prefs.layout]);
 
   const overlay = editing
@@ -651,8 +763,13 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${chrome.visible || settingsOpen ? '' : 'cursor-none'} ${fadeIn ? 'manga-reader-in' : ''}`}
+      ref={readerRoot}
+      className={`fixed inset-0 overflow-hidden ${BACKGROUND_CLASS[prefs.background]} ${zoom.cursor === 'grabbing' ? 'cursor-grabbing' : zoom.cursor === 'grab' ? 'cursor-grab' : chrome.cursorHidden && !settingsOpen ? 'cursor-none' : ''} ${fadeIn ? 'manga-reader-in' : ''}`}
+      // A finger sideways is a swipe (useSwipe), not the webview's own gesture.
+      style={vertical ? undefined : { touchAction: prefs.fit === 'height' ? 'none' : 'pan-y' }}
+      onPointerDownCapture={onPointerDownCapture}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onWheel={onWheel}
     >
       {vertical ? (
@@ -669,20 +786,28 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
           overlay={overlay}
         />
       ) : (
-        <PagedView
-          volumeId={volume.id}
-          spread={spread}
-          direction={prefs.direction}
-          fit={prefs.fit}
-          viewport={viewport}
-          sizeOf={sizeOf}
-          onNaturalSize={rememberSize}
-          overlay={overlay}
-        />
+        // The zoom's layer: the pages and their text scale together.
+        <div ref={zoomLayer} className="absolute inset-0">
+          <PagedView
+            volumeId={volume.id}
+            spread={spread}
+            direction={prefs.direction}
+            fit={prefs.fit}
+            viewport={viewport}
+            sizeOf={sizeOf}
+            onNaturalSize={rememberSize}
+            overlay={overlay}
+            transition={prefs.transition}
+            turns={turns}
+            turnKey={`${volume.id}:${prefs.layout}:${prefs.cover_alone}:${prefs.fit}`}
+            backgroundClass={BACKGROUND_CLASS[prefs.background]}
+          />
+        </div>
       )}
+      {zoom.zoomed && (chrome.visible || settingsOpen) ? <ZoomBadge zoom={zoom} /> : null}
 
       <TopBar
-        visible={chrome.visible || settingsOpen}
+        visible={chrome.visible || settingsOpen || clockOpen}
         title={series.title}
         subtitle={volume.title}
         fullscreen={fullscreen}
@@ -694,7 +819,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         onHover={(hovering) => chrome.pin('top', hovering)}
         onFocusWithin={(inside) => chrome.pin('top-focus', inside)}
         extra={<>
-          {ownSession ? <SessionIndicator session={ownSession} /> : null}
+          <ClockMenu volumeId={volume.id} onOpenChange={setClockOpen} />
           {readingShown ? (
             <span className="badge badge-soft badge-primary gap-1.5" role="status">
               <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
@@ -777,7 +902,7 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         />
       ) : null}
       <OcrInstallModal />
-      {settingsOpen ? <SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /> : null}
+      {settingsOpen ? <div ref={settingsPanel}><SettingsPanel prefs={prefs} onChange={updatePrefs} hasText={hasText} onShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }} /></div> : null}
       <ShortcutsSheet
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
@@ -792,6 +917,11 @@ function ReaderView({ data, initialPage }: { data: ReaderVolume; initialPage: nu
         pageLabel={pageLabel}
         pageCount={count}
         direction={prefs.direction}
+        previousVolume={previousVolume}
+        nextVolume={nextVolume}
+        // Where the user left off in it (the page is saved on the way out).
+        onPreviousVolume={() => { if (previousVolume) void openVolume(previousVolume.id); }}
+        onNextVolume={() => { if (nextVolume) void openVolume(nextVolume.id); }}
         onSeek={seek}
         onHover={(hovering) => chrome.pin('bottom', hovering)}
         onFocusWithin={(inside) => chrome.pin('bottom-focus', inside)}

@@ -356,10 +356,11 @@ textarea,
 
 /* The text layer (TextLayer.tsx): real text in mokuro's boxes. Transparent
    until hovered in "hover" mode, always shown in "always". */
+/* Spacing as in mokuro's reader, so each line sits on its column of the page. */
 .manga-text-layer .manga-block {
   position: absolute;
   font-family: var(--font-jp);
-  line-height: 1.15;
+  line-height: 1.1em;
   white-space: nowrap;
   color: transparent;
   border-radius: 0.2em;
@@ -371,6 +372,15 @@ textarea,
 }
 .manga-text-layer .manga-line {
   display: block;
+  letter-spacing: 0.1em;
+  line-height: 1.1em;
+}
+/* Lines with their own place on the page (linePlacements): left, top and
+   size come inline; the text starts at the line's top (right edge when
+   vertical) and a longer one spills past its end rather than wrapping. */
+.manga-text-layer .manga-block-placed .manga-line {
+  position: absolute;
+  overflow: visible;
 }
 .manga-text-layer[data-mode='hover'] .manga-block:hover,
 .manga-text-layer[data-mode='hover'] .manga-block:focus-visible,
@@ -381,10 +391,28 @@ textarea,
   /* Room around the glyphs, not an elevation. */
   box-shadow: 0 0 0 0.3em rgb(255 255 255 / 0.96);
 }
+/* A line longer than its box spills out (mokuro's size wins over the box):
+   it keeps its own paper so it can still be read. */
+.manga-text-layer[data-mode='hover'] .manga-block:hover .manga-line,
+.manga-text-layer[data-mode='hover'] .manga-block:focus-visible .manga-line,
+.manga-text-layer[data-mode='hover'] .manga-block:has(:focus-visible) .manga-line,
+.manga-text-layer[data-mode='always'] .manga-line {
+  background-color: rgb(255 255 255 / 0.96);
+}
 /* Where the pointer is: the block that a lookup or Ctrl+C would use. */
-.manga-text-layer:not([data-mode='hidden']) .manga-block:hover {
+.manga-text-layer:not([data-mode='hidden'], [data-mode='invisible']) .manga-block:hover {
   outline: 2px solid color-mix(in oklch, var(--color-primary) 60%, transparent);
   outline-offset: 0.3em;
+}
+/* Invisible: the blocks are there for Shift/Alt lookups and Ctrl+C / Ctrl+M,
+   but nothing shows on hover, not even the cursor or the copy / mine bar.
+   Reached from the keyboard they still show where focus is. */
+.manga-text-layer[data-mode='invisible'] .manga-block {
+  cursor: inherit;
+}
+.manga-text-layer[data-mode='invisible'] .manga-block:hover:not(:focus-visible, :has(:focus-visible)) > .manga-block-actions {
+  opacity: 0;
+  pointer-events: none;
 }
 /* Reached with Tab or the arrows: the app's focus ring, around the padding. */
 .manga-text-layer .manga-block:focus-visible {

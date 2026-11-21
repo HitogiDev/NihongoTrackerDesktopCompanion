@@ -30,7 +30,7 @@ export function AnkiSection({ settings }: { settings: Settings }) {
         <Field label={t('anki.deck')}>
           {(id) => <input id={id} className="input w-full" value={settings.anki_deck} onChange={(e) => void updateSettings({ anki_deck: e.target.value })} />}
         </Field>
-        <Field label={t('anki.noteType')} hint={t('anki.noteTypeHint')}>
+        <Field label={t('anki.noteType')}>
           {(id) => <select id={id} className="select w-full" value={settings.anki_model} onChange={(e) => void updateSettings({ anki_model: e.target.value, anki_field_sources: {} })}>
             {(ankiModels.data ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
             {!(ankiModels.data ?? []).includes(settings.anki_model) ? <option value={settings.anki_model}>{settings.anki_model}</option> : null}

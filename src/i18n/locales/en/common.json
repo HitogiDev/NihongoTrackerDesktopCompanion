@@ -8,7 +8,7 @@
     "install": "Install and restart",
     "installing": "Updating… {{percent}}%",
     "download": "Download from GitHub",
-    "manualHint": "This copy was installed by your package manager, so it cannot replace itself. Download the new package from GitHub.",
+    "manualHint": "Installed by your package manager: download the new package from GitHub.",
     "check": "Check now",
     "checking": "Checking…",
     "notes": "What's new",
@@ -16,7 +16,7 @@
     "checkFailed": "Could not check for updates: {{message}}",
     "installFailed": "The update could not be installed: {{message}}",
     "auto": "Check for updates automatically",
-    "autoHint": "On start and every 6 hours. Nothing is installed until you confirm it."
+    "autoHint": "Nothing is installed until you confirm."
   },
   "openInWeb": "Open in NihongoTracker",
   "cancel": "Cancel",
@@ -31,7 +31,11 @@
   "retry": "Retry",
   "add": "Add",
   "back": "Back",
-  "patreonTiers": { "consumer": "Consumer", "donator": "Donator", "enthusiast": "Enthusiast" },
+  "patreonTiers": {
+    "consumer": "Consumer",
+    "donator": "Donator",
+    "enthusiast": "Enthusiast"
+  },
   "none": "—",
   "minutesShort": "{{count}} min",
   "pagesShort": "{{count}} pages",
@@ -75,5 +79,12 @@
     "placeholder": "Title in romaji, English or Japanese…",
     "noResults": "No results.",
     "adult": "18+"
+  },
+  "textMenu": {
+    "label": "Text",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select all"
   }
 }

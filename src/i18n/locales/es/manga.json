@@ -13,7 +13,11 @@
     "title": "Seguir leyendo",
     "upNext": "Siguiente",
     "page": "p. {{page}} / {{count, number}}",
-    "open": "{{title}} — {{volume}}"
+    "open": "{{title}} — {{volume}}",
+    "goToSeries": "Ir a la serie",
+    "hide": "Quitar de Seguir leyendo",
+    "hidden": "{{title}} quitada de Seguir leyendo",
+    "hideFailed": "No se pudo quitar: {{message}}"
   },
   "grid": {
     "volumes_one": "{{count, number}} tomo",
@@ -336,9 +340,9 @@
     },
     "mode": {
       "managed": "Gestionado",
-      "managedHint": "La app descarga Suwayomi-Server y Java, lo arranca solo mientras usas extensiones y lo para al cerrar la app.",
+      "managedHint": "Descarga Suwayomi-Server y Java, y solo los ejecuta mientras usas extensiones.",
       "custom": "URL propia",
-      "customHint": "Un Suwayomi-Server que ya tienes, en este equipo o en tu red.",
+      "customHint": "Un Suwayomi-Server que ya ejecutas.",
       "recommended": "Recomendado"
     },
     "install": {
@@ -543,7 +547,8 @@
     "extensions": "Extensiones",
     "openExtensions": "Explorar extensiones",
     "extSettings": "Ajustes de extensiones…",
-    "readerSettings": "Ajustes del lector de manga…"
+    "readerSettings": "Ajustes del lector de manga…",
+    "card": "Opciones de {{title}}"
   },
   "view": {
     "sortLabel": "Ordenar series",

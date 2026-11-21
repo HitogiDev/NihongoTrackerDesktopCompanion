@@ -3,4 +3,4 @@
 /**
  * Why the clock is stopped.
  */
-export type MangaPause = "unfocused" | "idle";
+export type MangaPause = "unfocused" | "idle" | "stopped";

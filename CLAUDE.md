@@ -116,6 +116,15 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   destruye. El overlay de lectura y su popup se crean la primera vez que se
   quieren para una VN y viven hasta el cierre: las ventanas de ajustes son
   hijas del popup y morirían con él.
+- Ajustes (`settings`), los ajustes del overlay de lectura y el lector de
+  manga **se cierran de verdad** al pulsar la X: oculta, una webview conserva
+  su renderer (entre 70 y 90 MB medidos) y no guardan nada que merezca
+  conservarlas. `settings_closed` va en `WindowEvent::Destroyed`, que también
+  llega cuando muere con el popup. Un campo numérico con un guardado
+  pendiente lo hace al desmontarse (`NumberSetting`). Solo el texthooker se
+  oculta (guarda líneas y cronómetro), y `main` se oculta en la bandeja.
+  **Solo los ajustes del overlay de lectura** van siempre encima, para verse
+  sobre su diccionario; Ajustes es una ventana normal.
 - El estado del overlay de lectura (`reading_overlay::Runtime`, en `AppState`)
   existe aunque sus ventanas no: la última línea y el hook nativo de la obra
   (`OverlayState::hook`, por `content_id`, venga de donde venga la selección)
@@ -138,8 +147,17 @@ Cada webview es un proceso de renderizado, así que solo existen cuando hacen fa
   sidebar en Windows 11 (`data-vibrancy` en `<html>`; sin él no cambia nada).
 - Cada pantalla es un chunk (`React.lazy` en `App.tsx`): todas las ventanas
   cargan el mismo bundle.
-- En producción `src/lib/desktop.ts` anula los atajos y el menú contextual del
-  navegador. Los atajos de la app (Ctrl/⌘+1…7, `,`, `L`, `T`) viven en `Sidebar`.
+- `src/lib/desktop.ts` anula **siempre** el menú contextual del webview,
+  también en campos de texto (en desarrollo trae "Inspeccionar"; Mayús+clic
+  derecho lo deja salir solo en desarrollo), y en producción sus atajos. El
+  clic derecho es el menú de la app: `useContextMenu` en lo que tiene uno
+  (`components/ContextMenu.tsx`: flechas, Esc, tecla de menú o Mayús+F10) y
+  `TextMenu` (montado una vez en `main.tsx`, para todas las ventanas) en
+  campos, `contenteditable` y `.selectable`: Cortar, Copiar, Pegar y
+  Seleccionar todo, con `execCommand` para que el campo reciba su `input` y
+  Ctrl+Z lo deshaga. Pegar lee el portapapeles por Rust (`clipboard_text`,
+  arboard): el webview pediría permiso. Los atajos de la app
+  (Ctrl/⌘+1…7, `,`, `L`, `T`) viven en `Sidebar`.
 
 ### Actualizaciones
 
@@ -298,7 +316,8 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 
 - **El webview no lee el disco.** Páginas, miniaturas y portadas van por el
   protocolo `manga://` (`protocol.rs`, registrado en `lib.rs`):
-  `page/<volumen>/<n>`, `thumb/<volumen>/<n>`, `cover/<serie>`. Solo ids
+  `page/<volumen>/<n>`, `thumb/<volumen>/<n>`, `strip/<volumen>/<n>` (la
+  tira de páginas del lector), `cover/<serie>`. Solo ids
   opacos; el archivo sale de la base de datos, nunca de la URL. `parse` solo
   decodifica `%2F` (lo que hace `convertFileSrc`) y rechaza cualquier otro
   carácter: no añadas formas que acepten rutas. Las páginas de una carpeta se
@@ -308,7 +327,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
 - **CBZ desconfiado** (`archive.rs`): nombres con `..`, absolutos o con `:`
   no son páginas; una entrada que infla más de 50:1 (por encima de 2 MB) es
   una bomba; toda lectura corta a 64 MB diga lo que diga la cabecera. Orden
-  natural (`natural_cmp`, carpeta a carpeta) sin `__MACOSX` ni ocultos.
+  natural (`natural_cmp`, carpeta a carpeta) sin `__MACOSX` ni ocultos. Un
+  CBZ en disco (local, o remoto bajado entero) se queda abierto con su
+  directorio leído entre página y página (`read_page_at`, los últimos 4, por
+  ruta + tamaño + fecha: uno que cambia se reabre); borrar una copia sin
+  conexión los suelta antes (`close_under`).
 - **Detección** (`library.rs`): carpeta con imágenes = tomo, `.cbz`/`.zip` =
   tomo, `<Vol>.mokuro` junto a `<Vol>.cbz` o a `<Vol>/` = texto, la carpeta que
   lo contiene = serie. `<Vol>.webp` y `cover.*` son portadas, no páginas. Los
@@ -324,7 +347,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `cover-<serie>-<versión>/`: cachear una versión nueva borra las viejas
   (`thumbs::drop_other_covers`) y el reescaneo, la sincronización WebDAV y
   quitar una fuente barren las de series que ya no están
-  (`sweep_library_covers`).
+  (`sweep_library_covers`). Las portadas miden `COVER_WIDTH` = 320 px (se
+  pintan a 136–200 px; a 480 cada una decodificada ocupaba más del doble y la
+  rejilla monta 120). Cambiar el ancho deja archivos `<n>-<ancho>.jpg` viejos:
+  añade el anterior a `OLD_COVER_WIDTHS` y `sweep_library_covers` los borra
+  una vez (`kv:manga:covers:width`).
 - `.mokuro` (`mokuro.rs`) se lee con serde tolerante: campos de más se ignoran,
   de menos toman su valor por defecto. Las páginas se casan por final de ruta,
   luego por nombre sin extensión y, si no casa nada pero el número coincide,
@@ -345,7 +372,7 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `fitSpread`, en píxeles exactos, para que la capa de texto case con la imagen.
 - La lógica pura del lector está en `reader/layout.ts` y `reader/textLayer.ts`
   con sus tests: navegación por teclado según la dirección (en RTL la flecha
-  izquierda avanza), zonas de clic, precarga de ±2 dobles páginas. Las páginas
+  izquierda avanza), zonas de clic, precarga (`preloadPages`). Las páginas
   de una doble página van en el DOM en orden de lectura y una RTL se pinta con
   `flex-row-reverse`: así Tab y los lectores de pantalla llegan antes a la
   primera.
@@ -370,9 +397,88 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   qué página está arriba y a qué distancia, y la devuelve ahí cuando cambia la
   altura de las de encima. Pasar página mantiene la doble página anterior hasta
   que la nueva está decodificada (`decode()`, 250 ms como mucho) y
-  `PageImage` solo enseña imágenes decodificadas. La tira de miniaturas usa
-  `manga://thumb` y `content-visibility`; la rejilla de la biblioteca monta las
-  series de 120 en 120 (`GRID_BATCH`).
+  `PageImage` solo enseña imágenes decodificadas. La precarga
+  (`preloadPages`) son `manga_preload_pages` páginas por delante (4; Ajustes →
+  Lector de manga → Avanzado, hasta 50) más la doble página anterior, en los
+  dos modos; las que salen de esa ventana se sueltan. La tira de miniaturas
+  usa `manga://strip` y `content-visibility`. En disco es la miniatura de
+  siempre; en un tomo de servidor (`is_served_format`) **nunca se baja una
+  página solo para encogerla**: si sus bytes ya están aquí (copia sin
+  conexión o caché, `Remote::local_page_bytes`, que nunca pide nada) se hace
+  la miniatura (`thumbs::strip_path`, aparte de `thumb`, cuya 0 es la portada
+  sidecar; ETag `s`), y si no va la página tal cual (ETag `p`, la misma
+  petición que el lector precarga). La rueda la mueve en horizontal (listener
+  nativo no pasivo). La rejilla de la biblioteca monta las series de 120 en
+  120 (`GRID_BATCH`).
+- **Zoom y pan** (solo en los modos paginados; en la tira vertical Ctrl+rueda
+  no hace nada): `reader/useZoomPan.ts` sobre la matemática pura de
+  `reader/zoom.ts` (con tests). Ctrl+rueda acerca alrededor del puntero (un
+  pellizco del touchpad llega como eso mismo: una rueda con Ctrl);
+  Ctrl+arrastrar (⌘ en macOS, donde Ctrl+clic es el clic derecho) mueve; ya
+  ampliada, la rueda o dos dedos mueven en vez de pasar página; Ctrl+0 / + / -
+  desde el teclado, y Ctrl+flechas mueven una página ampliada un 20 % de
+  la ventana, animado (`arrowPan`, `panStep`; sin zoom no hacen nada). De 1× a 6×; la página nunca deja ver su borde por dentro
+  y un eje que aún cabe se queda centrado (`clampZoom`). La transformación
+  va en una capa que envuelve `PagedView` (páginas y capa de texto escalan
+  juntas) y se escribe **directamente en el DOM**, nunca como estado de
+  React: cada evento de rueda repintaría el lector. Solo `zoomed` y el cursor
+  son estado, y el porcentaje lo pinta `ZoomBadge` suscrito aparte. Los
+  listeners son nativos y no pasivos en la raíz del lector (antes que los de
+  React): así se puede impedir el zoom del webview y que la rueda pase además
+  la página. Pasar página, cambiar de disposición o de ajuste vuelve a la
+  página entera. Un Ctrl+clic nunca pasa página (`consumeClick`).
+  El zoom se **anima** hacia su objetivo (`approach`, ~70 ms de constante;
+  cada paso nuevo parte del objetivo, no del fotograma), el pan no (sigue al
+  dedo; antes remata la animación, `settle`). Medido en WebView2 (Chromium
+  157) con un touchpad de precisión en Windows: el pellizco **no** llega
+  como pellizco sino como Ctrl+rueda de ±100 cada 140–700 ms, y dos dedos
+  llegan como rueda de **un solo eje por gesto** (ni un evento con `deltaX`
+  y `deltaY` a la vez), la emulación de Windows para apps sin gestos nativos.
+  Lo del eje no se arregla desde la página (el otro eje no llega); Ctrl+
+  arrastrar sí mueve en diagonal. Para medir otro equipo:
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` al
+  lanzar `npm run tauri dev` y un listener de `wheel` por CDP.
+  `EditLayer` convierte el puntero a píxeles de la página dibujada (no de
+  pantalla) e ignora Ctrl+arrastrar.
+- **Paso de página y swipe** (solo en los modos paginados): la transición
+  (`ReaderPrefs.transition`: curl, slide o none) y la distancia del swipe
+  (`swipe_threshold`, % del ancho de la ventana, 0 = sin swipe) son globales.
+  La matemática es pura y con tests (`reader/turn.ts`: qué borde se coge
+  —en RTL, adelante es coger el borde izquierdo y llevarlo a la derecha—,
+  `spreadBoxes` y el curl). El curl gira **una hoja**, cogida por la
+  esquina más cercana a donde se pulsó (de arriba o de abajo; un clic, una
+  tecla o el touchpad, la de abajo), que sigue a la mano en las dos
+  direcciones: el pliegue es la mediatriz entre la esquina y donde está
+  ahora (`foldAt`), y la esquina no se aleja del lomo más que el ancho de la
+  hoja (`constrainCorner`). En doble página la hoja es la del lado que se
+  pasa, su lomo es el centro y **su reverso es la página nueva del otro
+  lado** (`backOf`: espejo sobre el lomo y luego sobre el pliegue, una
+  rotación, así que se lee al derecho), que acaba exactamente donde se
+  queda; debajo aparece la nueva de su lado. Si alguna de las dos dobles
+  páginas tiene una sola página, se dobla todo el pliego sobre su borde
+  lejano, y su reverso es papel blanco con la misma página al revés y
+  tenue (la hoja reflejada sobre el pliegue, al 20 %), como se transparenta.
+  Las sombras se apagan al acercarse la hoja al lomo (y al empezar): si no,
+  siguen ahí el último fotograma y desaparecen de golpe. Al soltar un curl,
+  la esquina sigue desde donde quedó (`released`, `progress` de 0 a 1 desde
+  ahí): el progreso de un swipe largo ya pasa de 1 y el resto duraría 0 ms. Un único
+  `TurnController` (fuera de React, como el zoom) dice qué giro hay en
+  pantalla; solo lo pinta `TurnLayer` dentro de `PagedView`, con imágenes y
+  sin capa de texto, opaco por encima de la vista, que debajo ya enseña la
+  doble página nueva en el mismo sitio. Un clic, una tecla o la rueda giran
+  cuando `PagedView` cambia de páginas (tras el `decode()`); un cambio de
+  tomo, disposición o ajuste (`turnKey`) no gira. `useSwipe`: dedo, lápiz o
+  ratón arrastrado de lado (el ratón no si empieza sobre un bloque de texto
+  seleccionable; la barra superior, que sale con cualquier movimiento justo
+  encima de las esquinas de arriba, también vale fuera de sus controles,
+  `data-reader-topbar`) y dos dedos en el touchpad (rueda horizontal: gira al pasar
+  el umbral, o se recoge 180 ms después del último evento); el giro sigue al
+  dedo y soltarlo antes del umbral devuelve la página. El clic que cierra un
+  swipe no pasa página (`consumeClick`). Ampliada, editando o en la tira no
+  hay swipe. Con `prefers-reduced-motion`, sin animación.
+- La sesión (`useMangaSession`) solo la lee `ClockMenu`, no `ReaderView`: su
+  reloj cambia cada segundo y no debe repintar las páginas ni volver a
+  registrar los atajos.
 - **Portadas en orden** (`screens/manga/coverQueue.ts`): una tarjeta de la
   rejilla no pide su portada hasta estar cerca de la pantalla (un único
   IntersectionObserver, 240 px de margen) y entonces espera turno en una cola
@@ -391,6 +497,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   `MangaSeries.in_library_at`; se cambia con `manga_set_in_library` (el
   marcador de la portada en Todas, que es hermano del enlace y no va dentro,
   y el botón de la ficha). Añadir una serie desde Extensiones también la mete.
+  Clic derecho en una portada: "Seguir leyendo" ofrece ir a la serie,
+  añadirla o quitarla de Mi biblioteca y quitarla de Seguir leyendo
+  (`manga_hide_continue`, tabla `manga_continue_hidden` sin clave foránea:
+  vuelve sola en cuanto se lee de nuevo, porque cuenta si el progreso es más
+  nuevo que `hidden_at`); las de las rejillas, añadir o quitar de Mi biblioteca.
   El origen (Local/WebDAV/Extensiones) es un filtro más del panel, solo si hay
   más de uno; Extensiones (tienda y explorar) se abre desde el engranaje.
 - **Cabecera de la pantalla Manga**: atajos, recargar (no en Extensiones), el
@@ -448,8 +559,16 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   primera página (`.manga-reader-in`) y otro tomo abierto en ella cruza con
   una transición si la hay.
 - **Capa de texto**: cajas escaladas desde `img_width`, `vertical-rl` si el
-  bloque es vertical, fuente ajustada a la caja (`blockFontSize`). Estilos en
-  `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
+  bloque es vertical. Como el lector de mokuro (`TextBoxes.svelte` de
+  ZXY101/legacy-mokuro-reader): la fuente es el `font_size` del bloque
+  escalado, **sin encoger para caber en la caja** (`blockFontSize`; solo un
+  bloque sin tamaño se ajusta), interlineado `1.1em`, `letter-spacing: 0.1em`,
+  caja recortada a la imagen y una línea más larga que la caja sobresale. Si
+  se ajusta a la caja, el texto queda más pequeño que el de la página y se sale
+  de sus columnas. Cada línea va además en su sitio de la página
+  (`linePlacements`, el rectángulo de sus `lines_coords`): apiladas desde el
+  borde de la caja, las columnas que empiezan a otra altura se amontonan. Sin
+  coordenadas para cada línea, fluyen desde el borde como antes. Estilos en `index.css` (`.manga-text-layer`, `data-mode`). El diccionario usa
   `src/hooks/useDictionaryHover.ts`, el mismo que el texthooker
   (`openDictionaryAt` para cualquier elemento). Ctrl+C sin selección selecciona
   el bloque y el evento `copy` escribe sus líneas unidas: no depende del
@@ -463,14 +582,45 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`session::tick`, sin red): una página cuenta tras
   `manga_page_dwell_secs` (3 s) en pantalla, con `count_japanese` de sus
   bloques, y **una sola vez** (`manga_page_read`, `INSERT OR IGNORE`). Sin
-  texto cuenta la página pero no caracteres.
-- **Cronómetro** como el de una VN: corre solo con la ventana del lector con
-  foco (`Runtime::reader_focused`, de `WindowEvent::Focused` en `lib.rs`) y
-  sin inactividad (`afk_timeout_secs`); el tiempo de permanencia de una página
-  se para con él. La sesión (`MangaSession`) viaja en `TrackerSnapshot.manga`
-  y por `manga://session`; la pintan la barra del lector (`SessionIndicator`)
-  y la tarjeta del Dashboard. La sesión no existe hasta el primer tick de
-  lectura.
+  texto cuenta la página pero no caracteres. Esa marca es lo único que se
+  escribe dentro del tick (decide la cuenta); las líneas de la página las
+  deja `step` en `Tracking::unsaved_lines` y `tick` las guarda en
+  `spawn_blocking` tras soltar el lock (`store_lines`).
+- **Cronómetro**: corre cuando está **armado** y el usuario está presente
+  (con foco si `manga_pause_on_unfocus`, de `Runtime::reader_focused` y
+  `WindowEvent::Focused` en `lib.rs`; sin inactividad,
+  `manga_afk_timeout_secs` o, si es `None`, `afk_timeout_secs`). Se arma solo
+  tras `manga_auto_start_delay_secs` de lectura si `manga_auto_start` (esos
+  segundos no cuentan y mirar a otro lado reinicia la cuenta), o desde el menú
+  del cronómetro (`ClockMenu`, el botón de la sesión en la barra del lector:
+  `manga_clock_action` `start`/`stop`/`finish`). Armado, la ausencia lo pausa
+  y vuelve solo; **detenido** por el usuario no vuelve hasta Iniciar o hasta
+  que se activa `manga_auto_start` (activarlo es pedirlo). Cerrar una sesión
+  ("Terminar y registrar" incluido) lo desarma: la siguiente arranca como
+  cualquier otra (sola tras el retraso, o desde el menú). El tiempo se edita a
+  mano en el menú (`manga_clock_set_elapsed`, `Tracking::set_elapsed`, hasta
+  24 h; `clockTime.ts` lee `h:mm:ss`, `mm:ss` o minutos): sin sesión, crea una
+  con ese tiempo, y el reloj sigue contando desde ahí. La lógica es pura (`Tracking::step`,
+  `start_clock`, `stop_clock`, `finish_now`) y tiene tests. El estado
+  (`MangaClock`: `running`, `paused`, `stopped`, `waiting` con
+  `starts_in_secs`, `off`) existe aunque no haya sesión y viaja por
+  `manga://clock` (`manga_clock_state` al cargar). Sus ajustes son un único
+  componente (`MangaClockSettings`) que usan el menú y Ajustes → Lector de
+  manga. La etiqueta dice qué hace cada opción: una explicación solo va donde
+  la etiqueta no llega (qué es 0, que las series sin vincular siguen yendo a
+  Pendientes). Al añadir una opción, ninguna explicación que repita la
+  etiqueta. Los números (`NumberSetting`) guardan
+  al salir, con Intro o 500 ms después de escribir: guardar en cada tecla o
+  paso de un slider va a Rust y vuelve, y se nota. El tiempo de permanencia de una página se para con el reloj. La
+  sesión (`MangaSession`, `pause` = `unfocused`/`idle`/`stopped`) viaja en
+  `TrackerSnapshot.manga` y por `manga://session`; la pintan la barra del
+  lector y la tarjeta del Dashboard. La sesión no existe hasta el primer tick
+  con el reloj en marcha. `manga://session` no sale cada segundo: si solo
+  avanzaron `elapsed_secs`/`inactive_secs`, sale cada `SESSION_RESYNC_SECS`
+  (15 s); cualquier otro cambio, y un tiempo editado a mano, al momento
+  (`Tracking::changed`). Entre medias `useMangaSession` cuenta solo
+  (`sessionAt`) mientras `counting`. El Dashboard no lo necesita: lee el
+  snapshot del tracker.
 - **Log** al cerrar el lector (`WindowEvent::Destroyed`), al pasar a otro tomo,
   al salir de la app (`RunEvent::Exit`) o tras `manga_idle_log_minutes` (10)
   con el reloj parado; al volver empieza otra sesión. `log_payload` es puro y
@@ -529,7 +679,16 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   desaloja), caché, servidor. Un CBZ remoto se lee con `ranged.rs`: un
   `Read + Seek` por bloques de 512 KB pedidos con `Range` (comprobando
   `Content-Range` y el tamaño listado), así que `archive.rs` funciona igual que
-  en disco y solo baja el directorio central y la entrada pedida. El índice
+  en disco y solo baja el directorio central. Las páginas no van por bloques:
+  `archive::RemoteIndex` guarda en memoria (los últimos 4 tomos,
+  `Remote::archive_index`) lo que el directorio dice de cada entrada (dónde
+  empieza su cabecera local, tamaños), sacado del propio crate `zip` (un
+  lector que, solo al indexar, contesta con una cabecera local vacía donde no
+  hay bytes), y una página es **una** petición: cabecera + datos + 64 KB de
+  margen (una segunda solo si la cabecera local es más larga). Los límites
+  (bomba, 64 MB, nombres) se miran antes de pedir y otra vez al inflar con
+  `read_page` sobre esos bytes. La página inflada se guarda en la caché
+  (`<tomo>-p<entrada>`): enseñarla otra vez no pide nada. El índice
   (`pages_json`) se lee al abrir el tomo (`reader::open`); si el servidor
   responde 200 a un `Range`, se corta la respuesta y el error es
   `needs-download`: la UI lo descarga entero con progreso (`manga://download`)
@@ -538,7 +697,11 @@ Biblioteca local y lector en `src-tauri/src/manga/` y `src/screens/Manga.tsx` +
   (`manga_prepare_series`) se bajan sus `.mokuro`. La miniatura 0 de un tomo
   remoto es su portada sidecar, sin abrir el CBZ.
 - **Caché** (`cache.rs`): `app_cache_dir/manga/webdav/`, LRU por fecha de
-  modificación (cada lectura la toca), límite `manga_webdav_cache_mb` (2 GB),
+  modificación (una lectura la toca si la marca tiene más de 60 s,
+  `TOUCH_AFTER`: dentro del mismo minuto el orden es aproximado, y leer y
+  marcar es una sola apertura). Al pasar el límite se borra hasta el 90 %
+  (`LOW_WATER`), para no recorrer la carpeta en cada escritura. Límite
+  `manga_webdav_cache_mb` (2 GB),
   "vaciar" en Ajustes → Lector de manga. Las claves llevan la firma del
   archivo remoto: uno que cambia es otra clave y el viejo envejece solo.
 - Todo es bloqueante y va en hilos de `spawn_blocking` (el protocolo, los
@@ -792,7 +955,7 @@ capturas no van dentro.
 `streak://reminder`, `streak://open-log`, `streak://auth-required`,
 `discord://status`, `updater://available`, `updater://progress`,
 `manga://library-changed`, `manga://reader-open`, `manga://session`,
-`manga://session-ended`, `manga://webdav-sync`, `manga://download`,
+`manga://session-ended`, `manga://clock`, `manga://webdav-sync`, `manga://download`,
 `manga://ocr-status`, `manga://ocr-page`, `manga://ocr-progress`,
 `manga://ext-status`, `manga://suggestions`. Están
 centralizados en `src/lib/ipc.ts` (`events`).

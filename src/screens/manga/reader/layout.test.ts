@@ -48,12 +48,18 @@ describe('navigation', () => {
     expect(clickAction(10, 1000, 'rtl')).toBe('next');
     expect(clickAction(990, 1000, 'rtl')).toBe('previous');
     expect(clickAction(990, 1000, 'ltr')).toBe('next');
-    expect(clickAction(500, 1000, 'rtl')).toBe('toggle');
+    expect(clickAction(500, 1000, 'rtl')).toBe('middle');
   });
 
-  it('preloads the two spreads on each side, nearest first', () => {
-    expect(preloadPages(spreads, 1)).toEqual([3, 4, 0, 5]);
+  it('preloads the pages ahead, nearest first, then the spread before', () => {
+    expect(preloadPages(spreads, 1)).toEqual([3, 4, 5, 0]);
+    expect(preloadPages(spreads, 1, 1)).toEqual([3, 0]);
     expect(preloadPages([[0], [1], [2]], 0)).toEqual([1, 2]);
+    // As many as asked, up to the end of the volume.
+    const strip = Array.from({ length: 20 }, (_, page) => [page]);
+    expect(preloadPages(strip, 5, 10)).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 4]);
+    expect(preloadPages(strip, 18, 10)).toEqual([19, 17]);
+    expect(preloadPages(strip, 3, 0)).toEqual([2]);
   });
 });
 

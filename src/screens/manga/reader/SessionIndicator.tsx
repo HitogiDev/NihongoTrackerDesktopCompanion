@@ -14,7 +14,9 @@ export function SessionIndicator({ session }: { session: MangaSession }) {
     ? t('session.counting')
     : session.pause === 'idle'
       ? t('session.pausedIdle')
-      : t('session.pausedUnfocused');
+      : session.pause === 'stopped'
+        ? t('session.pausedStopped')
+        : t('session.pausedUnfocused');
   const summary = t('session.summary', {
     time: formatClock(session.elapsed_secs),
     pages: session.pages_read,

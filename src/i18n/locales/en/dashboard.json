@@ -103,6 +103,7 @@
     "volumeProgress": "Progress in the volume",
     "unlinked": "Not linked: the log will wait in Pending.",
     "link": "Link",
-    "open": "Back to the reader"
+    "open": "Back to the reader",
+    "pausedStopped": "The clock is stopped."
   }
 }

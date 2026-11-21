@@ -82,6 +82,31 @@ manga_confirm_before_log: boolean,
  */
 manga_idle_log_minutes: number, 
 /**
+ * The reader's clock starts by itself once the user is reading; off, it
+ * only starts from its menu (`manga_clock_start`).
+ */
+manga_auto_start: boolean, 
+/**
+ * ...after this many seconds of reading (focused, not away). 0 starts at
+ * once. Those seconds are not counted.
+ */
+manga_auto_start_delay_secs: number, 
+/**
+ * Pause the clock while the reader window is not focused.
+ */
+manga_pause_on_unfocus: boolean, 
+/**
+ * Seconds without input before the reader's clock pauses. `None` follows
+ * `afk_timeout_secs`; 0 never pauses.
+ */
+manga_afk_timeout_secs: number | null, 
+/**
+ * Pages the reader loads and decodes ahead of the one on screen (plus
+ * the spread before it). More is smoother on a slow server and costs
+ * memory and data.
+ */
+manga_preload_pages: number, 
+/**
  * Megabytes the WebDAV cache may hold (offline downloads not included).
  */
 manga_webdav_cache_mb: number, 

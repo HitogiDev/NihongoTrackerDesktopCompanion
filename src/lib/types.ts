@@ -31,6 +31,8 @@ import type { MediaMatch } from './bindings/MediaMatch';
 import type { MangaContinue } from './bindings/MangaContinue';
 import type { MangaLibrary } from './bindings/MangaLibrary';
 import type { MangaPause } from './bindings/MangaPause';
+import type { MangaClock } from './bindings/MangaClock';
+import type { ClockStatus } from './bindings/ClockStatus';
 import type { MangaSeries } from './bindings/MangaSeries';
 import type { MangaLinkSuggestion } from './bindings/MangaLinkSuggestion';
 import type { MangaSeriesDetail } from './bindings/MangaSeriesDetail';
@@ -65,6 +67,7 @@ import type { ReaderTarget } from './bindings/ReaderTarget';
 import type { ReaderVolume } from './bindings/ReaderVolume';
 import type { ReadingDirection } from './bindings/ReadingDirection';
 import type { TextLayerMode } from './bindings/TextLayerMode';
+import type { PageTransition } from './bindings/PageTransition';
 import type { ReadingOverlaySettings } from './bindings/ReadingOverlaySettings';
 import type { ReadingOverlayState } from './bindings/ReadingOverlayState';
 import type { Settings } from './bindings/Settings';
@@ -111,6 +114,8 @@ export type {
   MangaContinue,
   MangaLibrary,
   MangaPause,
+  MangaClock,
+  ClockStatus,
   MangaSeries,
   MangaLinkSuggestion,
   MangaSeriesDetail,
@@ -146,6 +151,7 @@ export type {
   ReaderVolume,
   ReadingDirection,
   TextLayerMode,
+  PageTransition,
   ReadingOverlaySettings,
   ReadingOverlayState,
   Settings,

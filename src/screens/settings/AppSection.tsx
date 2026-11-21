@@ -44,7 +44,6 @@ export function AppSection({ settings }: { settings: Settings }) {
       <div className="surface p-2 divide-y divide-base-300/50">
         <Toggle
           label={t('app.overlay')}
-          description={t('app.overlayHint')}
           checked={settings.overlay_enabled}
           onChange={(v) => void updateSettings({ overlay_enabled: v })}
         />
@@ -82,7 +81,6 @@ export function AppSection({ settings }: { settings: Settings }) {
         />
         <Toggle
           label={t('app.minimizeToTray')}
-          description={t('app.minimizeToTrayHint')}
           checked={settings.minimize_to_tray}
           onChange={(v) => void updateSettings({ minimize_to_tray: v })}
         />
@@ -93,7 +91,6 @@ export function AppSection({ settings }: { settings: Settings }) {
         />
         <Toggle
           label={t('app.streakReminder')}
-          description={t('app.streakReminderHint')}
           checked={settings.streak_reminder}
           disabled={!settings.notifications}
           onChange={(v) => void updateSettings({ streak_reminder: v })}
